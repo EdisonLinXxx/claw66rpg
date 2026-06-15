@@ -52,6 +52,42 @@
     function hasQueryFlag(name) {
       return new URLSearchParams(window.location.search).get(name) === '1';
     }
+    function shouldTraceNullPath(value) {
+      if (!hasQueryFlag('traceNullPath')) return false;
+      if (value === null || value === undefined) return true;
+      var text = String(value);
+      return text === '' || /(^|\/)null(\s|%20)path($|\?)/i.test(text) || /^null(\s|%20)path$/i.test(text);
+    }
+    function logNullPath(label, value) {
+      if (!shouldTraceNullPath(value)) return;
+      var stack = '';
+      try {
+        stack = new Error().stack || '';
+      } catch (error) {}
+      logLine('NULL PATH ' + label + ' value=' + value + ' stack=' + stack.replace(/\n/g, ' | '));
+    }
+    function traceNullPathPayload(label, value, depth, seen) {
+      if (!hasQueryFlag('traceNullPath')) return;
+      if (shouldTraceNullPath(value)) {
+        logNullPath(label, value);
+        return;
+      }
+      if (!value || typeof value !== 'object' || depth > 3) return;
+      seen = seen || [];
+      if (seen.indexOf(value) !== -1) return;
+      seen.push(value);
+      if (Array.isArray(value)) {
+        for (var index = 0; index < value.length; index++) {
+          traceNullPathPayload(label + '[' + index + ']', value[index], depth + 1, seen);
+        }
+        return;
+      }
+      ['url', 'path', 'src', 'source', 'name'].forEach(function (key) {
+        if (Object.prototype.hasOwnProperty.call(value, key)) {
+          traceNullPathPayload(label + '.' + key, value[key], depth + 1, seen);
+        }
+      });
+    }
     if (hasQueryFlag('traceRuntime')) {
       (function () {
         function describeCallback(callback) {
@@ -109,6 +145,7 @@
       var open = XMLHttpRequest.prototype.open;
       var send = XMLHttpRequest.prototype.send;
       XMLHttpRequest.prototype.open = function (method, url) {
+        logNullPath('XHR.open', url);
         this.__runnerUrl = url;
         return open.apply(this, arguments);
       };
@@ -128,6 +165,34 @@
         return send.apply(this, arguments);
       };
     })();
+    if (hasQueryFlag('traceNullPath')) {
+      (function () {
+        function wrapUrlDescriptor(proto, prop, label) {
+          var descriptor = Object.getOwnPropertyDescriptor(proto, prop);
+          if (!descriptor || !descriptor.set || descriptor.set.__runnerNullPathWrapped) return;
+          Object.defineProperty(proto, prop, {
+            get: descriptor.get,
+            set: function (value) {
+              logNullPath(label + '.' + prop, value);
+              return descriptor.set.call(this, value);
+            }
+          });
+          Object.getOwnPropertyDescriptor(proto, prop).set.__runnerNullPathWrapped = true;
+        }
+        if (window.HTMLImageElement) wrapUrlDescriptor(HTMLImageElement.prototype, 'src', 'HTMLImageElement');
+        if (window.HTMLMediaElement) wrapUrlDescriptor(HTMLMediaElement.prototype, 'src', 'HTMLMediaElement');
+        if (window.HTMLSourceElement) wrapUrlDescriptor(HTMLSourceElement.prototype, 'src', 'HTMLSourceElement');
+        if (window.fetch && !window.fetch.__runnerNullPathWrapped) {
+          var originalFetch = window.fetch;
+          window.fetch = function (input) {
+            logNullPath('fetch', input && input.url ? input.url : input);
+            return originalFetch.apply(this, arguments);
+          };
+          window.fetch.__runnerNullPathWrapped = true;
+        }
+        logLine('null path trace enabled');
+      })();
+    }
     window.addEventListener('error', function (event) {
       if (event.target && event.target !== window && event.target.src) {
         logLine('RESOURCE ERROR: ' + event.target.tagName + ' ' + event.target.src);
@@ -467,6 +532,24 @@
           ['startLoad', 'pathCallback', 'path_2_Callback', 'readFontConfig', 'getTextLineHeight'].forEach(function (name) {
             wrapRuntimeMethod(org_data.DBitmapFontData.prototype, 'DBitmapFontData', name);
           });
+        }
+        if (hasQueryFlag('traceNullPath')) {
+          var wrapLoaderCall = function (owner, ownerName, methodName) {
+            if (!owner || typeof owner[methodName] !== 'function' || owner[methodName].__runnerNullPathWrapped) return;
+            var originalLoaderMethod = owner[methodName];
+            owner[methodName] = function () {
+              traceNullPathPayload(ownerName + '.' + methodName, arguments[0], 0);
+              return originalLoaderMethod.apply(this, arguments);
+            };
+            owner[methodName].__runnerNullPathWrapped = true;
+          };
+          if (window.ORG && ORG.loader) {
+            wrapLoaderCall(ORG.loader, 'ORG.loader', 'load');
+          }
+          if (window.Laya && Laya.loader) {
+            wrapLoaderCall(Laya.loader, 'Laya.loader', 'load');
+            wrapLoaderCall(Laya.loader, 'Laya.loader', 'create');
+          }
         }
         if (window.EventCenter && EventCenter.dispatchEvent && !EventCenter.dispatchEvent.__runnerEventWrapped) {
           var originalDispatchEvent = EventCenter.dispatchEvent;

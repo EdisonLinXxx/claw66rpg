@@ -414,3 +414,37 @@ Current technical conclusion: with the patched parser, mirrored resources, and a
 - Browser screenshot capture timed out during the animated post-click state, so this round uses console events plus local HTTP status transitions as the primary evidence.
 
 Current technical conclusion: gameplay continuity is now verified one step beyond the first scene. The local runner can enter the game, click the first scene control, discover the next resource wave, mirror it from the game map, and successfully reload those assets locally. The next validation should identify the source of `/null path`, then continue the same loop on the next visible interaction until platform APIs or story logic, not static asset fetching, becomes the main blocker.
+
+## Round 17: Null Path Trace And Move Sound Resource
+
+- Added a runner-only diagnostic flag:
+  - `traceNullPath=1`
+- The new trace hooks inspect:
+  - `XMLHttpRequest.open`
+  - `fetch`
+  - `HTMLImageElement.src`
+  - `HTMLMediaElement.src`
+  - `HTMLSourceElement.src`
+  - `ORG.loader.load`
+  - `Laya.loader.load`
+  - `Laya.loader.create`
+  - nested loader payload fields such as `url`, `path`, `src`, `source`, and `name`
+- Validation URL:
+  - `http://127.0.0.1:8765/h5_runner_experiment.html?localRes=1&patchNewDSystem=1&traceRuntime=1&traceTitle=1&traceNullPath=1&patchTitleClick=1&clearStorage=1&hideDebug=1`
+- Observed result:
+  - `traceNullPath=1` starts correctly and logs `null path trace enabled`
+  - the local server still sees two `GET /null%20path` requests during the first-scene/OAF loading window
+  - none of the hooked JS entry points reports a `NULL PATH ...` stack
+  - this means the request is likely produced below those public JS APIs, by an internal Laya resource path normalization path, cached resource retry, or another browser/runtime path not exposed through the wrapped methods
+  - it does not block title entry, patched cover click, first-scene loading, or dynamic-standing OAF frame loading
+- The same run exposed a real next missing resource:
+  - md5 `0839375b26561183ca0bd747ed0dccc3`
+  - mapped by the game resource map to `audio/se/move_1.mp3`
+  - size `32641`
+- Mirroring command:
+  - `python 66rpgProjectDropper\prepare_runner_mirror.py 1569947 --version 364 --root . --mirror-md5 0839375b26561183ca0bd747ed0dccc3 --mirror-log .http-server.err.log`
+- Local verification:
+  - `shareres/08/0839375b26561183ca0bd747ed0dccc3` exists locally
+  - direct HTTP request to `http://127.0.0.1:8765/shareres/08/0839375b26561183ca0bd747ed0dccc3` returns `200` with length `32641`
+
+Current technical conclusion: `/null path` is a low-priority noisy request in the current path because it is not stopping gameplay progression and is not a normal mapped asset miss. The next practical step is to continue the gameplay loop after `move_1.mp3` is mirrored, then collect and mirror the next real `/shareres/<md5>` 404. If `/null path` later becomes blocking, use a deeper Laya `Loader`/`URL.formatURL` monkey patch rather than treating it as a missing file.
