@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <base href="https://c2.cgyouxi.com/website/hfplayer/v2/bin/">
+  <title>66RPG H5 Runner Experiment</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1.0,minimum-scale=1.0,maximum-scale=1.0,user-scalable=no">
+  <link rel="stylesheet" href="https://c3.cgyouxi.com/website/hfplayer/v2/bin/css/public.css?v=20210202002">
+  <style>
+    html, body { margin: 0; width: 100%; height: 100%; background: #000; overflow: hidden; }
+    #debug {
+      position: fixed; left: 0; top: 0; z-index: 99999; max-width: 520px;
+      padding: 8px 10px; color: #fff; background: rgba(0,0,0,.72);
+      font: 12px/1.5 Consolas, monospace; pointer-events: none; white-space: pre-wrap;
+    }
+  </style>
+  <script>
+    var debug = true;
+    var webUrl = 'https://www.66rpg.com';
+    var passUrl = 'https://passport.66rpg.com';
+    var cgUrl = 'https://cg.66rpg.com';
+    var bbsUrl = 'https://bbs.66rpg.com';
+    var picUrl = 'https://pic.cgyouxi.com';
+    var cdnUrl = 'https://c2.cgyouxi.com';
+    var mUrl = 'https://m.66rpg.com';
+    var cUrl = 'https://c.66rpg.com';
+    var reportUrl = 'https://report.66rpg.com';
+    var channel_id = '';
+    var guid = '0a235c54f16c431ab5736c92997edb47';
+    var ver = '364';
+    var flower_unlock = '35';
+    var gamefv_times = '23992';
+    var platMark = '';
+    var aspect_ratio = '1';
+    var quality = '0';
+    var platformUid = null;
+    var platfromNum = null;
+    var pmode = '0';
+    var commonPlayer = {
+      channel_id: '',
+      platform: 0,
+      countServer: {
+        gamePlayTime: function () {},
+        gameDuration: function () {}
+      }
+    };
+    function logLine(text) {
+      var el = document.getElementById('debug');
+      if (el) el.textContent += text + '\n';
+      console.log(text);
+    }
+    (function () {
+      var open = XMLHttpRequest.prototype.open;
+      var send = XMLHttpRequest.prototype.send;
+      XMLHttpRequest.prototype.open = function (method, url) {
+        this.__runnerUrl = url;
+        return open.apply(this, arguments);
+      };
+      XMLHttpRequest.prototype.send = function () {
+        this.addEventListener('loadend', function () {
+          var len = 'n/a';
+          if (this.response instanceof ArrayBuffer) len = this.response.byteLength;
+          else if (!this.responseType || this.responseType === 'text') {
+            try {
+              if (typeof this.responseText === 'string') len = this.responseText.length;
+            } catch (error) {
+              len = 'unreadable';
+            }
+          }
+          logLine('XHR ' + this.status + ' ' + len + ' ' + this.__runnerUrl);
+        });
+        return send.apply(this, arguments);
+      };
+    })();
+    window.addEventListener('error', function (event) {
+      logLine('ERROR: ' + event.message + ' @ ' + event.filename + ':' + event.lineno);
+    });
+  </script>
+  <script src="https://c1.cgyouxi.com/website/hfplayer/v2/bin/libs/jquery-2.1.4.min.js?v=20210202002"></script>
+  <script src="https://c1.cgyouxi.com/website/hfplayer/v2/bin/libs/base91.js?v=20210202002"></script>
+  <script src="https://c2.cgyouxi.com/website/hfplayer/v2/bin/libs/utils.js?v=20210202002"></script>
+  <script src="https://c2.cgyouxi.com/website/hfplayer/v2/common/Common.js?v=20210202002"></script>
+  <script src="https://c3.cgyouxi.com/website/hfplayer/v2/common/Login.js?v=20210202002"></script>
+  <script src="https://c2.cgyouxi.com/website/mobile/js/ssologin.js?v=20210202002"></script>
+  <script src="https://c1.cgyouxi.com/website/hfplayer/v2/bin/libs/min/laya.core.min.js?v=20210202002"></script>
+  <script src="https://c4.cgyouxi.com/website/hfplayer/v2/bin/libs/min/laya.webgl.min.js?v=20210202002"></script>
+  <script src="https://c1.cgyouxi.com/website/hfplayer/v2/bin/libs/min/laya.filter.min.js?v=20210202002"></script>
+  <script src="https://c4.cgyouxi.com/website/hfplayer/v2/bin/libs/min/laya.ui.min.js?v=20210202002"></script>
+  <script src="https://c1.cgyouxi.com/website/hfplayer/v2/bin/libs/min/laya.html.min.js?v=20210202002"></script>
+  <script src="https://c1.cgyouxi.com/website/hfplayer/v2/bin/js/lib/LibClass.js?v=20210202002"></script>
+  <script src="https://c2.cgyouxi.com/website/hfplayer/v2/bin/libs/pc-common-VA.js?v=20210202002"></script>
+  <script src="https://c2.cgyouxi.com/website/hfplayer/v2/bin/main.min.js?v=20210202002"></script>
+</head>
+<body>
+  <div id="debug">runner experiment loaded</div>
+  <script>
+    logLine('starting game init');
+    try {
+      if (window.Main && Main.prototype && Main.prototype.setGameConfig && !Main.prototype.__runnerPatched) {
+        var originalSetGameConfig = Main.prototype.setGameConfig;
+        Main.prototype.setGameConfig = function () {
+          HttpURL.CGV2_SERVER_URL = 'http://127.0.0.1:8765/';
+          var result = originalSetGameConfig.apply(this, arguments);
+          HttpURL.CGV2_SERVER_URL = 'http://127.0.0.1:8765/';
+          GloableData.getInstance().serverPath = 'https://c2.cgyouxi.com/website/hfplayer/v2/bin/';
+          return result;
+        };
+        Main.prototype.__runnerPatched = true;
+      }
+      window.gameMain = new Main();
+      window.gameMain.initGameData(
+        '0a235c54f16c431ab5736c92997edb47',
+        '364',
+        '',
+        '',
+        '0',
+        '',
+        '1',
+        '1569947',
+        ''
+      );
+      logLine('initGameData called');
+    } catch (error) {
+      logLine('INIT ERROR: ' + (error && error.stack || error));
+    }
+  </script>
+</body>
+</html>
