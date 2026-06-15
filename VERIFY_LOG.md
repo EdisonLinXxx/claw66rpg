@@ -82,3 +82,28 @@ Current technical conclusion: grabbing the game package and static assets is tec
 - Raw inspection after `48338` shows values and strings that look like event/debug payloads, for example `8058`, `8059`, and Chinese text such as `数值：[8059：支线开启/关闭] = 0`, but the field ordering does not match the old `DEvent` / `DCustomUIData` constructors exposed in `main.min.js`.
 
 Current technical conclusion: the compatibility blocker is broader than the `Buttons` count. This game package uses a newer or different `DSystem` tail/UI/event schema than the public H5 player knows. A minimal runner patch must handle both the extended button table and the new tail/event layout; simply forcing `Buttons=453` is not enough.
+
+## Round 6: New Custom UI Event Layout Probe
+
+- Added `66rpgProjectDropper/probe_token_stream.py` to print loose int/string token streams from suspicious binary regions.
+- Updated `66rpgProjectDropper/probe_dsystem_tail.py` with a `--no-after-events` variant for the candidate newer `DCustomUIData` layout.
+- Reinterpreted the `DSystem` tail:
+  - `48318`: `UIInitSave=0`
+  - `48322`: extra field `1000`
+  - `48326`: extra field `3486`
+  - `48330`: first custom UI marker `0`
+  - `48334`: first custom UI `loadEvent` count `5`
+- Verified that `48338` begins valid event-list entries, not a `DCustomUIData` object:
+  - event item marker `85`, code `200`, indent `0`, argc `6`
+  - args include `8058`, `0`, `0`, `0`, `1`, and debug text `数值：[8059：支线开启/关闭] = 0`
+- The newer custom UI layout appears to omit the old `afterEvent` list:
+  - old public player layout: `marker -> loadEvents -> afterEvents -> controls -> show/mouse/key`
+  - observed newer layout: `marker -> loadEvents -> controls -> show/mouse/key`
+- With the `--no-after-events` parser:
+  - CUI #0 parses from `48330` to `51816`: `load=5`, `controls=20`, `show=0`, `mouse=1`, `key=1`
+  - CUI #1 parses from `51820` to `78996`: `load=31`, `controls=102`, `show=0`, `mouse=1`, `key=1`
+  - each parsed CUI is followed by an extra 4-byte field before the next CUI marker
+  - CUI #2 starts at `79000` and parses `load=19`, `controls=15`, but fails inside `control[12]` at `100330` with `bad control.event count 1508`
+- Interpretation: the main new CUI schema difference is now identified, but at least one `DCustomUIItem` / control branch has additional fields or a type-specific layout that the old public player does not support.
+
+Current technical conclusion: a minimal parser patch is becoming plausible, but it must handle three differences: extended button table, missing `afterEvent` list in newer CUI blocks, and at least one newer control-item branch. The next validation should focus on `control[12]` in CUI #2 and derive its type-specific field layout.

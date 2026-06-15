@@ -83,16 +83,23 @@ def parse_control(reader):
     }
 
 
-def parse_custom_ui(reader):
+def parse_custom_ui(reader, no_after_events=False):
     start = reader.pos
     marker = reader.i32()
     load_events = parse_event_list(reader, "loadEvent")
-    after_events = parse_event_list(reader, "afterEvent")
+    after_events = [] if no_after_events else parse_event_list(reader, "afterEvent")
     control_count_pos = reader.pos
     control_count = reader.i32()
     if control_count < 0 or control_count > 2000:
         raise ValueError(f"bad controls count {control_count} at {control_count_pos}")
-    controls = [parse_control(reader) for _ in range(control_count)]
+    controls = []
+    for control_index in range(control_count):
+        try:
+            controls.append(parse_control(reader))
+        except Exception as exc:
+            raise ValueError(
+                f"control[{control_index}] failed at {reader.pos}: {exc}"
+            ) from exc
     show_effect = reader.i32()
     is_mouse_exit = reader.i32()
     is_key_exit = reader.i32()
@@ -117,8 +124,9 @@ def main():
     parser = argparse.ArgumentParser(description="Probe DSystem tail after the extended button table.")
     parser.add_argument("path")
     parser.add_argument("--tail", type=int, default=48318)
-    parser.add_argument("--cui-start", type=int, default=48338)
+    parser.add_argument("--cui-start", type=int, default=48330)
     parser.add_argument("--count", type=int, default=5)
+    parser.add_argument("--no-after-events", action="store_true")
     args = parser.parse_args()
 
     data = Path(args.path).read_bytes()
@@ -136,7 +144,7 @@ def main():
     reader = Reader(data, args.cui_start)
     for index in range(args.count):
         try:
-            cui = parse_custom_ui(reader)
+            cui = parse_custom_ui(reader, no_after_events=args.no_after_events)
         except Exception as exc:
             print(f"cui[{index}] failed at {reader.pos}: {exc}")
             break
