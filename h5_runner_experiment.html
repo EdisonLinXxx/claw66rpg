@@ -49,6 +49,9 @@
       if (el) el.textContent += text + '\n';
       console.log(text);
     }
+    function hasQueryFlag(name) {
+      return new URLSearchParams(window.location.search).get(name) === '1';
+    }
     (function () {
       var open = XMLHttpRequest.prototype.open;
       var send = XMLHttpRequest.prototype.send;
@@ -96,12 +99,72 @@
   <script>
     logLine('starting game init');
     try {
+      if (hasQueryFlag('traceReads') && window.GameByte && !GameByte.prototype.__runnerTracePatched) {
+        var runnerTrace = [];
+        function pushTrace(item) {
+          runnerTrace.push(item);
+          if (runnerTrace.length > 30) runnerTrace.shift();
+        }
+        var originalGetInt32 = GameByte.prototype.getInt32;
+        var originalReadStringE = GameByte.prototype.readStringE;
+        var originalReadCString = GameByte.prototype.readCString;
+        GameByte.prototype.getInt32 = function () {
+          var before = { op: 'getInt32', pos: this.pos, bytesAvailable: this.bytesAvailable, length: this.length };
+          try {
+            var value = originalGetInt32.apply(this, arguments);
+            before.value = value;
+            before.after = this.pos;
+            pushTrace(before);
+            return value;
+          } catch (error) {
+            logLine('TRACE getInt32 error at pos=' + this.pos + ' bytesAvailable=' + this.bytesAvailable + ' length=' + this.length);
+            logLine('TRACE recent=' + JSON.stringify(runnerTrace));
+            throw error;
+          }
+        };
+        GameByte.prototype.readStringE = function () {
+          var pos = this.pos;
+          var value = originalReadStringE.apply(this, arguments);
+          pushTrace({ op: 'readStringE', pos: pos, after: this.pos, valueLen: value ? value.length : 0, sample: value ? String(value).slice(0, 32) : '' });
+          return value;
+        };
+        GameByte.prototype.readCString = function () {
+          var pos = this.pos;
+          var value = originalReadCString.apply(this, arguments);
+          pushTrace({ op: 'readCString', pos: pos, after: this.pos, valueLen: value ? value.length : 0, sample: value ? String(value).slice(0, 32) : '' });
+          return value;
+        };
+        GameByte.prototype.__runnerTracePatched = true;
+        logLine('GameByte trace enabled');
+      }
+      if (hasQueryFlag('fixEndian') && window.LoadAssets && LoadAssets.prototype && !LoadAssets.prototype.__runnerEndianPatched) {
+        LoadAssets.prototype.loadFile = function (url) {
+          ORG.loader.load(
+            url,
+            OHandler.create(this, function (data) {
+              var bytes = new GameByte(data);
+              bytes.endian = OByteArray.LITTLE_ENDIAN;
+              this.readGameBin(bytes);
+            }),
+            OHandler.create(this, this.gbProgress, null, false),
+            'arraybuffer',
+            0,
+            false
+          );
+        };
+        LoadAssets.prototype.__runnerEndianPatched = true;
+        logLine('little-endian game bin patch enabled');
+      }
       if (window.Main && Main.prototype && Main.prototype.setGameConfig && !Main.prototype.__runnerPatched) {
         var originalSetGameConfig = Main.prototype.setGameConfig;
         Main.prototype.setGameConfig = function () {
           HttpURL.CGV2_SERVER_URL = 'http://127.0.0.1:8765/';
           var result = originalSetGameConfig.apply(this, arguments);
           HttpURL.CGV2_SERVER_URL = 'http://127.0.0.1:8765/';
+          if (hasQueryFlag('localRes')) {
+            HttpURL.M_RESOUSE_SERVER_URL = 'http://127.0.0.1:8765/';
+            logLine('local resource mirror enabled');
+          }
           GloableData.getInstance().serverPath = 'https://c2.cgyouxi.com/website/hfplayer/v2/bin/';
           return result;
         };
