@@ -319,3 +319,39 @@ Current technical conclusion: the technical feasibility bar moved significantly:
   - the runtime logs `LONG_DOWN_CANCEL_BY_MOVINE_EVENT` after these automated clicks
 
 Current technical conclusion: startup, title rendering, and the first title/story UI resource loads are now technically reproducible from the local mirror. The next blocker is input handling rather than binary parsing or missing startup assets: the local automated clicks are being interpreted by the H5 player as a long-down/move-cancel event, so the next validation should compare a real manual click against the automated click path, then patch or shim the player input event path if manual click succeeds.
+
+## Round 14: Title Button Path And Auto Start Probe
+
+- Downloaded the public H5 player script temporarily for static inspection:
+  - `https://c2.cgyouxi.com/website/hfplayer/v2/bin/main.min.js?v=20210202002`
+- Static inspection result:
+  - the title screen is implemented by `view.TitleUI` and `view.TitleUIMediator`
+  - `TitleUI.initButton()` creates `ORGButton` instances only for non-empty title button images
+  - `TitleUIMediator.clickButton()` starts the story when the event index is `GloableStaticData.TITLE_BUTTON_TYPE_1`
+  - therefore the visible prompt is not a generic full-cover click target; the start path is a title-button event path
+- Added two runner-only validation flags:
+  - `traceTitle=1` logs parsed title button configuration after title UI resources load
+  - `autoStartTitle=1` bypasses pointer input and calls the same start-story path used by the first title button
+- Browser validation URL:
+  - `http://127.0.0.1:8765/h5_runner_experiment.html?localRes=1&patchNewDSystem=1&traceRuntime=1&traceTitle=1&autoStartTitle=1&hideDebug=1`
+- `traceTitle=1` result:
+  - `skipTitle=false`
+  - `startStoryId=1`
+  - `titleImage="封面-美人客栈.jpg"`
+  - `buttonCount=6`
+  - only title button 1 has non-empty images:
+    - button index `10`
+    - position `x=0,y=0`
+    - images `ui导入\\返回前.png` and `ui导入\\返回后.png`
+  - buttons 2-6 have empty images and are not created as clickable `ORGButton` instances
+- `autoStartTitle=1` result:
+  - emitted `AUTO TITLE START storyId=1`
+  - the runtime entered the first story path and requested first-scene resources
+  - first missing story asset was md5 `4d575c7975042bff3d52cd7c38613c7a`, mapped to `graphics/oafs/红花瓣飘动_540.oaf2`
+- Mirrored the missing OAF container, then used `prepare_runner_mirror.py --mirror-log .http-server.err.log` to bulk mirror the OAF frame PNGs and adjacent first-scene UI/button/background/audio resources observed in local 404 logs, including:
+  - `graphics/background/传送门.jpg`
+  - `audio/bgm/对月-染霜华-季一昂.mp3`
+  - `graphics/oafs/红花瓣飘动_540/0.png` through `59.png`
+  - several first-scene UI/button resources loaded after the story path started
+
+Current technical conclusion: title-to-story transition is technically viable when the title start event is triggered directly. The remaining user-interaction problem is not the story engine; it is title input targeting/event dispatch. The next validation should implement a narrow `patchTitleClick=1` shim that converts a click/tap on the visible title cover into `CLICK_TITLE_VIEW_BUTTON` with `TITLE_BUTTON_TYPE_1`, then verify that the page can enter story through normal user input instead of `autoStartTitle`.

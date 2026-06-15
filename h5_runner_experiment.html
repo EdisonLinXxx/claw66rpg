@@ -461,6 +461,57 @@
         }
         if (window.EventCenter && EventCenter.dispatchEvent && !EventCenter.dispatchEvent.__runnerEventWrapped) {
           var originalDispatchEvent = EventCenter.dispatchEvent;
+          var traceTitleState = function (label) {
+            try {
+              if (!hasQueryFlag('traceTitle')) return;
+              var system = GloableData.getInstance().gameMainData.System;
+              var title = system.Title;
+              var buttons = [];
+              for (var buttonIndex = 0; buttonIndex < title.buttons.length; buttonIndex++) {
+                var titleButton = title.buttons[buttonIndex];
+                var systemButton = system.Buttons[titleButton.index];
+                buttons.push({
+                  ordinal: buttonIndex + 1,
+                  titleButtonIndex: titleButton.index,
+                  x: titleButton.x,
+                  y: titleButton.y,
+                  staticType: GloableStaticData['TITLE_BUTTON_TYPE_' + (buttonIndex + 1)],
+                  image1: systemButton && systemButton.image1 && systemButton.image1.name,
+                  image2: systemButton && systemButton.image2 && systemButton.image2.name,
+                  image1Nil: systemButton && systemButton.image1 && systemButton.image1.IsNil(),
+                  image2Nil: systemButton && systemButton.image2 && systemButton.image2.IsNil()
+                });
+              }
+              logLine('TITLE STATE ' + label + ' ' + JSON.stringify({
+                skipTitle: system.SkipTitle,
+                startStoryId: system.StartStoryId,
+                titleImage: title.titleImagle && title.titleImagle.name,
+                drawTitle: title.drawTitle,
+                buttonCount: title.buttons.length,
+                buttons: buttons
+              }));
+            } catch (titleError) {
+              logLine('TITLE STATE ERROR ' + (titleError && titleError.stack || titleError));
+            }
+          };
+          var autoStartTitle = function () {
+            if (!hasQueryFlag('autoStartTitle')) return;
+            setTimeout(function () {
+              try {
+                var system = GloableData.getInstance().gameMainData.System;
+                logLine('AUTO TITLE START storyId=' + system.StartStoryId);
+                UIManager.getInstance().closeView(view.TitleUIMediator.NAME, false);
+                if (GloableData.getInstance().isFreeLimit) {
+                  GloableData.getInstance().dGameSystem.varsEx.loadExData(true);
+                } else {
+                  GloableData.getInstance().dGameSystem.varsEx.loadExData();
+                }
+                GloableData.getInstance().iMain.jumpStoryCallBack(system.StartStoryId);
+              } catch (autoError) {
+                logLine('AUTO TITLE START ERROR ' + (autoError && autoError.stack || autoError));
+              }
+            }, 800);
+          };
           EventCenter.dispatchEvent = function (event) {
             var summarizeValue = function (value) {
               if (value === null || value === undefined) return value;
@@ -473,7 +524,14 @@
               ? { type: event.type, parameter: summarizeValue(event.parameter) }
               : summarizeValue(event);
             logLine('EVENT dispatch ' + JSON.stringify(eventInfo));
-            return originalDispatchEvent.apply(this, arguments);
+            var dispatchResult = originalDispatchEvent.apply(this, arguments);
+            if (event && event.type === GameEventConstant.LOAD_UI_RESOURCE_COMPLETE && event.parameter === UIResouecrLoad.TITLEUI_TYPE) {
+              setTimeout(function () {
+                traceTitleState('after-title-ui-resource');
+                autoStartTitle();
+              }, 100);
+            }
+            return dispatchResult;
           };
           EventCenter.dispatchEvent.__runnerEventWrapped = true;
         }
