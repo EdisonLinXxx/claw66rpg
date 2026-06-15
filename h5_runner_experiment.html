@@ -159,6 +159,9 @@
 <body>
   <div id="debug">runner experiment loaded</div>
   <script>
+    if (hasQueryFlag('hideDebug')) {
+      document.getElementById('debug').style.display = 'none';
+    }
     logLine('starting game init');
     try {
       if (hasQueryFlag('traceReads') && window.GameByte && !GameByte.prototype.__runnerTracePatched) {

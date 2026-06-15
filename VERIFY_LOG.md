@@ -292,3 +292,30 @@ Current technical conclusion: the runner now reaches the platform/player startup
   - these happen after title entry and do not block reaching `Main.enterGame()`
 
 Current technical conclusion: the technical feasibility bar moved significantly: with the patched parser and mirrored startup/font resources, the official H5 player can enter the game/title layer locally. The next validation should focus on title-screen usability and first interaction: whether the title buttons respond, which additional title/story assets are requested, and which platform APIs must be stubbed to avoid later mall/flower/free-time failures.
+
+## Round 13: Clean Title View And First Click Probe
+
+- Added `hideDebug=1` to `h5_runner_experiment.html` so the runtime trace can stay enabled while the visual canvas is not covered by the debug overlay.
+- Browser validation URL:
+  - `http://127.0.0.1:8765/h5_runner_experiment.html?localRes=1&patchNewDSystem=1&traceRuntime=1&hideDebug=1`
+- Clean title rendering result:
+  - the canvas shows the full title cover for `美人客栈`
+  - visible prompt: `点击封面任意处进入作品`
+  - debug overlay is hidden, but the same trace text remains available through the hidden `#debug` node
+- First click attempt exposed three additional missing local resources:
+  - `graphics/ui/logo.png`, md5 `d827b63f1cf4a4b483530ee12e3bb093`
+  - `graphics/ui/ui导入/底图/姓名框.png`, md5 `41354891b5342e611d0771ddbf98b903`
+  - `graphics/ui/ui导入/底图/对话框2.png`, md5 `1a179f92a756fa0b3c7f4dca4ce9caba`
+- Mirrored those resources with `prepare_runner_mirror.py` and reran the clean title page.
+- After mirroring:
+  - `姓名框.png` and `对话框2.png` load with `LOAD_IMAGE_COMPLETE`
+  - `Main.loadFontComplete`, `Main.startGame`, and `Main.enterGame` still complete
+  - `LOAD_UI_RESOURCE_COMPLETE` still fires with `TITLEUI_TYPE`
+  - title cover remains visually complete
+- Interaction probe:
+  - coordinate click at the cover center did not advance into story
+  - Playwright canvas click did not advance into story
+  - coordinate click near the bottom prompt did not advance into story
+  - the runtime logs `LONG_DOWN_CANCEL_BY_MOVINE_EVENT` after these automated clicks
+
+Current technical conclusion: startup, title rendering, and the first title/story UI resource loads are now technically reproducible from the local mirror. The next blocker is input handling rather than binary parsing or missing startup assets: the local automated clicks are being interpreted by the H5 player as a long-down/move-cancel event, so the next validation should compare a real manual click against the automated click path, then patch or shim the player input event path if manual click succeeds.
