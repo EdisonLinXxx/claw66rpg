@@ -52,6 +52,59 @@
     function hasQueryFlag(name) {
       return new URLSearchParams(window.location.search).get(name) === '1';
     }
+    if (hasQueryFlag('traceRuntime')) {
+      (function () {
+        function describeCallback(callback) {
+          return callback && (callback.name || callback.toString().slice(0, 80).replace(/\s+/g, ' '));
+        }
+        function wrapCallback(callback, label) {
+          if (typeof callback !== 'function' || callback.__runnerRuntimeWrapped) return callback;
+          var wrapped = function () {
+            try {
+              return callback.apply(this, arguments);
+            } catch (error) {
+              logLine('RUNTIME ERROR in ' + label + ' ' + describeCallback(callback) + ': ' + (error && (error.stack || error.message) || error));
+              throw error;
+            }
+          };
+          wrapped.__runnerRuntimeWrapped = true;
+          return wrapped;
+        }
+        var originalSetTimeout = window.setTimeout;
+        window.setTimeout = function (callback) {
+          arguments[0] = wrapCallback(callback, 'setTimeout');
+          return originalSetTimeout.apply(this, arguments);
+        };
+        var originalSetInterval = window.setInterval;
+        window.setInterval = function (callback) {
+          arguments[0] = wrapCallback(callback, 'setInterval');
+          return originalSetInterval.apply(this, arguments);
+        };
+        var originalRequestAnimationFrame = window.requestAnimationFrame;
+        if (originalRequestAnimationFrame) {
+          window.requestAnimationFrame = function (callback) {
+            return originalRequestAnimationFrame.call(this, wrapCallback(callback, 'requestAnimationFrame'));
+          };
+        }
+        var originalAddEventListener = EventTarget.prototype.addEventListener;
+        EventTarget.prototype.addEventListener = function (type, listener) {
+          arguments[1] = wrapCallback(listener, 'event:' + type);
+          return originalAddEventListener.apply(this, arguments);
+        };
+        var scriptSrcDescriptor = Object.getOwnPropertyDescriptor(HTMLScriptElement.prototype, 'src');
+        if (scriptSrcDescriptor && scriptSrcDescriptor.set) {
+          Object.defineProperty(HTMLScriptElement.prototype, 'src', {
+            get: scriptSrcDescriptor.get,
+            set: function (value) {
+              logLine('SCRIPT SRC: ' + value);
+              if (!this.crossOrigin) this.crossOrigin = 'anonymous';
+              return scriptSrcDescriptor.set.call(this, value);
+            }
+          });
+        }
+        logLine('runtime trace enabled');
+      })();
+    }
     (function () {
       var open = XMLHttpRequest.prototype.open;
       var send = XMLHttpRequest.prototype.send;
@@ -76,23 +129,32 @@
       };
     })();
     window.addEventListener('error', function (event) {
-      logLine('ERROR: ' + event.message + ' @ ' + event.filename + ':' + event.lineno);
+      if (event.target && event.target !== window && event.target.src) {
+        logLine('RESOURCE ERROR: ' + event.target.tagName + ' ' + event.target.src);
+        return;
+      }
+      logLine('ERROR: ' + event.message + ' @ ' + event.filename + ':' + event.lineno + ':' + event.colno);
+      if (event.error && event.error.stack) logLine('ERROR STACK: ' + event.error.stack);
+    }, true);
+    window.addEventListener('unhandledrejection', function (event) {
+      var reason = event.reason;
+      logLine('UNHANDLED REJECTION: ' + (reason && (reason.stack || reason.message) || reason));
     });
   </script>
-  <script src="https://c1.cgyouxi.com/website/hfplayer/v2/bin/libs/jquery-2.1.4.min.js?v=20210202002"></script>
-  <script src="https://c1.cgyouxi.com/website/hfplayer/v2/bin/libs/base91.js?v=20210202002"></script>
-  <script src="https://c2.cgyouxi.com/website/hfplayer/v2/bin/libs/utils.js?v=20210202002"></script>
-  <script src="https://c2.cgyouxi.com/website/hfplayer/v2/common/Common.js?v=20210202002"></script>
-  <script src="https://c3.cgyouxi.com/website/hfplayer/v2/common/Login.js?v=20210202002"></script>
-  <script src="https://c2.cgyouxi.com/website/mobile/js/ssologin.js?v=20210202002"></script>
-  <script src="https://c1.cgyouxi.com/website/hfplayer/v2/bin/libs/min/laya.core.min.js?v=20210202002"></script>
-  <script src="https://c4.cgyouxi.com/website/hfplayer/v2/bin/libs/min/laya.webgl.min.js?v=20210202002"></script>
-  <script src="https://c1.cgyouxi.com/website/hfplayer/v2/bin/libs/min/laya.filter.min.js?v=20210202002"></script>
-  <script src="https://c4.cgyouxi.com/website/hfplayer/v2/bin/libs/min/laya.ui.min.js?v=20210202002"></script>
-  <script src="https://c1.cgyouxi.com/website/hfplayer/v2/bin/libs/min/laya.html.min.js?v=20210202002"></script>
-  <script src="https://c1.cgyouxi.com/website/hfplayer/v2/bin/js/lib/LibClass.js?v=20210202002"></script>
-  <script src="https://c2.cgyouxi.com/website/hfplayer/v2/bin/libs/pc-common-VA.js?v=20210202002"></script>
-  <script src="https://c2.cgyouxi.com/website/hfplayer/v2/bin/main.min.js?v=20210202002"></script>
+  <script crossorigin="anonymous" src="https://c1.cgyouxi.com/website/hfplayer/v2/bin/libs/jquery-2.1.4.min.js?v=20210202002"></script>
+  <script crossorigin="anonymous" src="https://c1.cgyouxi.com/website/hfplayer/v2/bin/libs/base91.js?v=20210202002"></script>
+  <script crossorigin="anonymous" src="https://c2.cgyouxi.com/website/hfplayer/v2/bin/libs/utils.js?v=20210202002"></script>
+  <script crossorigin="anonymous" src="https://c2.cgyouxi.com/website/hfplayer/v2/common/Common.js?v=20210202002"></script>
+  <script crossorigin="anonymous" src="https://c3.cgyouxi.com/website/hfplayer/v2/common/Login.js?v=20210202002"></script>
+  <script crossorigin="anonymous" src="https://c2.cgyouxi.com/website/mobile/js/ssologin.js?v=20210202002"></script>
+  <script crossorigin="anonymous" src="https://c1.cgyouxi.com/website/hfplayer/v2/bin/libs/min/laya.core.min.js?v=20210202002"></script>
+  <script crossorigin="anonymous" src="https://c4.cgyouxi.com/website/hfplayer/v2/bin/libs/min/laya.webgl.min.js?v=20210202002"></script>
+  <script crossorigin="anonymous" src="https://c1.cgyouxi.com/website/hfplayer/v2/bin/libs/min/laya.filter.min.js?v=20210202002"></script>
+  <script crossorigin="anonymous" src="https://c4.cgyouxi.com/website/hfplayer/v2/bin/libs/min/laya.ui.min.js?v=20210202002"></script>
+  <script crossorigin="anonymous" src="https://c1.cgyouxi.com/website/hfplayer/v2/bin/libs/min/laya.html.min.js?v=20210202002"></script>
+  <script crossorigin="anonymous" src="https://c1.cgyouxi.com/website/hfplayer/v2/bin/js/lib/LibClass.js?v=20210202002"></script>
+  <script crossorigin="anonymous" src="https://c2.cgyouxi.com/website/hfplayer/v2/bin/libs/pc-common-VA.js?v=20210202002"></script>
+  <script crossorigin="anonymous" src="https://c2.cgyouxi.com/website/hfplayer/v2/bin/main.min.js?v=20210202002"></script>
 </head>
 <body>
   <div id="debug">runner experiment loaded</div>
@@ -350,6 +412,48 @@
           return result;
         };
         Main.prototype.__runnerPatched = true;
+      }
+      if (hasQueryFlag('traceRuntime')) {
+        logLine('runtime globals Main=' + typeof Main + ' Laya=' + typeof Laya + ' GloableData=' + typeof GloableData);
+        var runtimePollCount = 0;
+        var runtimePoll = setInterval(function () {
+          runtimePollCount += 1;
+          var stageChildren = window.Laya && Laya.stage ? Laya.stage.numChildren : 'n/a';
+          var layaTimerScale = window.Laya && Laya.timer ? Laya.timer.scale : 'n/a';
+          var hasGameMain = !!window.gameMain;
+          var gameInfo = window.GloableData && GloableData.getInstance ? GloableData.getInstance().gameInfo : null;
+          var summarizeChild = function (child, index, depth) {
+            var summary = {
+              index: index,
+              type: child && child.constructor ? child.constructor.name : typeof child,
+              name: child && child.name,
+              visible: child && child.visible,
+              alpha: child && child.alpha,
+              x: child && child.x,
+              y: child && child.y,
+              width: child && child.width,
+              height: child && child.height,
+              numChildren: child && typeof child.numChildren === 'number' ? child.numChildren : null
+            };
+            if (child && child.graphics && child.graphics._one) summary.graphicsOne = true;
+            if (child && child.texture) summary.textureUrl = child.texture.url;
+            if (child && depth > 0 && typeof child.numChildren === 'number') {
+              summary.children = [];
+              for (var nestedIndex = 0; nestedIndex < Math.min(child.numChildren, 5); nestedIndex++) {
+                summary.children.push(summarizeChild(child.getChildAt(nestedIndex), nestedIndex, depth - 1));
+              }
+            }
+            return summary;
+          };
+          var childSummary = [];
+          if (window.Laya && Laya.stage) {
+            for (var childIndex = 0; childIndex < Laya.stage.numChildren; childIndex++) {
+              childSummary.push(summarizeChild(Laya.stage.getChildAt(childIndex), childIndex, 2));
+            }
+          }
+          logLine('RUNTIME STATE ' + runtimePollCount + ': gameMain=' + hasGameMain + ' stageChildren=' + stageChildren + ' timerScale=' + layaTimerScale + ' gameInfo=' + JSON.stringify(gameInfo) + ' children=' + JSON.stringify(childSummary));
+          if (runtimePollCount >= 5) clearInterval(runtimePoll);
+        }, 2000);
       }
       window.gameMain = new Main();
       window.gameMain.initGameData(

@@ -223,3 +223,37 @@ Current technical conclusion: the main structural blocker is cleared in the expe
   - the player's `.error-bg` overlay stays hidden, so this is not the previous visible resource-load error state
 
 Current technical conclusion: dependency mirroring is technically workable and can be driven from observed runner logs. The patched runner now reaches past main-bin parsing and the first secondary bin/font loads. The next blocker is an opaque runtime script error after startup resources load, so the next validation should instrument runtime errors more deeply and identify whether the failure is caused by an external API call, a missing non-`shareres` asset, or another player compatibility issue.
+
+## Round 11: Runtime Error And Stage State Trace
+
+- Added richer runner diagnostics to `h5_runner_experiment.html`:
+  - `crossorigin="anonymous"` on static player scripts
+  - fuller `window.error` and `unhandledrejection` logging
+  - `traceRuntime=1` to log dynamic script URLs, wrap async callbacks, and poll Laya stage state
+  - recursive stage child summaries for the first visible scene nodes
+- Browser validation URL:
+  - `http://127.0.0.1:8765/h5_runner_experiment.html?localRes=1&patchNewDSystem=1&traceRuntime=1`
+- Validation result:
+  - `Main`, `Laya`, and `GloableData` are all available before initialization
+  - `window.gameMain` is created successfully
+  - `gameInfo` is populated:
+    - `gName`: `【区半挂件】美人客栈`
+    - `gIndex`: `127`
+    - package runtime `ver`: `108`
+    - dimensions: `960x540`
+  - local mirrored startup resources load successfully:
+    - main `game.bin`: HTTP 200
+    - `mallnew.bin`: HTTP 200
+    - `font/font.list`: HTTP 200
+    - `font/方正宋刻本秀楷简体$26.xfi`: HTTP 200
+- The remaining observed external/platform failures are now separated from local asset mirroring:
+  - dynamic JSONP script `https://www.66rpg.com/ajax/index/get_home_gray?...` fails as a resource error, and direct local probing returns HTTP 403
+  - reporting/investigation URLs are malformed in this local runner context, for example `http:https://report.66rpg.com/...` and `http:https://c.66rpg.com/...`
+  - an opaque `Script error. @ :0:0` still fires after the font resources load
+- Laya stage state:
+  - stage initially has two children, including `adView`
+  - after the script error, stage has one root container
+  - that container contains a nested loading/progress display: a `960x540` graphics node plus progress-bar-like graphics nodes near `y=446..482`
+  - no game scene or title/menu view is mounted after five runtime polls
+
+Current technical conclusion: the runner now reaches the platform/player startup layer, not merely binary parsing. The next likely blocker is the official player startup flow around platform APIs, ads, and loading completion, rather than missing initial `shareres` files. The next validation should stub or bypass nonessential platform endpoints/ad flow (`get_home_gray`, report/investigate calls, possibly `adView`) and trace which player method should advance from the loading view into the game scene.
