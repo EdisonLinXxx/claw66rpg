@@ -39,7 +39,7 @@ def parse_event(reader):
 def parse_event_list(reader, label):
     count_pos = reader.pos
     count = reader.i32()
-    if count < 0 or count > 1000:
+    if count < 0 or count > 10000:
         raise ValueError(f"bad {label} count {count} at {count_pos}")
     events = []
     for _ in range(count):
@@ -127,6 +127,7 @@ def main():
     parser.add_argument("--cui-start", type=int, default=48330)
     parser.add_argument("--count", type=int, default=5)
     parser.add_argument("--no-after-events", action="store_true")
+    parser.add_argument("--chain-extra", action="store_true")
     args = parser.parse_args()
 
     data = Path(args.path).read_bytes()
@@ -135,10 +136,11 @@ def main():
     ext_a = tail.i32()
     ext_b = tail.i32()
     ext_c = tail.i32()
-    cui_count = tail.i32()
+    first_cui_load_count = tail.i32()
     print(
         f"tail@{args.tail}: ui_init_save={ui_init_save} "
-        f"ext=({ext_a},{ext_b},{ext_c}) cui_count={cui_count} next={tail.pos}"
+        f"ext=({ext_a},{ext_b},{ext_c}) first_cui_load_count={first_cui_load_count} "
+        f"next={tail.pos}"
     )
 
     reader = Reader(data, args.cui_start)
@@ -162,6 +164,14 @@ def main():
             f"controls={len(cui['controls'])} show={cui['show_effect']} "
             f"mouse={cui['is_mouse_exit']} key={cui['is_key_exit']}{first_summary}"
         )
+        if args.chain_extra and index + 1 < args.count:
+            extra_pos = reader.pos
+            try:
+                extra = reader.i32()
+            except Exception as exc:
+                print(f"chain extra failed at {extra_pos}: {exc}")
+                break
+            print(f"  chain_extra pos={extra_pos} value={extra} next={reader.pos}")
     print(f"next_pos={reader.pos}")
 
 

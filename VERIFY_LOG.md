@@ -107,3 +107,36 @@ Current technical conclusion: the compatibility blocker is broader than the `But
 - Interpretation: the main new CUI schema difference is now identified, but at least one `DCustomUIItem` / control branch has additional fields or a type-specific layout that the old public player does not support.
 
 Current technical conclusion: a minimal parser patch is becoming plausible, but it must handle three differences: extended button table, missing `afterEvent` list in newer CUI blocks, and at least one newer control-item branch. The next validation should focus on `control[12]` in CUI #2 and derive its type-specific field layout.
+
+## Round 7: Chained Custom UI Table Probe
+
+- Raised the event-list safety limit in `probe_dsystem_tail.py` from `1000` to `10000`.
+- Added `--chain-extra` to parse consecutive newer CUI blocks by skipping the 4-byte size/extra field that appears between blocks.
+- Corrected the Round 5/6 interpretation:
+  - `48334` is not a CUI table count
+  - it is the first CUI block's `loadEvent` count
+  - the CUI table begins at `48330`
+- Rechecked the previous CUI #2 `control[12]` failure:
+  - `100322`: control marker/extra field
+  - `100326`: event count `1508`
+  - `100330`: first event record
+  - parsing `1508` event records succeeds through `238230`
+- With the higher event limit, CUI #2 parses completely:
+  - `start=79000`, `end=238459`
+  - `load=19`, `controls=15`, `show=0`, `mouse=1`, `key=1`
+  - first control image: `兑换码.png`
+- Chained CUI parsing then succeeds through many blocks:
+  - CUI #0: `48330 -> 51816`, `load=5`, `controls=20`
+  - CUI #1: `51820 -> 78996`, `load=31`, `controls=102`
+  - CUI #2: `79000 -> 238459`, `load=19`, `controls=15`
+  - CUI #3: `238463 -> 288965`, `load=928`, `controls=34`
+  - CUI #4: `288969 -> 291800`, `load=14`, `controls=8`
+  - CUI #5 and onward continue with the same `extra -> marker -> loadEvents -> controls -> show/mouse/key` layout
+- A 1000-block chain probe did not hit a parser error. Late entries become empty placeholder-like CUI blocks with:
+  - `extra=24`
+  - `marker=0`
+  - `load=0`
+  - `controls=0`
+  - `show=0`, `mouse=1`, `key=1`
+
+Current technical conclusion: the previous suspected `DCustomUIItem` branch mismatch was a false alarm caused by an overly low event-count guard. The newer CUI table is now parsable as a chained sequence with inter-block 4-byte extras and no `afterEvent` list. The remaining unknown is how the real CUI table terminates or how its count is encoded before the parser reaches later `DMain` sections.
