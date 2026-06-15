@@ -639,7 +639,13 @@
             var eventInfo = event && typeof event === 'object'
               ? { type: event.type, parameter: summarizeValue(event.parameter) }
               : summarizeValue(event);
-            logLine('EVENT dispatch ' + JSON.stringify(eventInfo));
+            var isNoisyOafFrame = false;
+            if (hasQueryFlag('quietOafEvents') && eventInfo && eventInfo.type === GameEventConstant.LOAD_IMAGE_COMPLETE && Array.isArray(eventInfo.parameter)) {
+              isNoisyOafFrame = /Graphics\/oafs\/.*[\\\/]\d+\.png/i.test(String(eventInfo.parameter[0] || ''));
+            }
+            if (!isNoisyOafFrame) {
+              logLine('EVENT dispatch ' + JSON.stringify(eventInfo));
+            }
             var dispatchResult = originalDispatchEvent.apply(this, arguments);
             if (event && event.type === GameEventConstant.LOAD_UI_RESOURCE_COMPLETE && event.parameter === UIResouecrLoad.TITLEUI_TYPE) {
               setTimeout(function () {
@@ -651,6 +657,67 @@
             return dispatchResult;
           };
           EventCenter.dispatchEvent.__runnerEventWrapped = true;
+        }
+        if (hasQueryFlag('traceUiState') && !window.__runnerUiStateTraceStarted) {
+          window.__runnerUiStateTraceStarted = true;
+          var collectUiState = function () {
+            var nodes = [];
+            var targets = [];
+            var visit = function (node, depth, path, parentX, parentY) {
+              if (!node || depth > 4 || nodes.length >= 80) return;
+              var localX = Number(node.x || 0);
+              var localY = Number(node.y || 0);
+              var globalX = parentX + localX;
+              var globalY = parentY + localY;
+              var width = Number(node.width || 0);
+              var height = Number(node.height || 0);
+              var visible = node.visible !== false && node.alpha !== 0;
+              var hasTexture = !!(node.texture || node.graphics);
+              var text = node.text || node.label || node.name || '';
+              var className = node.constructor && node.constructor.name || typeof node;
+              if (visible && (text || hasTexture || width > 20 || height > 20)) {
+                nodes.push({
+                  path: path,
+                  cls: className,
+                  name: node.name || '',
+                  text: String(text).slice(0, 30),
+                  x: Math.round(localX),
+                  y: Math.round(localY),
+                  gx: Math.round(globalX),
+                  gy: Math.round(globalY),
+                  w: Math.round(width),
+                  h: Math.round(height),
+                  children: node.numChildren || 0
+                });
+                if (width >= 30 && height >= 25 && width <= 260 && height <= 120) {
+                  targets.push({
+                    path: path,
+                    cls: className,
+                    text: String(text).slice(0, 30),
+                    cx: Math.round(globalX + width / 2),
+                    cy: Math.round(globalY + height / 2),
+                    w: Math.round(width),
+                    h: Math.round(height)
+                  });
+                }
+              }
+              if (node.numChildren && typeof node.getChildAt === 'function') {
+                for (var childIndex = 0; childIndex < node.numChildren; childIndex++) {
+                  visit(node.getChildAt(childIndex), depth + 1, path + '.' + childIndex, globalX, globalY);
+                }
+              }
+            };
+            try {
+              visit(window.Laya && Laya.stage, 0, 'stage', 0, 0);
+              logLine('UI STATE ' + JSON.stringify(nodes));
+              logLine('UI TARGETS ' + JSON.stringify(targets.slice(0, 30)));
+            } catch (uiStateError) {
+              logLine('UI STATE ERROR ' + (uiStateError && uiStateError.stack || uiStateError));
+            }
+          };
+          setInterval(collectUiState, 5000);
+          setTimeout(collectUiState, 1500);
+          logLine('ui state trace enabled');
         }
         logLine('runtime globals Main=' + typeof Main + ' Laya=' + typeof Laya + ' GloableData=' + typeof GloableData);
         var runtimePollCount = 0;

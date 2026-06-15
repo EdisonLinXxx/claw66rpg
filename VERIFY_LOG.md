@@ -478,3 +478,38 @@ Current technical conclusion: `/null path` is a low-priority noisy request in th
 - Browser screenshot capture still times out during the animated scene, so this round again uses debug text plus HTTP status logs as primary evidence.
 
 Current technical conclusion: the resource mirror is now stable through the first scene, first dialogue advancement, create-character resource load, and dynamic-standing OAF animation. The next useful validation should reduce noisy animation trace output or add a targeted event/UI-state trace, because raw `LOAD_IMAGE_COMPLETE` logs from looping OAF frames make it hard to identify the next actionable UI state.
+
+## Round 19: Quiet OAF Logs And UI Target Trace
+
+- Added two runner-only diagnostic flags:
+  - `quietOafEvents=1`
+  - `traceUiState=1`
+- `quietOafEvents=1` suppresses repetitive `LOAD_IMAGE_COMPLETE` events for OAF frame paths such as:
+  - `Graphics/oafs/.../14.png`
+  - `Graphics/oafs/...\\14.png`
+- `traceUiState=1` periodically logs:
+  - `UI STATE`: visible Laya stage nodes with local and global coordinates (`x/y`, `gx/gy`)
+  - `UI TARGETS`: likely clickable targets with center coordinates (`cx/cy`) and bounds
+- Validation URL:
+  - `http://127.0.0.1:8765/h5_runner_experiment.html?localRes=1&patchNewDSystem=1&traceRuntime=1&traceTitle=1&traceNullPath=1&quietOafEvents=1&traceUiState=1&patchTitleClick=1&clearStorage=1&hideDebug=1`
+- Browser validation result:
+  - title entry still works
+  - patched title click still emits `PATCH TITLE CLICK START`
+  - the first scene UI can be inspected without OAF frame log flooding
+  - debug text summary after entering first scene:
+    - `Graphics/oafs` log count: `0`
+    - `UI STATE` count: `7`
+    - `UI TARGETS` count: `7`
+    - `PATCH TITLE CLICK START` count: `1`
+    - `NULL PATH` count: `2`
+- Example `UI TARGETS` captured in the first scene:
+  - `stage.0.3.0.0`, center `(536,413)`, size `132x50`
+  - `stage.0.3.0.1`, center `(632,417)`, size `54x58`
+  - `stage.0.3.0.2`, center `(775,429)`, size `69x82`
+  - `stage.0.7.0`, center `(921,54)`, size `42x52`
+  - `stage.0.7.1`, center `(921,124)`, size `42x52`
+- Local HTTP log:
+  - no new real `/shareres/<md5>` `404`
+  - only the known two `/null%20path` requests remain
+
+Current technical conclusion: the next validation can use `UI TARGETS` instead of guessed coordinates. This gives a cleaner path for automated gameplay probing: click each stable target center, wait briefly, then check for new `LOAD_UI_RESOURCE_COMPLETE`, real `/shareres` 404s, or a changed `UI TARGETS` set.
