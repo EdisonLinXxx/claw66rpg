@@ -448,3 +448,33 @@ Current technical conclusion: gameplay continuity is now verified one step beyon
   - direct HTTP request to `http://127.0.0.1:8765/shareres/08/0839375b26561183ca0bd747ed0dccc3` returns `200` with length `32641`
 
 Current technical conclusion: `/null path` is a low-priority noisy request in the current path because it is not stopping gameplay progression and is not a normal mapped asset miss. The next practical step is to continue the gameplay loop after `move_1.mp3` is mirrored, then collect and mirror the next real `/shareres/<md5>` 404. If `/null path` later becomes blocking, use a deeper Laya `Loader`/`URL.formatURL` monkey patch rather than treating it as a missing file.
+
+## Round 18: Continue After Move Sound Mirror
+
+- Reused the patched runner with:
+  - `localRes=1`
+  - `patchNewDSystem=1`
+  - `traceRuntime=1`
+  - `traceTitle=1`
+  - `traceNullPath=1`
+  - `patchTitleClick=1`
+  - `clearStorage=1`
+  - `hideDebug=1`
+- Validation path:
+  - loaded title
+  - clicked the title cover through the patched title-click path
+  - reached the first story scene with `Graphics/Background/传送门.jpg`
+  - advanced the dialogue/scene with several lower-screen and management-area clicks
+- Result after `audio/se/move_1.mp3` was mirrored in Round 17:
+  - no new `/shareres/<md5>` `404` was observed in the local HTTP log
+  - the only 404s remained the two known `/null%20path` requests
+  - after additional clicks, the debug log shows `Graphics/oafs/动态立绘1/...` frame loading repeatedly
+  - the debug log also confirms `创建人物` resources appeared earlier in the run
+  - local HTTP log confirms the previously mirrored create-character and dynamic-standing resources now return `304`
+- Additional interaction probe:
+  - several likely create-character / lower-screen click coordinates were tested
+  - these did not expose another UI resource wave or new real asset miss
+  - no new `RESOURCE ERROR` or `NULL PATH` entries appeared after those extra clicks
+- Browser screenshot capture still times out during the animated scene, so this round again uses debug text plus HTTP status logs as primary evidence.
+
+Current technical conclusion: the resource mirror is now stable through the first scene, first dialogue advancement, create-character resource load, and dynamic-standing OAF animation. The next useful validation should reduce noisy animation trace output or add a targeted event/UI-state trace, because raw `LOAD_IMAGE_COMPLETE` logs from looping OAF frames make it hard to identify the next actionable UI state.
