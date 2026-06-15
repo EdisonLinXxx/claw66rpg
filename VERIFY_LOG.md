@@ -25,3 +25,20 @@
 - Added `fixEndian=1` to set `GameByte.endian = OByteArray.LITTLE_ENDIAN` in the main bin loader, but this did not resolve the mismatch.
 
 Current technical conclusion: asset acquisition is feasible, but this player/runtime path is not yet enough for complete execution. The remaining blocker is parser compatibility or a missing runtime transform/initialization step before `readGameBin`.
+
+## Round 3: Public Player Version Probe
+
+- Added `66rpgProjectDropper/probe_player_assets.py` to extract official H5 player asset URLs across multiple game pages.
+- Tested accessible H5 pages including `1077671`, `1091342`, `1187730`, `1331133`, `1478834`, `1526802`, `1562209`, `1569945`, `1569947`, `1678415`, and `1690428`.
+- All tested official H5 pages referenced the same public player entry:
+  - `https://c2.cgyouxi.com/website/hfplayer/v2/bin/main.min.js?v=20210202002`
+- Added `66rpgProjectDropper/probe_cdn_player_candidates.py` to test common CDN candidates.
+- CDN candidate results:
+  - `hfplayer/v1/...` paths returned `404`
+  - `hfplayer/v3/...` paths returned `404`
+  - `hfplayer/v2/bin/main.js`, debug paths, and `bin/js/main*.js` returned `404`
+  - `hfplayer/v2/bin/main.min.js` exists on `c1` through `c4`, all with the same MD5: `dea2b3b0e0e3afa96e4d326d6b349721`
+- Query parameters on `main.min.js` are only cache busters:
+  - no query, `?v=20210202002`, `?v=20190101`, `?v=20240101`, and `?v=random` all returned the same MD5.
+
+Current technical conclusion: there is no alternate public H5 player version exposed through the tested official pages or common CDN paths. The remaining path is to investigate parser/runtime assumptions inside the current player, especially why `GameByte` parsing becomes offset by one byte around the first complex UI/string block.
