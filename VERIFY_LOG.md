@@ -355,3 +355,26 @@ Current technical conclusion: startup, title rendering, and the first title/stor
   - several first-scene UI/button resources loaded after the story path started
 
 Current technical conclusion: title-to-story transition is technically viable when the title start event is triggered directly. The remaining user-interaction problem is not the story engine; it is title input targeting/event dispatch. The next validation should implement a narrow `patchTitleClick=1` shim that converts a click/tap on the visible title cover into `CLICK_TITLE_VIEW_BUTTON` with `TITLE_BUTTON_TYPE_1`, then verify that the page can enter story through normal user input instead of `autoStartTitle`.
+
+## Round 15: Patched Cover Click Enters First Scene
+
+- Added `clearStorage=1` to clear `localStorage` and `sessionStorage` before runner initialization. This prevents previous local autosave/session state from sending the validation directly into a black story layer before title UI appears.
+- Added `patchTitleClick=1`:
+  - installed native capture listeners for `click`, `pointerup`, `mouseup`, and `touchend` after title UI resources complete
+  - on the first cover click, calls the same local start-story helper as `autoStartTitle`
+  - default behavior is unchanged unless the flag is present
+- Browser validation URL:
+  - `http://127.0.0.1:8765/h5_runner_experiment.html?localRes=1&patchNewDSystem=1&traceRuntime=1&traceTitle=1&patchTitleClick=1&clearStorage=1&hideDebug=1`
+- Pre-click validation:
+  - `browser storage cleared`
+  - `TITLE STATE after-title-ui-resource`
+  - `patchTitleClick native listeners installed`
+  - title data still reports `startStoryId=1`
+- Click validation:
+  - automated cover click emitted `PATCH TITLE CLICK START storyId=1`
+  - story resources loaded after the click, including `Graphics/Background/传送门.jpg`
+  - OAF frame resources for `Graphics/oafs/红花瓣飘动_540` loaded
+  - screenshot `round15_after_patch_click.png` shows the first interactive game scene with character art, background, menu/light-text controls, and story/management UI
+- The underlying runtime still logs `LONG_DOWN_CANCEL_BY_MOVINE_EVENT` around automated pointer input, but it no longer blocks the patched cover-click path.
+
+Current technical conclusion: with the patched parser, mirrored resources, and a small title-click shim, this 66RPG game can be loaded locally from mirrored assets, display its title, accept a cover click, and enter the first playable scene. The next validation should move from bootstrapping to gameplay continuity: click the first scene controls, observe the next resource wave, and use `--mirror-log` iteratively until a short 3-5 minute play path runs without local 404s.

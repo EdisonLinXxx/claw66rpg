@@ -162,6 +162,15 @@
     if (hasQueryFlag('hideDebug')) {
       document.getElementById('debug').style.display = 'none';
     }
+    if (hasQueryFlag('clearStorage')) {
+      try {
+        localStorage.clear();
+        sessionStorage.clear();
+        logLine('browser storage cleared');
+      } catch (storageError) {
+        logLine('browser storage clear failed ' + (storageError && storageError.stack || storageError));
+      }
+    }
     logLine('starting game init');
     try {
       if (hasQueryFlag('traceReads') && window.GameByte && !GameByte.prototype.__runnerTracePatched) {
@@ -494,23 +503,47 @@
               logLine('TITLE STATE ERROR ' + (titleError && titleError.stack || titleError));
             }
           };
+          var startTitleStory = function (label) {
+            var system = GloableData.getInstance().gameMainData.System;
+            logLine(label + ' storyId=' + system.StartStoryId);
+            UIManager.getInstance().closeView(view.TitleUIMediator.NAME, false);
+            if (GloableData.getInstance().isFreeLimit) {
+              GloableData.getInstance().dGameSystem.varsEx.loadExData(true);
+            } else {
+              GloableData.getInstance().dGameSystem.varsEx.loadExData();
+            }
+            GloableData.getInstance().iMain.jumpStoryCallBack(system.StartStoryId);
+          };
           var autoStartTitle = function () {
             if (!hasQueryFlag('autoStartTitle')) return;
             setTimeout(function () {
               try {
-                var system = GloableData.getInstance().gameMainData.System;
-                logLine('AUTO TITLE START storyId=' + system.StartStoryId);
-                UIManager.getInstance().closeView(view.TitleUIMediator.NAME, false);
-                if (GloableData.getInstance().isFreeLimit) {
-                  GloableData.getInstance().dGameSystem.varsEx.loadExData(true);
-                } else {
-                  GloableData.getInstance().dGameSystem.varsEx.loadExData();
-                }
-                GloableData.getInstance().iMain.jumpStoryCallBack(system.StartStoryId);
+                startTitleStory('AUTO TITLE START');
               } catch (autoError) {
                 logLine('AUTO TITLE START ERROR ' + (autoError && autoError.stack || autoError));
               }
             }, 800);
+          };
+          var patchTitleClick = function () {
+            if (!hasQueryFlag('patchTitleClick') || window.__runnerTitleClickPatched) return;
+            window.__runnerTitleClickPatched = true;
+            var started = false;
+            var handler = function (domEvent) {
+              if (started) return;
+              started = true;
+              try {
+                if (domEvent && domEvent.preventDefault) domEvent.preventDefault();
+                if (domEvent && domEvent.stopPropagation) domEvent.stopPropagation();
+                startTitleStory('PATCH TITLE CLICK START');
+              } catch (clickError) {
+                started = false;
+                logLine('PATCH TITLE CLICK ERROR ' + (clickError && clickError.stack || clickError));
+              }
+            };
+            ['click', 'pointerup', 'mouseup', 'touchend'].forEach(function (eventName) {
+              document.addEventListener(eventName, handler, true);
+            });
+            logLine('patchTitleClick native listeners installed');
           };
           EventCenter.dispatchEvent = function (event) {
             var summarizeValue = function (value) {
@@ -528,6 +561,7 @@
             if (event && event.type === GameEventConstant.LOAD_UI_RESOURCE_COMPLETE && event.parameter === UIResouecrLoad.TITLEUI_TYPE) {
               setTimeout(function () {
                 traceTitleState('after-title-ui-resource');
+                patchTitleClick();
                 autoStartTitle();
               }, 100);
             }
