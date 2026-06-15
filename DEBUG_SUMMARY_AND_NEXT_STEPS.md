@@ -245,6 +245,8 @@ Latest verified behavior:
 - welfare/event right-side target `(956,65)` still exposes no further inner target set after a 9-second stabilization wait
 - `UI TARGETS` now includes reliable `x/y` aliases, bounds, texture hints, listener lists, and `likelyInteractive`
 - first-scene target output was revalidated after the trace enhancement and still returns the expected 7 clickable targets
+- enhanced backpack reprobe showed the previous approximate point `(672,193)` is not an emitted clickable target in `bp.6`
+- actual `bp.6` deeper/action targets include `(626,320)` and `(785,354)`; both emit `CLICK_SCUI_BUTTON` but keep the target set stable in the sample window
 
 ## How To Reproduce The Current Validation
 
@@ -307,6 +309,7 @@ Second-level resource-miss loop:
 | Two-button deeper UI | `(432,478)`, `(617,474)`, `(925,503)` | `(432,478)` triggers a transition/resource load and reduces the target set; `(617,474)` reloads/keeps the deeper UI; `(925,503)` closes back to first-scene/right-button targets. |
 | Backpack deeper pages | `(925,496)`, `(672,193)`, `(343,327)` | `(925,496)` is a reliable close/return target; the other two sampled coordinates did not trigger effective button events in their sampled states. |
 | Welfare/event longer wait | `(956,65)` plus 9s wait | Target set stayed at 14 and no deeper inner target set appeared. |
+| Backpack enhanced reprobe | `bp.6` exact targets `(626,320)`, `(785,354)` | Both are real emitted targets with click listeners and emit `CLICK_SCUI_BUTTON`; target set remains stable and no new resource wave appears. |
 
 Latest resource-miss loop:
 
@@ -334,16 +337,16 @@ Validation after a cache-busted reload:
 
 ## Next Debug Direction
 
-### Priority 1: Reprobe Backpack With Enhanced Targets
+### Priority 1: Continue Exact-Target Backpack Probe
 
-Use the enhanced target output to avoid hand-picked approximate coordinates:
+The enhanced trace corrected the `bp.6` false coordinate probe. Continue exact-target probing only from emitted `UI TARGETS`:
 
 1. open `(921,54)`
 2. click backpack `(318,426)`
-3. click category targets such as `(74,328)` and `(74,375)`
+3. click category targets such as `(74,328)`, `(74,375)`, and `(74,422)`
 4. read the latest `UI TARGETS`
 5. click emitted exact targets with `listeners` containing `click` or `mousedown`
-6. classify whether the previous approximate no-ops `(672,193)` and `(343,327)` have nearby real clickable targets
+6. classify bottom-slot targets such as `(210,476)`, `(331,476)`, `(451,476)`, `(570,476)`, `(690,476)`, and `(810,476)`
 
 ### Priority 2: Platform/Service Boundary
 

@@ -818,3 +818,36 @@ Validation:
   - `stage.0.7.0` now carries its inherited texture URL `game_menu2_web.png` and event listener list including `click`.
 
 Current technical conclusion: `UI TARGETS` is now more suitable for automated probing because it exposes reliable `x/y` click centers, visible bounds, texture hints, and listener metadata. The next useful validation is to re-run a small backpack deeper probe with the enhanced target output and use the emitted exact centers instead of hand-picked approximate coordinates.
+
+## Round 26: Backpack Reprobe With Enhanced Targets
+
+- Reused the enhanced `UI TARGETS` output from Round 25.
+- Local HTTP log baseline: line `4036`.
+- Path:
+  1. reload with `clearStorage=1`
+  2. click title cover `(480,270)`
+  3. click main menu `(921,54)`
+  4. click backpack `(318,426)`
+  5. click category `bp.6` `(74,328)`
+  6. inspect emitted target centers before clicking deeper controls
+
+Enhanced target output for `bp.6` showed:
+
+- the previously hand-picked approximate point `(672,193)` does not correspond to an emitted clickable target in this state
+- actual emitted clickable targets include:
+  - bottom vertical slots: `(210,476)`, `(331,476)`, `(451,476)`, `(570,476)`, `(690,476)`, `(810,476)`
+  - action/detail-like targets: `(626,320)` and `(785,354)`
+
+Representative exact-target clicks:
+
+| Target path | Coordinate | Classification | Result |
+| --- | --- | --- | --- |
+| `stage.0.6.0.24` | `(626,320)` | actionable/no visible state change | Triggered `CLICK_SCUI_BUTTON`; target count stayed 25; no resource wave and no script error. |
+| `stage.0.6.0.25` | `(785,354)` | actionable/no visible state change | Triggered `CLICK_SCUI_BUTTON`; target count stayed 25; no resource wave and no script error. |
+
+HTTP result:
+
+- no new real `/shareres/<md5>` 404 appeared after line `4036`
+- only the known `/null%20path` requests appeared
+
+Current technical conclusion: the enhanced target trace resolved the earlier false coordinate probe. `(672,193)` was not a real emitted target; the nearby real `bp.6` controls are `(626,320)` and `(785,354)`. Both are clickable but currently do not produce visible target-set or resource changes in the sample window. The next useful validation can continue exact-target probing of the bottom slots, or switch to the mall/shop platform boundary.
