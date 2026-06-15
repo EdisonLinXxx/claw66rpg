@@ -1,5 +1,6 @@
 import argparse
 import json
+import re
 import struct
 from pathlib import Path
 from urllib.parse import urlparse
@@ -46,15 +47,19 @@ def write_api_map(entries, root):
 
 def mirror_entry(http, entry, cdn_host, root):
     name, expected_size, md5, _ = entry
-    data = fetch_bytes(http, resource_url(md5, cdn_host))
     target = root / "shareres" / md5[:2].lower() / md5
     target.parent.mkdir(parents=True, exist_ok=True)
-    target.write_bytes(data)
+    if target.exists():
+        actual_size = target.stat().st_size
+    else:
+        data = fetch_bytes(http, resource_url(md5, cdn_host))
+        target.write_bytes(data)
+        actual_size = len(data)
     return {
         "name": name,
         "path": str(target),
         "expected_size": expected_size,
-        "actual_size": len(data),
+        "actual_size": actual_size,
         "md5": md5,
     }
 
@@ -67,8 +72,21 @@ def main():
     parser.add_argument("--root", default=".", help="runner web root")
     parser.add_argument(
         "--mirror-name",
-        default="data/game.bin",
-        help="mapped filename to mirror locally; default mirrors only the main game bin",
+        action="append",
+        default=[],
+        help="mapped filename to mirror locally; may be repeated. Defaults to data/game.bin when no mirror selector is provided.",
+    )
+    parser.add_argument(
+        "--mirror-md5",
+        action="append",
+        default=[],
+        help="mapped MD5 to mirror locally; may be repeated.",
+    )
+    parser.add_argument(
+        "--mirror-log",
+        action="append",
+        default=[],
+        help="runner log file to scan for /shareres/xx/<md5> URLs and mirror missing mapped resources.",
     )
     args = parser.parse_args()
 
@@ -82,18 +100,39 @@ def main():
     entries = parse_map_bin(fetch_bytes(http, map_url))
     api_path = write_api_map(entries, root)
     by_name = {entry[0].lower(): entry for entry in entries}
-    entry = by_name.get(args.mirror_name.lower())
-    if not entry:
-        raise SystemExit(f"mapped file not found: {args.mirror_name}")
-    mirrored = mirror_entry(http, entry, args.cdn_host, root)
+    by_md5 = {entry[2].lower(): entry for entry in entries}
+    log_md5s = []
+    for log_path in args.mirror_log:
+        text = Path(log_path).read_text(encoding="utf-8", errors="replace")
+        log_md5s.extend(re.findall(r"/shareres/[0-9a-fA-F]{2}/([0-9a-fA-F]{32})", text))
+
+    mirror_names = args.mirror_name or ([] if args.mirror_md5 or log_md5s else ["data/game.bin"])
+    selected = []
+    seen = set()
+    for mirror_name in mirror_names:
+        entry = by_name.get(mirror_name.lower())
+        if not entry:
+            raise SystemExit(f"mapped file not found: {mirror_name}")
+        if entry[2].lower() not in seen:
+            selected.append(entry)
+            seen.add(entry[2].lower())
+    for mirror_md5 in args.mirror_md5 + log_md5s:
+        entry = by_md5.get(mirror_md5.lower())
+        if not entry:
+            raise SystemExit(f"mapped md5 not found: {mirror_md5}")
+        if entry[2].lower() not in seen:
+            selected.append(entry)
+            seen.add(entry[2].lower())
+    mirrored_items = [mirror_entry(http, entry, args.cdn_host, root) for entry in selected]
 
     print(f"guid: {guid}")
     print(f"version: {version}")
     print(f"api_map: {api_path} entries={len(entries)}")
-    print(
-        f"mirrored: {mirrored['name']} expected={mirrored['expected_size']} "
-        f"actual={mirrored['actual_size']} path={mirrored['path']}"
-    )
+    for mirrored in mirrored_items:
+        print(
+            f"mirrored: {mirrored['name']} expected={mirrored['expected_size']} "
+            f"actual={mirrored['actual_size']} path={mirrored['path']}"
+        )
 
 
 if __name__ == "__main__":

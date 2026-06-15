@@ -192,3 +192,34 @@ Current technical conclusion: the newer `DSystem` tail is now structurally close
 - The later `getInt32 error - Out of bounds` occurs after a 404 response is loaded as binary data, not while parsing the main game bin.
 
 Current technical conclusion: the main structural blocker is cleared in the experimental runner. The remaining validation path is asset/bin dependency mirroring: mirror secondary bin files such as `data/mallnew.bin` and required image/audio resources, then rerun the patched runner to see how far the actual game initialization proceeds.
+
+## Round 10: Runner Startup Dependency Mirroring
+
+- Extended `66rpgProjectDropper/prepare_runner_mirror.py` so the local mirror can pull multiple resources in one run:
+  - repeated `--mirror-name`
+  - repeated `--mirror-md5`
+  - repeated `--mirror-log`, which scans runner logs for `/shareres/xx/<md5>` URLs and mirrors those mapped resources
+  - existing local files are reused instead of downloaded again
+- Mirrored the first startup dependency set for the patched local runner:
+  - `data/game.bin`, md5 `7b633df854b9742c1a653e134ee6f2d8`
+  - `data/mallnew.bin`, md5 `e348f5a2ff82e8751adc97af6eb84c64`
+  - `graphics/background/封面-美人客栈.jpg`, md5 `50fa5798f1b3781f07be6d05f33d0abc`
+  - `graphics/button/ui导入/返回前.png`, md5 `a8960086d87d7d441a29d281a0cde38c`
+  - `graphics/button/ui导入/返回后.png`, md5 `f6315584df310dbd0ccf1130e544bb1b`
+- Used the new `--mirror-log` flow to mirror the next missing font resources detected by the browser runner:
+  - `font/font.list`, md5 `0aac1d3ba7b759f32030df054e8715c2`
+  - `font/方正宋刻本秀楷简体$26.xfi`, md5 `e9bbc1dec4b99341c0f11c6333ab43c9`
+- Browser validation URL:
+  - `http://127.0.0.1:8765/h5_runner_experiment.html?localRes=1&patchNewDSystem=1`
+- Validation result:
+  - main `data/game.bin` loads locally with HTTP 200
+  - `data/mallnew.bin` loads locally with HTTP 200
+  - `font/font.list` loads locally with HTTP 200
+  - `font/方正宋刻本秀楷简体$26.xfi` loads locally with HTTP 200
+  - no remaining 404 was observed in the startup `/shareres` requests for this run
+- The current failure moved again:
+  - browser reports `ERROR: Script error. @ :0`
+  - the Laya canvas is created at `1280x720`, but the visible game area remains black
+  - the player's `.error-bg` overlay stays hidden, so this is not the previous visible resource-load error state
+
+Current technical conclusion: dependency mirroring is technically workable and can be driven from observed runner logs. The patched runner now reaches past main-bin parsing and the first secondary bin/font loads. The next blocker is an opaque runtime script error after startup resources load, so the next validation should instrument runtime errors more deeply and identify whether the failure is caused by an external API call, a missing non-`shareres` asset, or another player compatibility issue.
