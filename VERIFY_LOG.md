@@ -513,3 +513,38 @@ Current technical conclusion: the resource mirror is now stable through the firs
   - only the known two `/null%20path` requests remain
 
 Current technical conclusion: the next validation can use `UI TARGETS` instead of guessed coordinates. This gives a cleaner path for automated gameplay probing: click each stable target center, wait briefly, then check for new `LOAD_UI_RESOURCE_COMPLETE`, real `/shareres` 404s, or a changed `UI TARGETS` set.
+
+## Round 20: Effective Visible UI Target Filtering
+
+- Problem found while starting the next click probe:
+  - `traceUiState=1` listed hidden title/loading children as `UI TARGETS`.
+  - The previous collector checked each node's own `visible` and `alpha`, but did not inherit parent visibility.
+- Runner diagnostic patch:
+  - `collectUiState()` now propagates `parentVisible`.
+  - `UI STATE` entries include `effectiveVisible`.
+  - `UI TARGETS` are emitted only for effectively visible nodes with centers inside the 960x540 stage bounds.
+- Validation URL:
+  - `http://127.0.0.1:8765/h5_runner_experiment.html?localRes=1&patchNewDSystem=1&traceRuntime=1&traceTitle=1&traceNullPath=1&quietOafEvents=1&traceUiState=1&patchTitleClick=1&clearStorage=1&hideDebug=1`
+- Browser validation result after title click:
+  - `PATCH TITLE CLICK START`: `1`
+  - `UI TARGETS` no longer includes the hidden top title targets at `(152,9)`.
+  - `UI TARGETS` no longer includes the hidden loading text target `加载中...100%`.
+  - Clean first-scene targets:
+    - `stage.0.3.0.0`, center `(536,413)`, size `132x50`
+    - `stage.0.3.0.1`, center `(632,417)`, size `54x58`
+    - `stage.0.3.0.2`, center `(775,429)`, size `69x82`
+    - `stage.0.3.0.3`, center `(678,128)`, size `45x55`
+    - `stage.0.3.0.4`, center `(582,129)`, size `54x58`
+    - `stage.0.7.0`, center `(921,54)`, size `42x52`
+    - `stage.0.7.1`, center `(921,124)`, size `42x52`
+- Single click probe:
+  - clicked `(536,413)`
+  - target set did not change after 4 seconds
+  - `LOAD_UI_RESOURCE_COMPLETE` stayed at `1`
+  - `NULL PATH` stayed at `2`
+- Local HTTP log:
+  - many mirrored first-scene resources returned `304`
+  - no real `/shareres/<md5>` `404`
+  - only the known two `/null%20path` requests remain
+
+Current technical conclusion: `UI TARGETS` is now reliable enough for automated isolated click probing. The next useful validation should reload to the same first-scene state for each target, click one target at a time, and classify each target by resulting target-set changes, resource requests, and event counts.

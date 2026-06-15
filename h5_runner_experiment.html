@@ -663,7 +663,7 @@
           var collectUiState = function () {
             var nodes = [];
             var targets = [];
-            var visit = function (node, depth, path, parentX, parentY) {
+            var visit = function (node, depth, path, parentX, parentY, parentVisible) {
               if (!node || depth > 4 || nodes.length >= 80) return;
               var localX = Number(node.x || 0);
               var localY = Number(node.y || 0);
@@ -672,10 +672,11 @@
               var width = Number(node.width || 0);
               var height = Number(node.height || 0);
               var visible = node.visible !== false && node.alpha !== 0;
+              var effectiveVisible = parentVisible && visible;
               var hasTexture = !!(node.texture || node.graphics);
               var text = node.text || node.label || node.name || '';
               var className = node.constructor && node.constructor.name || typeof node;
-              if (visible && (text || hasTexture || width > 20 || height > 20)) {
+              if (effectiveVisible && (text || hasTexture || width > 20 || height > 20)) {
                 nodes.push({
                   path: path,
                   cls: className,
@@ -687,15 +688,19 @@
                   gy: Math.round(globalY),
                   w: Math.round(width),
                   h: Math.round(height),
+                  effectiveVisible: effectiveVisible,
                   children: node.numChildren || 0
                 });
-                if (width >= 30 && height >= 25 && width <= 260 && height <= 120) {
+                var centerX = globalX + width / 2;
+                var centerY = globalY + height / 2;
+                var inStageBounds = centerX >= 0 && centerY >= 0 && centerX <= 960 && centerY <= 540;
+                if (inStageBounds && width >= 30 && height >= 25 && width <= 260 && height <= 120) {
                   targets.push({
                     path: path,
                     cls: className,
                     text: String(text).slice(0, 30),
-                    cx: Math.round(globalX + width / 2),
-                    cy: Math.round(globalY + height / 2),
+                    cx: Math.round(centerX),
+                    cy: Math.round(centerY),
                     w: Math.round(width),
                     h: Math.round(height)
                   });
@@ -703,12 +708,12 @@
               }
               if (node.numChildren && typeof node.getChildAt === 'function') {
                 for (var childIndex = 0; childIndex < node.numChildren; childIndex++) {
-                  visit(node.getChildAt(childIndex), depth + 1, path + '.' + childIndex, globalX, globalY);
+                  visit(node.getChildAt(childIndex), depth + 1, path + '.' + childIndex, globalX, globalY, effectiveVisible);
                 }
               }
             };
             try {
-              visit(window.Laya && Laya.stage, 0, 'stage', 0, 0);
+              visit(window.Laya && Laya.stage, 0, 'stage', 0, 0, true);
               logLine('UI STATE ' + JSON.stringify(nodes));
               logLine('UI TARGETS ' + JSON.stringify(targets.slice(0, 30)));
             } catch (uiStateError) {
