@@ -62,3 +62,23 @@ Current technical conclusion: there is no alternate public H5 player version exp
 - The public player appears to read the `DSystem` button count as `80`, but the binary stream contains `453` button records.
 
 Current technical conclusion: grabbing the game package and static assets is technically feasible, but directly reusing the public H5 player is blocked by a `DSystem` schema/version mismatch for this game. The next validation should derive or patch the correct `DSystem` layout, especially the field that decides the button count and any version-specific padding before `DButton` records.
+
+## Round 5: DSystem Tail Layout Probe
+
+- Added `66rpgProjectDropper/probe_dsystem_tail.py` to inspect the bytes immediately after the extended button table.
+- Rechecked the start of the button table:
+  - `pos=9946` is the public player's declared `Buttons` count: `80`
+  - `pos=9950` is also `80`, but this is the first `DButton` marker
+  - offline button scanning still parses through `453` button-shaped records, ending at `pos=48318`
+- Probed the bytes after `pos=48318`:
+  - `48318`: `ui_init_save=0`
+  - `48322`: `1000`
+  - `48326`: `3486`
+  - `48330`: `0`
+  - `48334`: `5`
+- Interpretation: after the expanded button table, the binary appears to contain three extra `DSystem` tail fields before a `5` count-like value.
+- Attempted to parse from `48338` using the public player's old `DCustomUIData` schema. It fails immediately:
+  - `cui[0] failed at 48362: bad event argc 943009848 at 48358`
+- Raw inspection after `48338` shows values and strings that look like event/debug payloads, for example `8058`, `8059`, and Chinese text such as `数值：[8059：支线开启/关闭] = 0`, but the field ordering does not match the old `DEvent` / `DCustomUIData` constructors exposed in `main.min.js`.
+
+Current technical conclusion: the compatibility blocker is broader than the `Buttons` count. This game package uses a newer or different `DSystem` tail/UI/event schema than the public H5 player knows. A minimal runner patch must handle both the extended button table and the new tail/event layout; simply forcing `Buttons=453` is not enough.
