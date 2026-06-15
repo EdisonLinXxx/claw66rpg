@@ -42,3 +42,23 @@ Current technical conclusion: asset acquisition is feasible, but this player/run
   - no query, `?v=20210202002`, `?v=20190101`, `?v=20240101`, and `?v=random` all returned the same MD5.
 
 Current technical conclusion: there is no alternate public H5 player version exposed through the tested official pages or common CDN paths. The remaining path is to investigate parser/runtime assumptions inside the current player, especially why `GameByte` parsing becomes offset by one byte around the first complex UI/string block.
+
+## Round 4: DSystem Button Schema Trace
+
+- Added `traceStructs=1` to `h5_runner_experiment.html` to wrap key `org_data` constructors and log parser enter/exit/error positions.
+- Added `skipButtonPad=1` as a controlled experiment for `DButton` records that appear to have a single leading zero byte before the expected int/name layout.
+- Added `66rpgProjectDropper/probe_bin_offsets.py` to inspect raw `game.bin` offsets around the first parser failure.
+- Added `66rpgProjectDropper/probe_dsystem_buttons.py` to parse consecutive `DSystem` `DButton` records offline from the extracted `data/game.bin`.
+- Structure trace narrowed the original failure path:
+  - `DMain -> DHeader -> DSystem`
+  - first `DButton` parsed from `pos=9950` to `pos=10070`
+  - second `DButton` failed because its first field at `pos=10070` was shifted by one byte
+- Raw offset inspection showed that starting the second `DButton` at `pos=10071` produces sane string and image filename fields.
+- With `skipButtonPad=1`, the browser runner passed the original `pos=11622` EOF jump and advanced through many button records.
+- The next browser failure became `DCustomUIData pos=16637 message=Invalid array length`, which means the current public player stopped reading buttons too early and entered the next structure at the wrong offset.
+- Offline parsing from `pos=9950` with the same single-byte pad rule successfully parsed `453` consecutive button records:
+  - last valid button: index `452`, start `48241`, end `48318`, name `卖百份`, images `卖百份1.png` / `卖百份2.png`
+  - next bytes at `pos=48318` no longer look like a `DButton`
+- The public player appears to read the `DSystem` button count as `80`, but the binary stream contains `453` button records.
+
+Current technical conclusion: grabbing the game package and static assets is technically feasible, but directly reusing the public H5 player is blocked by a `DSystem` schema/version mismatch for this game. The next validation should derive or patch the correct `DSystem` layout, especially the field that decides the button count and any version-specific padding before `DButton` records.

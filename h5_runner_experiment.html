@@ -155,6 +155,74 @@
         LoadAssets.prototype.__runnerEndianPatched = true;
         logLine('little-endian game bin patch enabled');
       }
+      if (hasQueryFlag('traceStructs') && window.org_data && !org_data.__runnerStructTracePatched) {
+        [
+          'DMain',
+          'DHeader',
+          'DSystem',
+          'DFileName',
+          'DMusicItem',
+          'DTitle',
+          'DGameMenu',
+          'DCG',
+          'DBGM',
+          'DSaveData',
+          'DMessageBox',
+          'DReplay',
+          'DSetting',
+          'DButton',
+          'DButtonIndex',
+          'DCustomUIData'
+        ].forEach(function (name) {
+          var Original = org_data[name];
+          if (!Original || Original.__runnerWrapped) return;
+          var Wrapped = function () {
+            var stream = arguments[0];
+            var before = stream && typeof stream.pos === 'number' ? stream.pos : 'n/a';
+            logLine('STRUCT enter ' + name + ' pos=' + before);
+            try {
+              var result = new (Function.prototype.bind.apply(Original, [null].concat(Array.prototype.slice.call(arguments))))();
+              var after = stream && typeof stream.pos === 'number' ? stream.pos : 'n/a';
+              logLine('STRUCT exit ' + name + ' pos=' + after);
+              return result;
+            } catch (error) {
+              var at = stream && typeof stream.pos === 'number' ? stream.pos : 'n/a';
+              logLine('STRUCT error ' + name + ' pos=' + at + ' message=' + (error && error.message || error));
+              throw error;
+            }
+          };
+          Wrapped.prototype = Original.prototype;
+          Wrapped.__runnerWrapped = true;
+          org_data[name] = Wrapped;
+        });
+        org_data.__runnerStructTracePatched = true;
+        logLine('struct trace enabled');
+      }
+      if (hasQueryFlag('skipButtonPad') && window.org_data && org_data.DButton && !org_data.DButton.__runnerPadWrapped) {
+        var OriginalDButton = org_data.DButton;
+        var readI32LE = function (stream, pos) {
+          try {
+            return new DataView(stream.buffer).getInt32(pos, true);
+          } catch (error) {
+            return null;
+          }
+        };
+        var PaddedDButton = function (stream) {
+          if (stream && typeof stream.pos === 'number' && stream.pos + 5 < stream.length) {
+            var current = readI32LE(stream, stream.pos);
+            var shifted = readI32LE(stream, stream.pos + 1);
+            if (stream.buffer && new Uint8Array(stream.buffer, stream.pos, 1)[0] === 0 && current % 256 === 0 && shifted > 0 && shifted < 10000) {
+              logLine('skip DButton leading pad at pos=' + stream.pos + ' current=' + current + ' shifted=' + shifted);
+              stream.pos += 1;
+            }
+          }
+          return new OriginalDButton(stream);
+        };
+        PaddedDButton.prototype = OriginalDButton.prototype;
+        PaddedDButton.__runnerPadWrapped = true;
+        org_data.DButton = PaddedDButton;
+        logLine('button padding patch enabled');
+      }
       if (window.Main && Main.prototype && Main.prototype.setGameConfig && !Main.prototype.__runnerPatched) {
         var originalSetGameConfig = Main.prototype.setGameConfig;
         Main.prototype.setGameConfig = function () {
