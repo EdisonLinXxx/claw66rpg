@@ -140,3 +140,30 @@ Current technical conclusion: a minimal parser patch is becoming plausible, but 
   - `show=0`, `mouse=1`, `key=1`
 
 Current technical conclusion: the previous suspected `DCustomUIItem` branch mismatch was a false alarm caused by an overly low event-count guard. The newer CUI table is now parsable as a chained sequence with inter-block 4-byte extras and no `afterEvent` list. The remaining unknown is how the real CUI table terminates or how its count is encoded before the parser reaches later `DMain` sections.
+
+## Round 8: Counted Custom UI Table Validation
+
+- Added `66rpgProjectDropper/probe_cui_chain_summary.py` to summarize chained newer CUI blocks and detect empty placeholder runs.
+- Updated `66rpgProjectDropper/probe_dsystem_tail.py` with `--counted-new-cui`.
+- Corrected the `DSystem` tail layout again:
+  - `48318`: `UIInitSave=0`
+  - `48322`: newer CUI table count: `1000`
+  - `48326`: CUI #0 declared byte size: `3486`
+  - `48330`: CUI #0 marker/start
+- The newer CUI table layout is now:
+  - `UIInitSave`
+  - `CuiCount`
+  - repeated `CuiCount` times: `DeclaredSize -> marker -> loadEvents -> controls -> show/mouse/key`
+  - then the next `DSystem` field, likely `MenuIndex`
+- Verified all `1000` CUI blocks with declared-size checking:
+  - no `size_mismatch`
+  - final parsed CUI: `cui[999] start=24414620 end=24414644 declared_size=24 actual_size=24`
+  - final table end: `pos=24414644`
+- `probe_cui_chain_summary.py` showed sparse placeholders:
+  - first empty placeholder appears at `cui[60]`
+  - later real CUI entries continue after that
+  - last non-empty CUI in the 1000-entry table is `cui[933]`
+  - common placeholder shape: `declared_size=24`, `marker=0`, `load=0`, `controls=0`, `show=0`, `mouse=1`, `key=1`
+- The field at `24414644` is `0`, consistent with the old public player reading `MenuIndex` immediately after `Cuis`.
+
+Current technical conclusion: the newer `DSystem` tail is now structurally closed. The parser mismatch can be described as: public player expects `UIInitSave -> CuisCount -> old CUI blocks -> MenuIndex`, while this package uses `UIInitSave -> CuisCount=1000 -> size-prefixed new CUI blocks without afterEvents -> MenuIndex`. This is enough to attempt a targeted runner parser patch for `DSystem`/`DCustomUIData`.

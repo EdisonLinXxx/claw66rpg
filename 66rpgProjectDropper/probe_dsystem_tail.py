@@ -124,32 +124,53 @@ def main():
     parser = argparse.ArgumentParser(description="Probe DSystem tail after the extended button table.")
     parser.add_argument("path")
     parser.add_argument("--tail", type=int, default=48318)
-    parser.add_argument("--cui-start", type=int, default=48330)
+    parser.add_argument("--cui-start", type=int)
     parser.add_argument("--count", type=int, default=5)
     parser.add_argument("--no-after-events", action="store_true")
     parser.add_argument("--chain-extra", action="store_true")
+    parser.add_argument("--counted-new-cui", action="store_true")
     args = parser.parse_args()
 
     data = Path(args.path).read_bytes()
     tail = Reader(data, args.tail)
     ui_init_save = tail.i32()
-    ext_a = tail.i32()
-    ext_b = tail.i32()
-    ext_c = tail.i32()
-    first_cui_load_count = tail.i32()
+    new_cui_count = tail.i32()
+    first_cui_size = tail.i32()
     print(
         f"tail@{args.tail}: ui_init_save={ui_init_save} "
-        f"ext=({ext_a},{ext_b},{ext_c}) first_cui_load_count={first_cui_load_count} "
+        f"new_cui_count={new_cui_count} first_cui_size={first_cui_size} "
         f"next={tail.pos}"
     )
 
-    reader = Reader(data, args.cui_start)
-    for index in range(args.count):
+    if args.cui_start is not None:
+        cui_start = args.cui_start
+    elif args.counted_new_cui:
+        cui_start = args.tail + 8
+    else:
+        cui_start = args.tail + 12
+
+    reader = Reader(data, cui_start)
+    loop_count = new_cui_count if args.counted_new_cui else args.count
+    for index in range(loop_count):
+        declared_size = None
+        size_pos = None
+        if args.counted_new_cui:
+            size_pos = reader.pos
+            try:
+                declared_size = reader.i32()
+            except Exception as exc:
+                print(f"size read failed at {size_pos}: {exc}")
+                break
+            if declared_size < 0 or declared_size > len(data) - reader.pos:
+                print(f"bad declared_size index={index} pos={size_pos} value={declared_size}")
+                break
+        parse_start = reader.pos
         try:
             cui = parse_custom_ui(reader, no_after_events=args.no_after_events)
         except Exception as exc:
             print(f"cui[{index}] failed at {reader.pos}: {exc}")
             break
+        actual_size = reader.pos - parse_start
         first_control = cui["controls"][0] if cui["controls"] else None
         first_summary = ""
         if first_control:
@@ -162,8 +183,15 @@ def main():
             f"cui[{index}] start={cui['start']} end={cui['end']} marker={cui['marker']} "
             f"load={cui['load_events']} after={cui['after_events']} "
             f"controls={len(cui['controls'])} show={cui['show_effect']} "
-            f"mouse={cui['is_mouse_exit']} key={cui['is_key_exit']}{first_summary}"
+            f"mouse={cui['is_mouse_exit']} key={cui['is_key_exit']}"
+            f"{' declared_size=' + str(declared_size) + ' actual_size=' + str(actual_size) if declared_size is not None else ''}"
+            f"{first_summary}"
         )
+        if declared_size is not None and declared_size != actual_size:
+            print(
+                f"  size_mismatch index={index} size_pos={size_pos} "
+                f"declared={declared_size} actual={actual_size}"
+            )
         if args.chain_extra and index + 1 < args.count:
             extra_pos = reader.pos
             try:
