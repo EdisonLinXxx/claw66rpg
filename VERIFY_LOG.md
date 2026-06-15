@@ -257,3 +257,38 @@ Current technical conclusion: dependency mirroring is technically workable and c
   - no game scene or title/menu view is mounted after five runtime polls
 
 Current technical conclusion: the runner now reaches the platform/player startup layer, not merely binary parsing. The next likely blocker is the official player startup flow around platform APIs, ads, and loading completion, rather than missing initial `shareres` files. The next validation should stub or bypass nonessential platform endpoints/ad flow (`get_home_gray`, report/investigate calls, possibly `adView`) and trace which player method should advance from the loading view into the game scene.
+
+## Round 12: Bitmap Font Atlas And Title Entry
+
+- Inspected the official `main.min.js` startup path and identified the loading transition:
+  - `Main.onLoaded()` creates `org_data.DBitmapFontData`
+  - `DBitmapFontData.startLoad()` loads `font/font.list`, `.xfi`, and, on the browser path, bitmap font PNG atlases
+  - `Main.loadFontComplete()` then calls `Main.startGame()`
+  - `Main.startGame()` dispatches or triggers the transition into `Main.enterGame()`
+- Added method-level `traceRuntime=1` diagnostics for:
+  - `Main.loadInitBinComplete`, `getInvestigateUrl`, `onLoaded`, `loadFontComplete`, `startGame`, `enterGame`, and `checkAuto`
+  - `LoadingLayer` / `LoadingBar`
+  - `DBitmapFontData.startLoad`, `pathCallback`, `path_2_Callback`, `readFontConfig`, and `getTextLineHeight`
+  - `EventCenter.dispatchEvent`
+- First validation with the new trace found the concrete blocking error:
+  - `DBitmapFontData.readFontConfig` threw `Cannot read properties of undefined (reading 'width')`
+  - this happened because the `.xfi` file loaded, but the bitmap font PNG atlas textures were not mirrored locally
+- Mirrored the missing font atlas resources:
+  - `font/方正宋刻本秀楷简体$26$1.png`, md5 `ef233e8618723ae2e98b022afed06c3c`
+  - `font/方正宋刻本秀楷简体$26$2.png`, md5 `fc90f00f224973fe653c5e23b352cd7a`
+  - `font/方正宋刻本秀楷简体$26$3.png`, md5 `8db19f3d9c81fd998291f46b10553413`
+- Browser validation after mirroring:
+  - `DBitmapFontData.readFontConfig` returned successfully
+  - `Main.loadFontComplete` was called
+  - `Main.startGame` was called
+  - `Main.enterGame` was called
+  - `LoadingLayer.dispose` and `LoadingBar.dispose` were called
+  - `LOAD_UI_RESOURCE_COMPLETE` fired with `TITLEUI_TYPE`
+  - stage changed from the loading/ad layer to a `960x540` root with `13` children, consistent with the title UI being mounted
+  - `Graphics/Background/封面-美人客栈.jpg` loaded after title entry
+- Remaining non-blocking platform/resource issues observed:
+  - `get_home_gray` JSONP still returns a resource error / 403 in local context
+  - mall/flower APIs are malformed under the local runner, for example `http://https//www.66rpg.com/PropShop/...`
+  - these happen after title entry and do not block reaching `Main.enterGame()`
+
+Current technical conclusion: the technical feasibility bar moved significantly: with the patched parser and mirrored startup/font resources, the official H5 player can enter the game/title layer locally. The next validation should focus on title-screen usability and first interaction: whether the title buttons respond, which additional title/story assets are requested, and which platform APIs must be stubbed to avoid later mall/flower/free-time failures.

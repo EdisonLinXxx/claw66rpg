@@ -414,6 +414,66 @@
         Main.prototype.__runnerPatched = true;
       }
       if (hasQueryFlag('traceRuntime')) {
+        var wrapRuntimeMethod = function (owner, ownerName, methodName) {
+          if (!owner || typeof owner[methodName] !== 'function' || owner[methodName].__runnerRuntimeMethodWrapped) return;
+          var originalMethod = owner[methodName];
+          owner[methodName] = function () {
+            var argSummary = Array.prototype.slice.call(arguments).map(function (arg) {
+              if (arg === null || arg === undefined) return arg;
+              if (typeof arg === 'string' || typeof arg === 'number' || typeof arg === 'boolean') return arg;
+              if (arg && arg.constructor && arg.constructor.name) return '[object ' + arg.constructor.name + ']';
+              return '[' + typeof arg + ']';
+            });
+            logLine('CALL ' + ownerName + '.' + methodName + ' args=' + JSON.stringify(argSummary));
+            try {
+              var result = originalMethod.apply(this, arguments);
+              logLine('RETURN ' + ownerName + '.' + methodName);
+              return result;
+            } catch (error) {
+              logLine('THROW ' + ownerName + '.' + methodName + ': ' + (error && (error.stack || error.message) || error));
+              throw error;
+            }
+          };
+          owner[methodName].__runnerRuntimeMethodWrapped = true;
+        };
+        if (window.Main && Main.prototype) {
+          ['loadInitBinComplete', 'getInvestigateUrl', 'onLoaded', 'loadFontComplete', 'startGame', 'enterGame', 'checkAuto', 'setAddictionTime'].forEach(function (name) {
+            wrapRuntimeMethod(Main.prototype, 'Main', name);
+          });
+        }
+        if (window.LoadingLayer && LoadingLayer.prototype) {
+          ['showLoadingBar', 'loadingComplete', 'dispose'].forEach(function (name) {
+            wrapRuntimeMethod(LoadingLayer.prototype, 'LoadingLayer', name);
+          });
+        }
+        if (window.view && view.LoadingBar && view.LoadingBar.prototype) {
+          ['setComplete', 'setProgress', 'intoGame', 'dispose'].forEach(function (name) {
+            wrapRuntimeMethod(view.LoadingBar.prototype, 'LoadingBar', name);
+          });
+        }
+        if (window.org_data && org_data.DBitmapFontData && org_data.DBitmapFontData.prototype) {
+          ['startLoad', 'pathCallback', 'path_2_Callback', 'readFontConfig', 'getTextLineHeight'].forEach(function (name) {
+            wrapRuntimeMethod(org_data.DBitmapFontData.prototype, 'DBitmapFontData', name);
+          });
+        }
+        if (window.EventCenter && EventCenter.dispatchEvent && !EventCenter.dispatchEvent.__runnerEventWrapped) {
+          var originalDispatchEvent = EventCenter.dispatchEvent;
+          EventCenter.dispatchEvent = function (event) {
+            var summarizeValue = function (value) {
+              if (value === null || value === undefined) return value;
+              if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') return value;
+              if (Array.isArray(value)) return value.slice(0, 6).map(summarizeValue);
+              if (value && value.constructor && value.constructor.name) return '[object ' + value.constructor.name + ']';
+              return '[' + typeof value + ']';
+            };
+            var eventInfo = event && typeof event === 'object'
+              ? { type: event.type, parameter: summarizeValue(event.parameter) }
+              : summarizeValue(event);
+            logLine('EVENT dispatch ' + JSON.stringify(eventInfo));
+            return originalDispatchEvent.apply(this, arguments);
+          };
+          EventCenter.dispatchEvent.__runnerEventWrapped = true;
+        }
         logLine('runtime globals Main=' + typeof Main + ' Laya=' + typeof Laya + ' GloableData=' + typeof GloableData);
         var runtimePollCount = 0;
         var runtimePoll = setInterval(function () {
