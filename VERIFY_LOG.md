@@ -378,3 +378,39 @@ Current technical conclusion: title-to-story transition is technically viable wh
 - The underlying runtime still logs `LONG_DOWN_CANCEL_BY_MOVINE_EVENT` around automated pointer input, but it no longer blocks the patched cover-click path.
 
 Current technical conclusion: with the patched parser, mirrored resources, and a small title-click shim, this 66RPG game can be loaded locally from mirrored assets, display its title, accept a cover click, and enter the first playable scene. The next validation should move from bootstrapping to gameplay continuity: click the first scene controls, observe the next resource wave, and use `--mirror-log` iteratively until a short 3-5 minute play path runs without local 404s.
+
+## Round 16: First Scene Continuation Resource Wave
+
+- Reused the local patched runner URL:
+  - `http://127.0.0.1:8765/h5_runner_experiment.html?localRes=1&patchNewDSystem=1&traceRuntime=1&traceTitle=1&patchTitleClick=1&clearStorage=1&hideDebug=1`
+- First pass:
+  - entered the title successfully
+  - clicked the cover and reached the first interactive scene
+  - clicked the visible `continue management` control in the first scene
+  - this exposed a new local missing resource:
+    - md5 `087ab1d0f97373d1ec5cf7bcdbb99767`, mapped to `graphics/oafs/dynamic-standing-1.oaf2`
+- Ran:
+  - `python 66rpgProjectDropper\prepare_runner_mirror.py 1569947 --version 364 --root . --mirror-md5 087ab1d0f97373d1ec5cf7bcdbb99767 --mirror-log .http-server.err.log`
+  - then reran `--mirror-log .http-server.err.log` after the next click-generated 404 wave
+- The mirror-log pass pulled the next gameplay resource wave, including:
+  - `graphics/oafs/dynamic-standing-1.oaf2`
+  - `graphics/oafs/dynamic-standing-1/10000.png` through `10025.png`
+  - `graphics/half/create-character/1.jpg`
+  - `graphics/half/create-character/initial-character-select.png`
+  - `graphics/half/create-character/initial-character-select-bg.jpg`
+  - `graphics/button/festival-extra-1.png`
+  - `graphics/button/festival-extra-2.png`
+  - `graphics/button/currency-plus-1.png`
+  - `graphics/button/currency-plus-2.png`
+- Final rerun after mirroring:
+  - title and patched cover click still work
+  - first scene loads without new startup/title regression
+  - clicking the first-scene continuation control now loads the dynamic-standing frame sequence successfully
+  - browser console emits repeated `LOAD_IMAGE_COMPLETE` for `Graphics/oafs/dynamic-standing-1/10000.png` through later frames
+  - local server log confirms previously missing `shareres` hashes return `200` or `304` after mirroring
+- Remaining observed issue:
+  - the runtime still requests `/null%20path` twice after this step; this is not a `shareres` asset miss and appears to be an empty path emitted by the runtime/story data
+  - external 66RPG platform JSONP/API errors still exist but are not blocking this specific first-scene continuation resource load
+- Browser screenshot capture timed out during the animated post-click state, so this round uses console events plus local HTTP status transitions as the primary evidence.
+
+Current technical conclusion: gameplay continuity is now verified one step beyond the first scene. The local runner can enter the game, click the first scene control, discover the next resource wave, mirror it from the game map, and successfully reload those assets locally. The next validation should identify the source of `/null path`, then continue the same loop on the next visible interaction until platform APIs or story logic, not static asset fetching, becomes the main blocker.
