@@ -167,3 +167,28 @@ Current technical conclusion: the previous suspected `DCustomUIItem` branch mism
 - The field at `24414644` is `0`, consistent with the old public player reading `MenuIndex` immediately after `Cuis`.
 
 Current technical conclusion: the newer `DSystem` tail is now structurally closed. The parser mismatch can be described as: public player expects `UIInitSave -> CuisCount -> old CUI blocks -> MenuIndex`, while this package uses `UIInitSave -> CuisCount=1000 -> size-prefixed new CUI blocks without afterEvents -> MenuIndex`. This is enough to attempt a targeted runner parser patch for `DSystem`/`DCustomUIData`.
+
+## Round 9: Runner DSystem Parser Patch
+
+- Added `patchNewDSystem=1` to `h5_runner_experiment.html`.
+- The patch keeps the old player intact unless the query flag is enabled.
+- Patch behavior:
+  - enables the existing one-byte `DButton` pad workaround automatically
+  - replaces `org_data.DSystem` with an experiment parser for this newer package layout
+  - parses the expanded button table as `453` buttons when the old count field is `80`
+  - parses newer CUI blocks as `DeclaredSize -> marker -> loadEvents -> controls -> show/mouse/key`
+  - validates each CUI block's declared byte size against the actual bytes consumed
+- Browser validation URL:
+  - `http://127.0.0.1:8765/h5_runner_experiment.html?localRes=1&patchNewDSystem=1&traceStructs=1`
+- Validation result:
+  - `new DSystem buttons oldCount=80 parsed=453 pos=48318`
+  - `new DSystem Cuis parsed=1000 menuIndex=0 pos=24414648`
+  - `STRUCT exit DMain pos=47345898`
+- This confirms the runner can now parse the entire main `data/game.bin` through `DMain`.
+- The next failure moved to local resource coverage:
+  - missing `data/mallnew.bin`, md5 `e348f5a2ff82e8751adc97af6eb84c64`
+  - missing image/resource md5s including `50fa5798f1b3781f07be6d05f33d0abc`, `a8960086d87d7d441a29d281a0cde38c`, and `f6315584df310dbd0ccf1130e544bb1b`
+  - these fail because the current local mirror only contains `data/game.bin`
+- The later `getInt32 error - Out of bounds` occurs after a 404 response is loaded as binary data, not while parsing the main game bin.
+
+Current technical conclusion: the main structural blocker is cleared in the experimental runner. The remaining validation path is asset/bin dependency mirroring: mirror secondary bin files such as `data/mallnew.bin` and required image/audio resources, then rerun the patched runner to see how far the actual game initialization proceeds.
