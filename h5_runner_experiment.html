@@ -663,6 +663,64 @@
           var collectUiState = function () {
             var nodes = [];
             var targets = [];
+            var shortString = function (value, maxLength) {
+              if (value === null || value === undefined) return '';
+              return String(value).slice(0, maxLength || 80);
+            };
+            var getTextureUrl = function (node) {
+              try {
+                if (node && node.texture && node.texture.url) return node.texture.url;
+                if (node && node.skin) return node.skin;
+                if (node && node._skin) return node._skin;
+                if (node && node.graphics && node.graphics._one && node.graphics._one.texture && node.graphics._one.texture.url) return node.graphics._one.texture.url;
+                if (node && node.numChildren === 1 && typeof node.getChildAt === 'function') {
+                  var child = node.getChildAt(0);
+                  if (child && child.texture && child.texture.url) return child.texture.url;
+                  if (child && child.graphics && child.graphics._one && child.graphics._one.texture && child.graphics._one.texture.url) return child.graphics._one.texture.url;
+                }
+              } catch (textureError) {}
+              return '';
+            };
+            var getListenerTypes = function (node) {
+              var types = [];
+              var seen = {};
+              var addType = function (type) {
+                if (!type || seen[type]) return;
+                seen[type] = true;
+                types.push(String(type));
+              };
+              var inspectEvents = function (events) {
+                if (!events) return;
+                Object.keys(events).forEach(addType);
+              };
+              try {
+                inspectEvents(node._events);
+                inspectEvents(node._$0__events);
+                inspectEvents(node._eventsMap);
+                if (node.clickHandler) addType('clickHandler');
+                if (node.mouseThrough === false) addType('mouseThrough:false');
+                if (node.mouseEnabled) addType('mouseEnabled');
+                if (node.hitArea) addType('hitArea');
+              } catch (listenerError) {}
+              return types.slice(0, 10);
+            };
+            var getBounds = function (node, globalX, globalY, width, height) {
+              try {
+                if (node && typeof node.getBounds === 'function') {
+                  var bounds = node.getBounds();
+                  if (bounds && isFinite(bounds.x) && isFinite(bounds.y) && isFinite(bounds.width) && isFinite(bounds.height)) {
+                    return {
+                      x: globalX + Number(bounds.x || 0),
+                      y: globalY + Number(bounds.y || 0),
+                      width: Number(bounds.width || 0),
+                      height: Number(bounds.height || 0),
+                      source: 'getBounds'
+                    };
+                  }
+                }
+              } catch (boundsError) {}
+              return { x: globalX, y: globalY, width: width, height: height, source: 'widthHeight' };
+            };
             var visit = function (node, depth, path, parentX, parentY, parentVisible) {
               if (!node || depth > 4 || nodes.length >= 80) return;
               var localX = Number(node.x || 0);
@@ -676,33 +734,70 @@
               var hasTexture = !!(node.texture || node.graphics);
               var text = node.text || node.label || node.name || '';
               var className = node.constructor && node.constructor.name || typeof node;
+              var textureUrl = getTextureUrl(node);
+              var listenerTypes = getListenerTypes(node);
+              var bounds = getBounds(node, globalX, globalY, width, height);
+              var boundsX = Number(bounds.x || 0);
+              var boundsY = Number(bounds.y || 0);
+              var boundsW = Number(bounds.width || 0);
+              var boundsH = Number(bounds.height || 0);
               if (effectiveVisible && (text || hasTexture || width > 20 || height > 20)) {
                 nodes.push({
                   path: path,
                   cls: className,
                   name: node.name || '',
-                  text: String(text).slice(0, 30),
+                  text: shortString(text, 30),
+                  texture: shortString(textureUrl, 100),
+                  listeners: listenerTypes,
+                  mouseEnabled: !!node.mouseEnabled,
+                  disabled: !!node.disabled,
+                  alpha: Number(node.alpha === undefined ? 1 : node.alpha),
                   x: Math.round(localX),
                   y: Math.round(localY),
                   gx: Math.round(globalX),
                   gy: Math.round(globalY),
                   w: Math.round(width),
                   h: Math.round(height),
+                  bx: Math.round(boundsX),
+                  by: Math.round(boundsY),
+                  bw: Math.round(boundsW),
+                  bh: Math.round(boundsH),
+                  boundsSource: bounds.source,
                   effectiveVisible: effectiveVisible,
                   children: node.numChildren || 0
                 });
-                var centerX = globalX + width / 2;
-                var centerY = globalY + height / 2;
+                var targetX = width > 0 && height > 0 ? globalX : boundsX;
+                var targetY = width > 0 && height > 0 ? globalY : boundsY;
+                var targetWidth = width > 0 && height > 0 ? width : boundsW;
+                var targetHeight = width > 0 && height > 0 ? height : boundsH;
+                var centerX = targetX + targetWidth / 2;
+                var centerY = targetY + targetHeight / 2;
                 var inStageBounds = centerX >= 0 && centerY >= 0 && centerX <= 960 && centerY <= 540;
-                if (inStageBounds && width >= 30 && height >= 25 && width <= 260 && height <= 120) {
+                var hasActionListener = listenerTypes.some(function (type) {
+                  return /^(click|mousedown|mouseup|mouseover|mouseout|clickHandler)$/i.test(type);
+                });
+                var likelyInteractive = hasActionListener || (!!node.mouseEnabled && !!(text || textureUrl)) || /Button|Btn/i.test(className);
+                if (likelyInteractive && inStageBounds && targetWidth >= 30 && targetHeight >= 25 && targetWidth <= 260 && targetHeight <= 140) {
                   targets.push({
                     path: path,
                     cls: className,
-                    text: String(text).slice(0, 30),
+                    name: shortString(node.name || '', 40),
+                    text: shortString(text, 30),
+                    texture: shortString(textureUrl, 100),
+                    listeners: listenerTypes,
+                    mouseEnabled: !!node.mouseEnabled,
+                    likelyInteractive: likelyInteractive,
+                    x: Math.round(centerX),
+                    y: Math.round(centerY),
                     cx: Math.round(centerX),
                     cy: Math.round(centerY),
-                    w: Math.round(width),
-                    h: Math.round(height)
+                    left: Math.round(targetX),
+                    top: Math.round(targetY),
+                    right: Math.round(targetX + targetWidth),
+                    bottom: Math.round(targetY + targetHeight),
+                    w: Math.round(targetWidth),
+                    h: Math.round(targetHeight),
+                    boundsSource: width > 0 && height > 0 ? 'widthHeight' : bounds.source
                   });
                 }
               }

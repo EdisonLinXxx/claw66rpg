@@ -548,3 +548,273 @@ Current technical conclusion: the next validation can use `UI TARGETS` instead o
   - only the known two `/null%20path` requests remain
 
 Current technical conclusion: `UI TARGETS` is now reliable enough for automated isolated click probing. The next useful validation should reload to the same first-scene state for each target, click one target at a time, and classify each target by resulting target-set changes, resource requests, and event counts.
+
+## Round 21: Isolated First-Scene Target Classification
+
+- Reused the Round 20 validation URL and forced a `960x540` browser viewport so `UI TARGETS` coordinates map directly to click coordinates.
+- For each run:
+  - reloaded with `clearStorage=1`
+  - waited for `patchTitleClick native listeners installed`
+  - clicked title cover `(480,270)`
+  - waited for the stable first-scene `UI TARGETS`
+  - clicked one target center
+  - waited 5-7 seconds
+  - compared page debug text and local HTTP status logs
+
+| Target path | Coordinate | Classification | Result |
+| --- | --- | --- | --- |
+| `stage.0.3.0.0` | `(536,413)` | dialogue/branch advance | Triggered `CLICK_TEXT_CHOICE_BUTTON`, loaded create-character images, then target set reduced to the two right-side buttons. This was state-sensitive and no longer a no-op in the isolated run. |
+| `stage.0.3.0.1` | `(632,417)` | save/menu UI | Triggered `CLICK_TEXT_CHOICE_BUTTON`, `LOAD_UI_RESOURCE_COMPLETE:SAVEFILEUI_TYPE`, and opened the save-file target set at `stage.0.7.2.3` / `stage.0.7.2.4`. |
+| `stage.0.3.0.2` | `(775,429)` | save/menu UI plus resource wave | Triggered `CLICK_TEXT_CHOICE_BUTTON`, `LONG_DOWN_CANCEL_BY_BRANCH`, `SAVEFILEUI_TYPE`, `Graphics/Background/传送门.jpg`, `Graphics/Oafs/红瓣540\\红瓣540_bg.png`, and the known two `/null%20path` requests. |
+| `stage.0.3.0.3` | `(678,128)` | branch/menu transition | Triggered `CLICK_TEXT_CHOICE_BUTTON` and `LONG_DOWN_CANCEL_BY_BRANCH`; target set reduced to the two right-side buttons. |
+| `stage.0.3.0.4` | `(582,129)` | settings UI | Triggered `CLICK_TEXT_CHOICE_BUTTON`, `LOAD_UI_RESOURCE_COMPLETE:SETUI_TYPE`, and loaded `Graphics/UI/ui导入/底图/设置.jpg`, `数值前.png`, and `数值后.png`; target list became empty in the 5s sample window. |
+| `stage.0.7.0` | `(921,54)` | main menu/resource wave | Opened the main menu overlay and initially exposed a large batch of real `/shareres/<md5>` 404s for menu buttons and related UI assets. |
+| `stage.0.7.1` | `(921,124)` | platform/API boundary | Added `请稍候...` loading text and hit malformed platform JSONP `http://https//www.66rpg.com/ajax/game/get_game_info.json...`; no new mapped local asset miss was identified. |
+
+- Resource-miss loop:
+  - Ran `python 66rpgProjectDropper\prepare_runner_mirror.py 1569947 --version 364 --root . --mirror-log .http-server.err.log`.
+  - The script resolved all observed mapped `/shareres/<md5>` misses through `Map.bin` and mirrored the missing local files.
+  - Important newly mirrored groups include:
+    - main menu background/buttons: `Graphics/Other/菜单底图.jpg`, `Graphics/Button/开始*.png`, `Graphics/Button/ui导入/*`
+    - save UI: `Graphics/UI/ui导入/底图/档案.jpg` and related choice/bookmark buttons
+    - settings UI: `Graphics/UI/ui导入/底图/设置.jpg`, `数值前.png`, `数值后.png`
+    - create-character flow: `Graphics/Half/创建人物/*`, `Graphics/Oafs/动态立绘1/*`
+    - menu/platform-adjacent buttons such as `商城`, `属性`, `当前任务`, `宠物`, `每日签到`, `分线`, `确认`
+- Retest after mirroring:
+  - repeated `(921,54)`
+  - local HTTP log showed the former menu `/shareres` requests returning `200`
+  - no new real `/shareres/<md5>` 404 appeared
+  - only the known two `/null%20path` 404s remained
+  - `UI TARGETS` expanded to many main-menu overlay targets, including `stage.0.6.0.1`, `stage.0.6.0.2`, `stage.0.6.0.6`, `stage.0.6.0.7`, and others
+
+Current technical conclusion: isolated first-scene target classification is complete for the current stable target set. The next useful validation should probe the newly exposed main-menu overlay targets after `(921,54)`, while treating `(921,124)` as a platform/API boundary until platform service stubs are implemented.
+
+## Round 22: Main Menu Overlay Target Classification
+
+- Reused the Round 21 path:
+  - reload with `clearStorage=1`
+  - click title cover `(480,270)`
+  - wait for first-scene `UI TARGETS`
+  - click `(921,54)` to open the main menu overlay
+  - click one `stage.0.6.0.*` target per isolated run
+- Tested all 15 menu overlay targets listed in `DEBUG_SUMMARY_AND_NEXT_STEPS.md`.
+
+| Menu target | Coordinate | Classification | Result |
+| --- | --- | --- | --- |
+| `stage.0.6.0.1` | `(944,475)` | close/collapse | Menu overlay closed back to first-scene targets plus right-side buttons. |
+| `stage.0.6.0.2` | `(168,112)` | mall/platform boundary | Triggered `LOAD_UI_RESOURCE_COMPLETE:NEW_MALLUI_TYPE` and a browser `Script error. @ :0:0`. After resource mirroring, no mapped local 404 remained. |
+| `stage.0.6.0.6` | `(601,324)` | save-file UI | Triggered `LOAD_UI_RESOURCE_COMPLETE:SAVEFILEUI_TYPE` and exposed save-file right-side targets. |
+| `stage.0.6.0.7` | `(221,272)` | submenu | Loaded a small submenu with targets around `(124,182)` and `(124,221)`. |
+| `stage.0.6.0.9` | `(851,203)` | submenu/gallery-like UI | Loaded a UI with targets around `(200,328)`, `(30,424)`, and `(891,420)`. |
+| `stage.0.6.0.10` | `(174,485)` | UI transition/close-like | Triggered a resource wave and returned to first-scene targets. |
+| `stage.0.6.0.11` | `(325,499)` | submenu | Loaded a UI with targets around `(892,329)` and `(931,425)`. |
+| `stage.0.6.0.12` | `(72,512)` | CG/gallery UI | Triggered `LOAD_UI_RESOURCE_COMPLETE:CGUI_TYPE`; only known `/null%20path` requests appeared. |
+| `stage.0.6.0.13` | `(210,469)` | UI transition | Triggered a resource wave and returned to first-scene targets. |
+| `stage.0.6.0.14` | `(318,426)` | backpack/items UI | After mirroring, opened an item-category UI with many left-side category targets such as `(74,46)`, `(74,93)`, `(74,140)`, etc. |
+| `stage.0.6.0.15` | `(75,439)` | welfare/event UI | After mirroring, opened a right-side vertical menu UI with targets around `x=956` and a left target around `(74,465)`. |
+| `stage.0.6.0.16` | `(196,371)` | no-op/menu remains | Emitted `CLICK_SCUI_BUTTON`, but the menu target set stayed effectively unchanged. |
+| `stage.0.6.0.17` | `(66,397)` | welfare/event UI | Same right-side vertical menu pattern as `stage.0.6.0.15`. |
+| `stage.0.6.0.18` | `(882,117)` | close/return | Menu overlay closed back to first-scene targets. |
+| `stage.0.6.0.19` | `(818,115)` | close/return | Menu overlay closed back to first-scene targets. |
+
+- First pass exposed new real `/shareres/<md5>` 404s from several submenus, especially:
+  - mall / product detail assets
+  - backpack / item category assets
+  - pet, sign-in, wardrobe, character-image, and welfare/event assets
+  - gallery / locked-image assets
+- Mirroring command:
+  - `python 66rpgProjectDropper\prepare_runner_mirror.py 1569947 --version 364 --root . --mirror-log .http-server.err.log`
+- Important newly mirrored groups include:
+  - `Graphics/UI/ui导入/底图/商城.jpg`
+  - `Graphics/Other/背包/*`
+  - `Graphics/Other/宠物/*`
+  - `Graphics/Other/签到/*`
+  - `Graphics/Other/衣橱/*`
+  - `Graphics/Other/形象选择/*`
+  - `Graphics/UI/ui导入/底图/鉴赏.jpg`
+  - welfare/event assets such as `Graphics/Other/福利/累充福利.jpg`
+- Retested representative resource-wave entries after mirroring:
+  - `stage.0.6.0.2`
+  - `stage.0.6.0.14`
+  - `stage.0.6.0.15`
+  - `stage.0.6.0.17`
+- Retest result:
+  - previous mapped `/shareres` misses now return `200` or `304`
+  - no new real `/shareres/<md5>` 404 appeared in the retest window
+  - only the known `/null%20path` 404s remained
+  - `stage.0.6.0.2` still emits `Script error. @ :0:0`, so mall/platform behavior likely needs platform-service stubbing rather than more static assets
+
+Current technical conclusion: main menu overlay classification is complete for the first-level menu targets, and the local mirror now covers the representative resource-heavy submenus tested. The next useful validation is to go one level deeper into the submenus that now open successfully: backpack category targets, welfare/event vertical menu targets, gallery targets, and the two-button submenu from `stage.0.6.0.7`. Mall should be tracked separately as a platform/API boundary.
+
+## Round 23: Second-Level Submenu Probe
+
+- Reused the Round 22 isolated path:
+  - reload with `clearStorage=1`
+  - click title cover `(480,270)`
+  - click `(921,54)` to open the main menu overlay
+  - click one first-level submenu target
+  - click one exposed second-level target per isolated run
+- Probed backpack/items, two-button submenu, CG/gallery, and welfare/event paths.
+
+| Parent path | Second-level target | Coordinate | Classification | Result |
+| --- | --- | --- | --- | --- |
+| backpack/items `(318,426)` | `bp.0` | `(74,46)` | category switch | Reopened/reloaded backpack category UI; 52 image loads; no script error. |
+| backpack/items `(318,426)` | `bp.1` | `(74,93)` | category switch | Reopened/reloaded backpack category UI; 52 image loads; no script error. |
+| backpack/items `(318,426)` | `bp.2` | `(74,140)` | category switch | Category UI; 48 image loads; no script error. |
+| backpack/items `(318,426)` | `bp.3` | `(74,187)` | category switch | Category UI; 48 image loads; no script error. |
+| backpack/items `(318,426)` | `bp.4` | `(74,234)` | category switch | Category UI; 52 image loads; no script error. |
+| backpack/items `(318,426)` | `bp.5` | `(74,281)` | category/page switch | Category UI with small resource wave; exposes an extra target near `(925,496)`. |
+| backpack/items `(318,426)` | `bp.6` | `(74,328)` | item/prop category | Category UI with prop/title resources; first pass exposed new mapped `/shareres` misses, then passed after mirroring. |
+| backpack/items `(318,426)` | `bp.7` | `(74,375)` | category/page switch | Category UI with small resource wave; exposes a target near `(343,327)`. |
+| backpack/items `(318,426)` | `bp.8` | `(74,422)` | category/page switch | Category UI with small resource wave; no script error. |
+| backpack/items `(318,426)` | `bp.close` | `(46,481)` | category-like/no close | Behaved like a category refresh rather than closing; exposes a target near `(925,496)`. |
+| backpack/items `(318,426)` | `bp.side0` | `(159,69)` | no-op/detail slot | Emitted `CLICK_SCUI_BUTTON` plus cancel noise; target set stayed effectively unchanged. |
+| backpack/items `(318,426)` | `bp.side1` | `(159,184)` | no-op/detail slot | Emitted `CLICK_SCUI_BUTTON`; no meaningful target-set change. |
+| backpack/items `(318,426)` | `bp.side2` | `(159,299)` | no-op/detail slot | Emitted `CLICK_SCUI_BUTTON`; no meaningful target-set change. |
+| two-button submenu `(221,272)` | `two.0` | `(124,182)` | opens deeper UI | Opened a new UI with targets around `(432,478)`, `(617,474)`, and `(925,503)`; 38 image loads; no script error. |
+| two-button submenu `(221,272)` | `two.1` | `(124,221)` | mostly no-op | Submenu remained visible; no new resource wave or script error. |
+| CG/gallery `(72,512)` | `cg.0` | `(536,413)` | gallery item click | Triggered `SHOW_CG_UI_ITEM_MSG` and `SHOW_CG_UI_ITEM`; no script error. |
+| CG/gallery `(72,512)` | `cg.1` | `(632,417)` | gallery item click | Triggered `SHOW_CG_UI_ITEM_MSG` and `SHOW_CG_UI_ITEM`; no script error. |
+| CG/gallery `(72,512)` | `cg.2` | `(775,429)` | gallery item click | Triggered `SHOW_CG_UI_ITEM_MSG` and `SHOW_CG_UI_ITEM`; no script error. |
+| welfare/event `(75,439)` | `wf.0`-`wf.7` | `(956,65)` through `(956,493)` | vertical menu/page switch | Each emitted `CLICK_SCUI_BUTTON`; kept the same vertical menu pattern; first pass exposed one audio resource miss, then passed after mirroring. |
+| welfare/event `(75,439)` | `wf.left` | `(74,465)` | return/collapse | Returned to the first-scene/right-button target set; no script error. |
+
+- New real mapped `/shareres/<md5>` misses observed during second-level probing:
+  - `3600bf9b7d679f703bb1d27c573d7fa7` -> title/label asset
+  - `e25afea88a8f80f92e64f2222b951445` -> title/label selected asset
+  - `f8196840cfb5fb51bd035f920ec7a734` -> sign-in button
+  - `d879ac7a74ebf4c3da7e542a087db076` -> sign-in button selected
+  - `df8976233d87caa4b768a8aca267fc59` -> locked title/label asset
+  - `e9d3f3f2dbaeaef791400d16595e7cde` -> `audio/se/error_1.mp3`
+- Mirroring command:
+  - `python 66rpgProjectDropper\prepare_runner_mirror.py 1569947 --version 364 --root . --mirror-log .http-server.err.log`
+- Representative retests after mirroring:
+  - backpack `bp.6` `(74,328)`: triggered `CLICK_SCUI_BUTTON` and `LOAD_UI_RESOURCE_COMPLETE`, no script error, all mapped resources returned `200` or `304`.
+  - welfare `wf.0` `(956,65)`: triggered `CLICK_SCUI_BUTTON`, no script error, audio resource returned `200/304`.
+  - welfare `wf.left` `(74,465)`: returned to first-scene/right-button targets, no script error.
+- Local HTTP log after the mirror/retest window:
+  - no new real `/shareres/<md5>` `404`
+  - only the known `/null%20path` requests remain
+- Browser console note:
+  - repeated `NotAllowedError: play() failed because the user didn't interact with the document first` appears during automated reloads; this is browser autoplay policy noise and not a mapped resource miss.
+  - occasional browser-control `Statsig` network timeout messages are external tooling noise and not game runtime behavior.
+
+Current technical conclusion: the planned second-level submenu probe is complete for the representative exposed targets. Static resources for those paths are mirrored enough that retests no longer produce real `/shareres` 404s. The next useful validation is deeper than Round 23: probe the newly exposed deeper UI targets from two-button submenu and backpack category/detail pages, and separately define platform/service stubs for mall and account-like features.
+
+## Round 24: Deeper UI Probe
+
+- Continued from the Round 23 next direction.
+- Browser viewport was forced to `960x540`.
+- Local HTTP server log baseline for this round:
+  - before two-button deeper probing: line `3616`
+  - after mirroring two-button deeper misses: line `3721`
+  - before backpack deeper probing: line `3739`
+
+### Two-Button Deeper UI
+
+Path:
+
+1. click title cover `(480,270)`
+2. click main menu `(921,54)`
+3. click first-level two-button submenu `(221,272)`
+4. click top option `(124,182)`
+5. probe deeper targets `(432,478)`, `(617,474)`, and `(925,503)`
+
+| Deeper target | Classification | Result |
+| --- | --- | --- |
+| `(432,478)` | confirm/transition-like | Triggered `CLICK_SCUI_BUTTON`, `LOAD_UI_RESOURCE_COMPLETE`, 14 image loads, and target count dropped from 20 to 12. No script error. |
+| `(617,474)` | refresh/reopen-like | Triggered `CLICK_SCUI_BUTTON`, `LOAD_UI_RESOURCE_COMPLETE`, 38 image loads, and target count stayed 20. No script error. |
+| `(925,503)` | close/return | Triggered `CLICK_SCUI_BUTTON` and returned to first-scene/right-button target set. No resource wave and no script error. |
+
+New mapped resource misses exposed by the first pass:
+
+- `c5be296d8fc3dfb5ac20bbbbb180b4a1` -> `graphics/other/称号/称号/称号4.jpg`
+- `87d0fc55a07cda95560a418edefb542a` -> `graphics/other/称号/称号/称号2.jpg`
+
+Mirroring command:
+
+```powershell
+python 66rpgProjectDropper\prepare_runner_mirror.py 1569947 --version 364 --root . --mirror-log .http-server.err.log
+```
+
+Retest result:
+
+- `(432,478)` requested `c5be296d8fc3dfb5ac20bbbbb180b4a1`, now `200`.
+- `(617,474)` requested `87d0fc55a07cda95560a418edefb542a`, now `200`.
+- No new real `/shareres/<md5>` 404 appeared after the two-button retest.
+
+### Backpack Deeper Targets
+
+| Setup path | Deeper target | Classification | Result |
+| --- | --- | --- | --- |
+| backpack `(318,426)` -> `bp.5` `(74,281)` | `(925,496)` | close/return | Triggered `CLICK_SCUI_BUTTON`; target count dropped from 16 to 7 and returned to first-scene/right-button targets. No resource wave or script error. |
+| backpack `(318,426)` -> `bp.6` `(74,328)` | `(672,193)` | no effective hit | No `CLICK_SCUI_BUTTON`, no resource wave, target count stayed 20. Likely coordinate was near a displayed target but not an active click area in this state. |
+| backpack `(318,426)` -> `bp.7` `(74,375)` | `(343,327)` | no effective hit | No `CLICK_SCUI_BUTTON`, no resource wave, target count stayed 18. Likely coordinate was near a displayed target but not an active click area in this state. |
+
+Backpack deeper HTTP result:
+
+- No new real `/shareres/<md5>` 404 appeared after line `3739`.
+- New backpack/deeper resources requested during this round returned `200` or `304`.
+- Only known `/null%20path` requests remained.
+
+### Welfare Longer Stabilization
+
+Path:
+
+1. click title cover `(480,270)`
+2. click main menu `(921,54)`
+3. click welfare/event `(75,439)`
+4. click right-side target `(956,65)`
+5. wait 9 seconds
+
+Result:
+
+- Target count stayed at 14.
+- Target pattern stayed the same right-side vertical menu family.
+- No deeper inner-page target set appeared during the 9-second stabilization window.
+- No script error appeared.
+
+Current technical conclusion: the deeper two-button UI path is now classified and its newly exposed title-image resources are mirrored. Backpack deeper probing found one reliable close/return target and two coordinate probes that do not hit effective buttons in the current state. Welfare/event does not expose a further inner target set after a longer wait. The next useful validation should either add better target-coordinate extraction for Laya nodes or move to platform/service boundary work, especially mall/shop and account-like features.
+
+## Round 25: Enhanced UI Target Trace
+
+- Implemented runner-side `traceUiState` improvements in `h5_runner_experiment.html`.
+- `UI TARGETS` now includes:
+  - `x` / `y` aliases for the click center, in addition to `cx` / `cy`
+  - `left`, `top`, `right`, `bottom`
+  - `w`, `h`
+  - `texture`
+  - `listeners`
+  - `mouseEnabled`
+  - `likelyInteractive`
+  - `boundsSource`
+- `UI STATE` nodes now also include texture, listener, alpha, disabled, and bounds details.
+- Important implementation detail:
+  - Laya `getBounds()` can already include accumulated offsets for some nodes.
+  - For nodes with non-zero `width` and `height`, target centers now prefer `globalX/globalY + width/height`.
+  - `getBounds()` is used as a fallback for zero-sized texture children and supplemental state data.
+- Target filtering was tightened:
+  - action-listener nodes such as `click`, `mousedown`, and `mouseup` are preferred
+  - pure texture children are not emitted as duplicate targets when their clickable parent carries the event listeners
+  - parent buttons can inherit a single child texture URL for easier resource identification
+
+Validation:
+
+- Forced a cache-busted reload with `traceUiState=1` and `patchTitleClick=1`.
+- First-scene target output returned to the expected 7 clickable targets:
+  - `stage.0.3.0.0` `(536,413)`
+  - `stage.0.3.0.1` `(632,417)`
+  - `stage.0.3.0.2` `(775,429)`
+  - `stage.0.3.0.3` `(678,128)`
+  - `stage.0.3.0.4` `(582,129)`
+  - `stage.0.7.0` `(921,54)`
+  - `stage.0.7.1` `(921,124)`
+- Main menu target output now includes enhanced fields while preserving known centers such as:
+  - `stage.0.6.0.2` `(168,112)`
+  - `stage.0.6.0.7` `(221,272)`
+  - `stage.0.6.0.14` `(318,426)`
+  - `stage.0.6.0.15` `(75,439)`
+- Example improvement:
+  - `stage.0.7.0` now carries its inherited texture URL `game_menu2_web.png` and event listener list including `click`.
+
+Current technical conclusion: `UI TARGETS` is now more suitable for automated probing because it exposes reliable `x/y` click centers, visible bounds, texture hints, and listener metadata. The next useful validation is to re-run a small backpack deeper probe with the enhanced target output and use the emitted exact centers instead of hand-picked approximate coordinates.
