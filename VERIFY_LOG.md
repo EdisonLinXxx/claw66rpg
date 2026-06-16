@@ -851,3 +851,32 @@ HTTP result:
 - only the known `/null%20path` requests appeared
 
 Current technical conclusion: the enhanced target trace resolved the earlier false coordinate probe. `(672,193)` was not a real emitted target; the nearby real `bp.6` controls are `(626,320)` and `(785,354)`. Both are clickable but currently do not produce visible target-set or resource changes in the sample window. The next useful validation can continue exact-target probing of the bottom slots, or switch to the mall/shop platform boundary.
+
+## Round 27: Backpack `bp.6` Bottom Slot Probe
+
+- Continued exact-target probing with enhanced `UI TARGETS`.
+- Local HTTP log baseline: line `4173`.
+- Path per isolated run:
+  1. reload with `clearStorage=1`
+  2. click title cover `(480,270)`
+  3. click main menu `(921,54)`
+  4. click backpack `(318,426)`
+  5. click category `bp.6` `(74,328)`
+  6. click one emitted bottom slot target
+
+| Target path | Coordinate | Result |
+| --- | --- | --- |
+| `stage.0.6.0.16` | `(210,476)` | Triggered `CLICK_SCUI_BUTTON`; target count stayed 25; no resource wave, no script error. |
+| `stage.0.6.0.17` | `(331,476)` | Triggered `CLICK_SCUI_BUTTON`; target count stayed 25; one `LOAD_IMAGE_COMPLETE`; no script error. |
+| `stage.0.6.0.18` | `(451,476)` | Triggered `CLICK_SCUI_BUTTON`; target count stayed 25; one `LOAD_IMAGE_COMPLETE`; no script error. |
+| `stage.0.6.0.19` | `(570,476)` | Triggered `CLICK_SCUI_BUTTON`; target count stayed 25; one `LOAD_IMAGE_COMPLETE`; no script error. |
+| `stage.0.6.0.20` | `(690,476)` | Triggered `CLICK_SCUI_BUTTON`; target count stayed 25; one `LOAD_IMAGE_COMPLETE`; no script error. |
+| `stage.0.6.0.21` | `(810,476)` | Triggered `CLICK_SCUI_BUTTON`; target count stayed 25; one `LOAD_IMAGE_COMPLETE`; no script error. |
+
+HTTP result:
+
+- no new real `/shareres/<md5>` 404 appeared after line `4173`
+- resource requests were `200` or `304`
+- only known `/null%20path` requests appeared
+
+Current technical conclusion: all sampled `bp.6` bottom slots are valid clickable nodes, but they behave as stable/no-visible-change controls in the 5-second sample window. They do not open deeper target sets, do not trigger UI resource loads, and do not expose missing static resources. The next useful validation is to move to the mall/shop platform boundary (`stage.0.6.0.2`) or add state-variable tracing if these silent backpack clicks need deeper interpretation.

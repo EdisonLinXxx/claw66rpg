@@ -247,6 +247,7 @@ Latest verified behavior:
 - first-scene target output was revalidated after the trace enhancement and still returns the expected 7 clickable targets
 - enhanced backpack reprobe showed the previous approximate point `(672,193)` is not an emitted clickable target in `bp.6`
 - actual `bp.6` deeper/action targets include `(626,320)` and `(785,354)`; both emit `CLICK_SCUI_BUTTON` but keep the target set stable in the sample window
+- `bp.6` bottom slots `(210,476)`, `(331,476)`, `(451,476)`, `(570,476)`, `(690,476)`, and `(810,476)` are all valid clickable targets; each emits `CLICK_SCUI_BUTTON`, keeps target count stable at 25, and exposes no new real `/shareres/<md5>` 404
 
 ## How To Reproduce The Current Validation
 
@@ -310,6 +311,7 @@ Second-level resource-miss loop:
 | Backpack deeper pages | `(925,496)`, `(672,193)`, `(343,327)` | `(925,496)` is a reliable close/return target; the other two sampled coordinates did not trigger effective button events in their sampled states. |
 | Welfare/event longer wait | `(956,65)` plus 9s wait | Target set stayed at 14 and no deeper inner target set appeared. |
 | Backpack enhanced reprobe | `bp.6` exact targets `(626,320)`, `(785,354)` | Both are real emitted targets with click listeners and emit `CLICK_SCUI_BUTTON`; target set remains stable and no new resource wave appears. |
+| Backpack `bp.6` bottom slots | `(210,476)`, `(331,476)`, `(451,476)`, `(570,476)`, `(690,476)`, `(810,476)` | All are real emitted targets and emit `CLICK_SCUI_BUTTON`; target set remains 25; only `(331,476)` onward show one image-load event; no script error and no new resource miss. |
 
 Latest resource-miss loop:
 
@@ -337,18 +339,7 @@ Validation after a cache-busted reload:
 
 ## Next Debug Direction
 
-### Priority 1: Continue Exact-Target Backpack Probe
-
-The enhanced trace corrected the `bp.6` false coordinate probe. Continue exact-target probing only from emitted `UI TARGETS`:
-
-1. open `(921,54)`
-2. click backpack `(318,426)`
-3. click category targets such as `(74,328)`, `(74,375)`, and `(74,422)`
-4. read the latest `UI TARGETS`
-5. click emitted exact targets with `listeners` containing `click` or `mousedown`
-6. classify bottom-slot targets such as `(210,476)`, `(331,476)`, `(451,476)`, `(570,476)`, `(690,476)`, and `(810,476)`
-
-### Priority 2: Platform/Service Boundary
+### Priority 1: Platform/Service Boundary
 
 - static assets are now mirrored
 - remaining `Script error. @ :0:0` likely needs platform/shop API stubs or deeper runtime hooks
@@ -359,6 +350,15 @@ Treat `stage.0.6.0.2` / mall as the next platform-service target:
 2. Stub or intercept the shop/platform service calls needed after `data/mallnew.bin`.
 3. Distinguish malformed URL bugs from missing platform response data.
 4. Retest mall after stubbing to see whether the `Script error. @ :0:0` disappears.
+
+### Priority 2: Runtime State Trace For Silent Backpack Clicks
+
+The exact `bp.6` clickable targets are now classified at the UI/resource level. If backpack behavior still matters, the next useful step is not more coordinate probing; it is state tracing:
+
+1. hook variable/save mutations around `CLICK_SCUI_BUTTON`
+2. capture selected category/page/item ids
+3. compare before/after snapshots for `(626,320)`, `(785,354)`, and bottom slots
+4. decide whether these controls are intentionally silent, locked, or waiting on game state
 
 ### Priority 3: Continue Resource-Miss Loop
 
