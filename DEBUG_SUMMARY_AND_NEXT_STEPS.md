@@ -255,6 +255,14 @@ Latest verified behavior:
 - mall inner target `stage.0.7.2.12` `(921,455)` closes/returns from the mall target set back to the main menu target set
 - remaining mall noise is malformed PropShop JSONP URLs for account money/owned item counts, not a static asset miss
 - `stubPropShop=1` now intercepts PropShop JSONP script URLs and returns deterministic fake account data; with it enabled, mall opening produces 4 stub hits, 0 PropShop resource errors, 6 `GetImageBase64` conversions, and no script error
+- browser click automation must use screen-scaled coordinates when the canvas is displayed larger than `960x540`; `UI TARGETS` now includes `screenX/screenY`
+- the main story path was revalidated with scaled clicks:
+  - first scene `stage.0.3.0.0` `(536,413)` advanced into a CG/story scene
+  - next story target `(896,55)` advanced again to a visually distinct CG/story scene
+  - both transitions emitted `自动存档` and `自动存档204`
+- manual archive/save UI opens from `stage.0.3.0.1` `(632,417)`
+- cloud archive access is blocked by the expected login boundary: `未登录不能使用云存档。`
+- local archive slot write/read behavior is not yet proven in the empty-slot sample
 
 ## How To Reproduce The Current Validation
 
@@ -354,16 +362,33 @@ Validation after a cache-busted reload:
 
 ## Next Debug Direction
 
-### Priority 1: Mall Item State/Object Trace
+### Priority 1: Local Play MVP Validation
 
-- static assets are now mirrored
-- `GetImageBase64` is now stubbed locally and no longer blocks the mall
-- PropShop owned-item and account-money JSONP calls are now stubbed behind `stubPropShop=1`
-- mall event detail logging is now available for `EventCenter.dispatchEvent`
+This is still useful for platform feature coverage, but it is no longer the closest path to the local-play MVP. For local playability, prioritize the story/save items below first.
 
-The mall opens reliably under `stubPropShop=1`, and one item-like click on `(536,413)` emitted `CLICK_NEW_MALL_ITEM_BG`. That click did not request `/getUserHavePropNum`, `/createBuyOrder`, or any new PropShop endpoint. Repeated clicks on the currently emitted non-close mall coordinates did not reliably produce additional buy/detail events.
+### Priority 1A: Main Story Longer Run
 
-Treat mall item selection state as the next target before adding more endpoint stubs:
+The latest validation proves two story transitions beyond the first scene and repeated auto-save logs. The next local-play validation should lengthen this path:
+
+1. use `screenX/screenY` from `UI TARGETS` for browser clicks
+2. continue story/branch targets for 10-20 transitions
+3. record each new background/CG/audio resource wave
+4. mirror any new real `/shareres/<md5>` 404
+5. stop at the first platform/API boundary or parser/runtime error
+
+### Priority 1B: Local Archive State Trace
+
+Manual archive UI opens, cloud save is correctly blocked by login, but local slot write/read is not proven yet. The next save/load validation should trace state:
+
+1. hook localStorage/sessionStorage/indexedDB writes if used by the runtime
+2. hook archive/save manager methods if discoverable
+3. capture archive list data before/after auto-save and manual archive clicks
+4. reload without `clearStorage=1`
+5. verify whether archive entries survive reload and can restore to the same story node
+
+### Priority 1C: Mall Item State/Object Trace
+
+For non-core platform coverage, keep the previous mall direction:
 
 1. open mall with `stubPropShop=1`
 2. identify the mall view/mediator object that handles `CLICK_NEW_MALL_ITEM_BG`

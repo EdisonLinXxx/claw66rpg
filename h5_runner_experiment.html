@@ -764,6 +764,22 @@
           var collectUiState = function () {
             var nodes = [];
             var targets = [];
+            var screenOffsetX = 0;
+            var screenOffsetY = 0;
+            var screenScaleX = 1;
+            var screenScaleY = 1;
+            try {
+              var canvas = document.getElementById('layaCanvas') || document.querySelector('canvas');
+              if (canvas && canvas.getBoundingClientRect) {
+                var canvasRect = canvas.getBoundingClientRect();
+                screenOffsetX = Number(canvasRect.left || 0);
+                screenOffsetY = Number(canvasRect.top || 0);
+                screenScaleX = Number(canvasRect.width || 960) / 960;
+                screenScaleY = Number(canvasRect.height || 540) / 540;
+              }
+            } catch (screenScaleError) {}
+            var toScreenX = function (stageX) { return Math.round(screenOffsetX + stageX * screenScaleX); };
+            var toScreenY = function (stageY) { return Math.round(screenOffsetY + stageY * screenScaleY); };
             var shortString = function (value, maxLength) {
               if (value === null || value === undefined) return '';
               return String(value).slice(0, maxLength || 80);
@@ -892,6 +908,12 @@
                     y: Math.round(centerY),
                     cx: Math.round(centerX),
                     cy: Math.round(centerY),
+                    screenX: toScreenX(centerX),
+                    screenY: toScreenY(centerY),
+                    screenLeft: toScreenX(targetX),
+                    screenTop: toScreenY(targetY),
+                    screenRight: toScreenX(targetX + targetWidth),
+                    screenBottom: toScreenY(targetY + targetHeight),
                     left: Math.round(targetX),
                     top: Math.round(targetY),
                     right: Math.round(targetX + targetWidth),

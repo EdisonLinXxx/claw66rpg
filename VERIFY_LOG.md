@@ -1018,3 +1018,56 @@ Event findings:
 - Repeated clicks on the emitted non-close coordinates did not reliably emit additional mall item/buy events in the current target trace.
 
 Current technical conclusion: the PropShop/opening boundary is stable. The next mall blocker is no longer a missing endpoint; it is insufficient state visibility for the mall item list and selected item. The next useful validation is a mall-specific object/state trace, for example selected item id, visible mall item records, and the mediator/view object handling `CLICK_NEW_MALL_ITEM_BG`.
+
+## Round 31: Main Story And Save/Load Smoke Test
+
+- Local HTTP log baseline: line `5325`.
+- Added `screenX/screenY` and screen bounds to `UI TARGETS`.
+- Reason: the Laya stage reports `960x540` coordinates, while the browser canvas was displayed at `1280x720`; direct browser clicks need scaled screen coordinates.
+
+Validation URL kept `stubPropShop=1`.
+
+Main story path:
+
+1. reload with `clearStorage=1`
+2. click title cover
+3. reach first playable scene with 7 targets
+4. click main story/branch target `stage.0.3.0.0` at stage `(536,413)`, screen `(715,551)`
+5. reach new CG/story scene with target `stage.0.3.0.0` at stage `(896,55)`
+6. click stage `(896,55)`, screen `(1195,73)`
+7. reach another visually distinct CG/story scene
+
+Main story result:
+
+| Check | Result |
+| --- | --- |
+| title to first scene | pass |
+| first scene to CG/story scene | pass |
+| second CG/story click | pass |
+| auto-save log | `自动存档`, `自动存档204` after story transitions |
+| new real `/shareres/<md5>` 404 | none |
+| `Script error. @ :0:0` | none |
+
+Save/load path:
+
+1. from first scene, click the save/archive target `stage.0.3.0.1` at stage `(632,417)`, screen `(843,556)`
+2. archive UI opens
+3. screenshot confirms the archive page with local/cloud buttons
+4. click an empty visible local slot area
+5. click cloud button
+
+Save/load result:
+
+| Check | Result |
+| --- | --- |
+| archive UI opens | pass |
+| archive UI target count | `3` |
+| local archive slot click | no effective write/load action observed in empty slot sample |
+| cloud archive click | blocked by login boundary |
+| cloud warning text | `未登录不能使用云存档。` |
+| new real `/shareres/<md5>` 404 | none |
+| `Script error. @ :0:0` | none |
+
+HTTP log after the baseline showed only normal `200`/`304` resource hits plus the known `/null%20path` 404 pair. A new story resource `54081a0390cb6af5fccf9db34a25c4d4` returned `200`.
+
+Current technical conclusion: core local story playback is viable beyond the first scene when clicks use screen-scaled coordinates. Auto-save is firing successfully enough to log `204`. Manual archive UI opens locally, but local slot write/read behavior is not yet proven; cloud archive is explicitly a platform/login boundary and should be disabled or stubbed for a local MVP.
