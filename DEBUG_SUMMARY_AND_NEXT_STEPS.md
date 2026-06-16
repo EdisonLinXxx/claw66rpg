@@ -262,7 +262,12 @@ Latest verified behavior:
   - both transitions emitted `自动存档` and `自动存档204`
 - manual archive/save UI opens from `stage.0.3.0.1` `(632,417)`
 - cloud archive access is blocked by the expected login boundary: `未登录不能使用云存档。`
-- local archive slot write/read behavior is not yet proven in the empty-slot sample
+- local auto-save persistence is now proven:
+  - `traceStorage=1` shows auto-save writing `localStorage` key `save0a235c54f16c431ab5736c92997edb47undefined-100`
+  - the saved value grew from length `3045` to `3341` across story advances
+  - a reload without `clearStorage=1` reads the same key with length `3341`
+  - the restored state exposes story-layer right-side menu targets rather than title-only UI
+- manual archive slot write/read behavior is still not proven in the empty-slot sample
 
 ## How To Reproduce The Current Validation
 
@@ -376,15 +381,16 @@ The latest validation proves two story transitions beyond the first scene and re
 4. mirror any new real `/shareres/<md5>` 404
 5. stop at the first platform/API boundary or parser/runtime error
 
-### Priority 1B: Local Archive State Trace
+### Priority 1B: Local Auto-Save And Archive State Trace
 
-Manual archive UI opens, cloud save is correctly blocked by login, but local slot write/read is not proven yet. The next save/load validation should trace state:
+Auto-save persistence is now proven through `localStorage` writes and reload reads. Manual archive UI opens, cloud save is correctly blocked by login, but local slot write/read is not proven yet. The next save/load validation should focus on the manual archive path:
 
-1. hook localStorage/sessionStorage/indexedDB writes if used by the runtime
+1. keep `traceStorage=1` enabled for write/read evidence
 2. hook archive/save manager methods if discoverable
-3. capture archive list data before/after auto-save and manual archive clicks
-4. reload without `clearStorage=1`
-5. verify whether archive entries survive reload and can restore to the same story node
+3. capture archive list data before/after manual archive clicks
+4. identify the exact local slot/button target that writes a manual save
+5. reload without `clearStorage=1`
+6. verify whether manual archive entries survive reload and can restore to the same story node
 
 ### Priority 1C: Mall Item State/Object Trace
 

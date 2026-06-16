@@ -310,6 +310,86 @@
         logLine('browser storage clear failed ' + (storageError && storageError.stack || storageError));
       }
     }
+    if (hasQueryFlag('traceStorage') && !window.__runnerStorageTracePatched) {
+      window.__runnerStorageTracePatched = true;
+      try {
+        var summarizeStorage = function (store, name) {
+          var items = [];
+          try {
+            for (var i = 0; i < store.length; i++) {
+              var key = store.key(i);
+              var value = store.getItem(key);
+              items.push({
+                key: key,
+                len: value ? String(value).length : 0,
+                preview: value ? String(value).slice(0, 80) : ''
+              });
+            }
+          } catch (summaryError) {
+            items.push({ error: String(summaryError && (summaryError.stack || summaryError.message) || summaryError) });
+          }
+          return { name: name, count: items.length, items: items };
+        };
+        var lastStorageSnapshot = '';
+        var logStorageSnapshot = function (label) {
+          try {
+            var snapshot = JSON.stringify([
+              summarizeStorage(localStorage, 'localStorage'),
+              summarizeStorage(sessionStorage, 'sessionStorage')
+            ]);
+            if (snapshot !== lastStorageSnapshot) {
+              lastStorageSnapshot = snapshot;
+              logLine('STORAGE SNAPSHOT ' + label + ' ' + snapshot);
+            }
+          } catch (snapshotError) {
+            logLine('STORAGE SNAPSHOT ERROR ' + label + ' ' + (snapshotError && (snapshotError.stack || snapshotError.message) || snapshotError));
+          }
+        };
+        var wrapStorageMethod = function (methodName) {
+          var original = Storage.prototype[methodName];
+          if (typeof original !== 'function' || original.__runnerStorageWrapped) return;
+          Storage.prototype[methodName] = function () {
+            var storeName = this === localStorage ? 'localStorage' : (this === sessionStorage ? 'sessionStorage' : 'storage');
+            var key = arguments.length > 0 ? String(arguments[0]) : '';
+            var value = arguments.length > 1 ? String(arguments[1]) : '';
+            logLine('STORAGE ' + storeName + '.' + methodName + ' key=' + key + ' len=' + value.length + ' preview=' + value.slice(0, 80));
+            var result = original.apply(this, arguments);
+            logStorageSnapshot(storeName + '.' + methodName);
+            return result;
+          };
+          Storage.prototype[methodName].__runnerStorageWrapped = true;
+        };
+        var originalGetItem = Storage.prototype.getItem;
+        if (typeof originalGetItem === 'function' && !originalGetItem.__runnerStorageWrapped) {
+          Storage.prototype.getItem = function () {
+            var storeName = this === localStorage ? 'localStorage' : (this === sessionStorage ? 'sessionStorage' : 'storage');
+            var key = arguments.length > 0 ? String(arguments[0]) : '';
+            var result = originalGetItem.apply(this, arguments);
+            var value = result === null || result === undefined ? '' : String(result);
+            if (value.length || hasQueryFlag('traceStorageVerbose')) {
+              logLine('STORAGE ' + storeName + '.getItem key=' + key + ' len=' + value.length + ' preview=' + value.slice(0, 80));
+            }
+            return result;
+          };
+          Storage.prototype.getItem.__runnerStorageWrapped = true;
+        }
+        wrapStorageMethod('setItem');
+        wrapStorageMethod('removeItem');
+        wrapStorageMethod('clear');
+        if (window.indexedDB && indexedDB.open && !indexedDB.open.__runnerStorageWrapped) {
+          var originalIndexedDbOpen = indexedDB.open.bind(indexedDB);
+          indexedDB.open = function (name, version) {
+            logLine('INDEXEDDB open name=' + name + ' version=' + (version === undefined ? '' : version));
+            return originalIndexedDbOpen.apply(indexedDB, arguments);
+          };
+          indexedDB.open.__runnerStorageWrapped = true;
+        }
+        logStorageSnapshot('initial');
+        setInterval(function () { logStorageSnapshot('interval'); }, 1000);
+      } catch (traceStorageError) {
+        logLine('traceStorage patch failed ' + (traceStorageError && (traceStorageError.stack || traceStorageError.message) || traceStorageError));
+      }
+    }
     logLine('starting game init');
     try {
       if (hasQueryFlag('traceReads') && window.GameByte && !GameByte.prototype.__runnerTracePatched) {

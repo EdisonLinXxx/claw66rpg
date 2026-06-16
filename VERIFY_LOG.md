@@ -1071,3 +1071,58 @@ Save/load result:
 HTTP log after the baseline showed only normal `200`/`304` resource hits plus the known `/null%20path` 404 pair. A new story resource `54081a0390cb6af5fccf9db34a25c4d4` returned `200`.
 
 Current technical conclusion: core local story playback is viable beyond the first scene when clicks use screen-scaled coordinates. Auto-save is firing successfully enough to log `204`. Manual archive UI opens locally, but local slot write/read behavior is not yet proven; cloud archive is explicitly a platform/login boundary and should be disabled or stubbed for a local MVP.
+
+## Round 32: Local Auto-Save Persistence And Reload Restore
+
+- Local HTTP log baseline: line `5478`.
+- Added `traceStorage=1` runner instrumentation for local storage persistence:
+  - `localStorage` / `sessionStorage` `setItem`, `removeItem`, and `clear`
+  - non-empty `getItem` reads
+  - storage key snapshots when storage changes
+  - `indexedDB.open` calls
+- `traceStorageVerbose=1` can be used when empty `getItem` probes are needed.
+
+Auto-save write validation:
+
+1. reload with `clearStorage=1` and `traceStorage=1`
+2. click title cover
+3. advance the main story target at screen `(715,551)`
+4. advance the next story target at screen `(1195,73)`
+
+Observed writes:
+
+| Step | Storage key | Length |
+| --- | --- | --- |
+| first story advance | `save0a235c54f16c431ab5736c92997edb47undefined-100` | `3045` |
+| later story advance | `save0a235c54f16c431ab5736c92997edb47undefined-100` | `3341` |
+
+Relevant runtime logs:
+
+- `自动存档`
+- `STORAGE localStorage.setItem key=save0a235c54f16c431ab5736c92997edb47undefined-100 ...`
+- `自动存档204`
+
+Reload/read validation:
+
+1. reload without `clearStorage=1`
+2. keep `traceStorage=1`
+3. wait for game initialization
+
+Observed reads:
+
+| Check | Result |
+| --- | --- |
+| save key survives reload | pass |
+| save key read by runtime | pass |
+| non-empty read length | `3341` |
+| restored state target pattern | story-layer right-side menu targets, not title-only UI |
+| new real `/shareres/<md5>` 404 | none |
+| `Script error. @ :0:0` | none |
+
+HTTP log after the baseline showed:
+
+- runner reloads returned `200`
+- `shareres/7b/7b633df854b9742c1a653e134ee6f2d8` returned `200`
+- only the known `/null%20path` 404 pair appeared
+
+Current technical conclusion: local auto-save now has a proven persistence loop. The runtime writes the auto-save to `localStorage`, the value survives a reload, and the runtime reads the same non-empty save key on initialization. This is enough to treat browser-local auto-save recovery as working for the local-play MVP. Manual archive slot write/load is still a separate UI path and remains unproven.
