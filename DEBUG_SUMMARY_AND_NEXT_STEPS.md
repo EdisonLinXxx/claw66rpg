@@ -276,6 +276,12 @@ Latest verified behavior:
   - no `Script error. @ :0:0`
   - auto-save length stays at `3341`
   - coordinate continuation attempts do not expose a new story target set
+- black-screen runtime display trace found:
+  - stage and game main remain alive
+  - main stage child is visible, `960x540`, and has 13 children
+  - visible full-screen layer exists but no active texture is reported by the reliable runtime summary
+  - several full-screen candidate content groups under `stage.0.2` are `visible:false`
+  - `d66...` now returns `304`/cache success, so the current black screen is not a new mapped asset miss
 
 ## How To Reproduce The Current Validation
 
@@ -384,10 +390,11 @@ This is still useful for platform feature coverage, but it is no longer the clos
 The latest long-run probe fixed the next mapped missing asset, but the sampled path now stalls on a black screen without a script error or a new real `shareres` miss. The next local-play validation should inspect runtime scene/display state at that black screen:
 
 1. keep `traceUiState=1`, `traceStorage=1`, and `traceFullTargets=1` available
-2. add a black-screen display trace for visible Laya nodes, alpha, z-order, and current resource URLs
-3. capture current story index/command if the active story controller object is discoverable
-4. identify whether the black screen is caused by hidden/transparent nodes, missing non-`shareres` content, or a story command waiting on state/input
-5. after fixing the black-screen cause, resume 10-20 transition long-run probing and mirror any new real `/shareres/<md5>` 404
+2. keep expanding the reliable `RUNTIME STATE` path; the standalone `DISPLAY STATE` branch did not emit in the browser trace
+3. identify which manager/controller owns `stage.0.0`, `stage.0.2`, and `stage.0.3`
+4. capture current story index/command if the active story controller object is discoverable
+5. determine why visible full-screen layers have no active texture and why candidate content groups under `stage.0.2` are hidden
+6. after fixing the black-screen cause, resume 10-20 transition long-run probing and mirror any new real `/shareres/<md5>` 404
 
 ### Priority 1B: Local Auto-Save And Archive State Trace
 

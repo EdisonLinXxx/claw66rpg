@@ -1167,3 +1167,41 @@ Retest after mirroring:
 | auto-save length after continuation attempts | unchanged at `3341` |
 
 Current technical conclusion: the next main-story blocker is no longer a missing mapped asset in this sampled path. The newly discovered `graphics/half/创建人物/3.jpg` miss is fixed, but the long-run path still reaches a black-screen/stalled story state with no script error and no new real `/shareres/<md5>` 404. The next validation should inspect runtime scene/display state during the black screen: visible Laya nodes, active story index/command, current background/half-body resource ids, and whether an overlay or alpha state is hiding the rendered scene.
+
+## Round 34: Black-Screen Runtime Display Trace
+
+- Local HTTP log baseline: line `5522`.
+- Added display/runtime trace improvements:
+  - `traceDisplay=1` display-tree sampler
+  - deeper `RUNTIME STATE` node summaries when `traceDisplay=1`
+  - texture, text, z-order, mouse, and graphics metadata in runtime child summaries
+
+Validation path:
+
+1. reload with `clearStorage=1`
+2. click title center
+3. click the known first branch point
+4. click the known top-right story point twice
+5. wait for runtime/display logs and capture a clipped screenshot
+
+Observed state:
+
+| Check | Result |
+| --- | --- |
+| screenshot | full black viewport |
+| new real `/shareres/<md5>` 404 | none |
+| fixed `d66...` resource | requested as `304` / cached success |
+| `Script error. @ :0:0` | none |
+| stage root | present |
+| main stage child | visible, `960x540`, `numChildren=13` |
+| visible full-size display layer | present but no texture reported in the reliable runtime summary |
+| candidate content groups | several full-size children under `stage.0.2` are `visible:false` |
+| auto-save key | unchanged from the previous black-screen sample |
+
+Important trace caveat:
+
+- The standalone `DISPLAY STATE` branch did not emit in the browser trace even though the served HTML contains it.
+- The already-reliable `RUNTIME STATE` logs did emit and were used for the current conclusion.
+- The next step should keep using/expanding `RUNTIME STATE` unless the `traceDisplay` branch activation issue is resolved.
+
+Current technical conclusion: the black screen is now more likely a runtime display/state problem than a static asset miss. The stage is alive and the game main object exists, but the visible full-screen display stack does not expose an active texture in the current runtime summary, while other full-screen candidate content groups are hidden. The next validation should identify which story/display manager owns `stage.0.0`, `stage.0.2`, and `stage.0.3`, then trace the command that hides content or fails to assign the next background/half-body texture.

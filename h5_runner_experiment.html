@@ -1030,6 +1030,134 @@
           setTimeout(collectUiState, 1500);
           logLine('ui state trace enabled');
         }
+        if (hasQueryFlag('traceDisplay') && !window.__runnerDisplayTraceStarted) {
+          logLine('traceDisplay flag active');
+          window.__runnerDisplayTraceStarted = true;
+          var displayTraceCount = 0;
+          var shortDisplayString = function (value, maxLength) {
+            if (value === null || value === undefined) return '';
+            return String(value).slice(0, maxLength || 100);
+          };
+          var displayTextureUrl = function (node) {
+            try {
+              if (node && node.texture && node.texture.url) return node.texture.url;
+              if (node && node.skin) return node.skin;
+              if (node && node._skin) return node._skin;
+              if (node && node.graphics && node.graphics._one && node.graphics._one.texture && node.graphics._one.texture.url) return node.graphics._one.texture.url;
+              if (node && node.graphics && node.graphics.cmds && node.graphics.cmds.length) {
+                for (var cmdIndex = 0; cmdIndex < node.graphics.cmds.length; cmdIndex++) {
+                  var cmd = node.graphics.cmds[cmdIndex];
+                  if (cmd && cmd.texture && cmd.texture.url) return cmd.texture.url;
+                }
+              }
+            } catch (textureError) {}
+            return '';
+          };
+          var graphicsSummary = function (node) {
+            var summary = {};
+            try {
+              if (node && node.graphics) {
+                summary.hasGraphics = true;
+                summary.one = !!node.graphics._one;
+                summary.cmdCount = node.graphics.cmds && node.graphics.cmds.length || 0;
+                if (node.graphics._one) {
+                  summary.oneType = node.graphics._one.constructor && node.graphics._one.constructor.name || typeof node.graphics._one;
+                  summary.oneFillColor = node.graphics._one.fillColor || node.graphics._one.color || '';
+                }
+              }
+            } catch (graphicsError) {
+              summary.error = String(graphicsError && (graphicsError.message || graphicsError));
+            }
+            return summary;
+          };
+          var collectDisplayState = function () {
+            displayTraceCount += 1;
+            try {
+              var stage = window.Laya && Laya.stage;
+              var nodes = [];
+              var largeNodes = [];
+              var blackCandidates = [];
+              var visitDisplay = function (node, depth, path, parentX, parentY, parentVisible, parentAlpha) {
+                if (!node || depth > 7 || nodes.length >= 180) return;
+                var localX = Number(node.x || 0);
+                var localY = Number(node.y || 0);
+                var globalX = parentX + localX;
+                var globalY = parentY + localY;
+                var width = Number(node.width || 0);
+                var height = Number(node.height || 0);
+                var alpha = Number(node.alpha === undefined ? 1 : node.alpha);
+                var effectiveAlpha = parentAlpha * alpha;
+                var visible = parentVisible && node.visible !== false && effectiveAlpha > 0.001;
+                var texture = displayTextureUrl(node);
+                var graphics = graphicsSummary(node);
+                var text = node.text || node.label || node.name || '';
+                var item = {
+                  path: path,
+                  cls: node.constructor && node.constructor.name || typeof node,
+                  name: shortDisplayString(node.name || '', 40),
+                  text: shortDisplayString(text, 40),
+                  visible: node.visible !== false,
+                  effectiveVisible: visible,
+                  alpha: alpha,
+                  effectiveAlpha: Number(effectiveAlpha.toFixed(3)),
+                  x: Math.round(globalX),
+                  y: Math.round(globalY),
+                  w: Math.round(width),
+                  h: Math.round(height),
+                  zOrder: Number(node.zOrder || 0),
+                  blendMode: shortDisplayString(node.blendMode || '', 20),
+                  mouseEnabled: !!node.mouseEnabled,
+                  children: node.numChildren || 0,
+                  texture: shortDisplayString(texture, 120),
+                  graphics: graphics
+                };
+                if (visible && (texture || text || width > 20 || height > 20 || graphics.hasGraphics)) {
+                  nodes.push(item);
+                }
+                if (visible && width >= 700 && height >= 400) {
+                  largeNodes.push(item);
+                  var lowerTexture = String(texture || '').toLowerCase();
+                  var fillColor = String(graphics.oneFillColor || '').toLowerCase();
+                  if (!texture || lowerTexture.indexOf('black') !== -1 || fillColor === '#000000' || fillColor === 'black') {
+                    blackCandidates.push(item);
+                  }
+                }
+                if (node.numChildren && typeof node.getChildAt === 'function') {
+                  for (var childIndex = 0; childIndex < node.numChildren; childIndex++) {
+                    visitDisplay(node.getChildAt(childIndex), depth + 1, path + '.' + childIndex, globalX, globalY, visible, effectiveAlpha);
+                  }
+                }
+              };
+              if (stage) visitDisplay(stage, 0, 'stage', 0, 0, true, 1);
+              var canvas = document.getElementById('layaCanvas') || document.querySelector('canvas');
+              var canvasInfo = canvas ? {
+                width: canvas.width,
+                height: canvas.height,
+                clientWidth: canvas.clientWidth,
+                clientHeight: canvas.clientHeight
+              } : null;
+              var globalKeys = Object.keys(window).filter(function (key) {
+                return /story|scene|game|movie|avg|plot|script|main/i.test(key);
+              }).slice(0, 80);
+              logLine('DISPLAY STATE ' + JSON.stringify({
+                count: displayTraceCount,
+                stageChildren: stage ? stage.numChildren : null,
+                canvas: canvasInfo,
+                nodeCount: nodes.length,
+                largeNodes: largeNodes.slice(-25),
+                blackCandidates: blackCandidates.slice(-15),
+                tailNodes: nodes.slice(-35),
+                globalKeys: globalKeys
+              }));
+            } catch (displayError) {
+              logLine('DISPLAY STATE ERROR ' + (displayError && (displayError.stack || displayError.message) || displayError));
+            }
+            if (displayTraceCount >= 20) clearInterval(displayTraceTimer);
+          };
+          var displayTraceTimer = setInterval(collectDisplayState, 3000);
+          setTimeout(collectDisplayState, 2500);
+          logLine('display trace enabled');
+        }
         logLine('runtime globals Main=' + typeof Main + ' Laya=' + typeof Laya + ' GloableData=' + typeof GloableData);
         var runtimePollCount = 0;
         var runtimePoll = setInterval(function () {
@@ -1039,16 +1167,38 @@
           var hasGameMain = !!window.gameMain;
           var gameInfo = window.GloableData && GloableData.getInstance ? GloableData.getInstance().gameInfo : null;
           var summarizeChild = function (child, index, depth) {
+            var textureUrl = '';
+            try {
+              if (child && child.texture && child.texture.url) textureUrl = child.texture.url;
+              else if (child && child.skin) textureUrl = child.skin;
+              else if (child && child._skin) textureUrl = child._skin;
+              else if (child && child.graphics && child.graphics._one && child.graphics._one.texture && child.graphics._one.texture.url) textureUrl = child.graphics._one.texture.url;
+            } catch (textureSummaryError) {}
+            var graphicsInfo = null;
+            try {
+              if (child && child.graphics) {
+                graphicsInfo = {
+                  one: !!child.graphics._one,
+                  cmdCount: child.graphics.cmds && child.graphics.cmds.length || 0,
+                  fillColor: child.graphics._one && (child.graphics._one.fillColor || child.graphics._one.color) || ''
+                };
+              }
+            } catch (graphicsSummaryError) {}
             var summary = {
               index: index,
               type: child && child.constructor ? child.constructor.name : typeof child,
               name: child && child.name,
+              text: child && (child.text || child.label) || '',
               visible: child && child.visible,
               alpha: child && child.alpha,
               x: child && child.x,
               y: child && child.y,
               width: child && child.width,
               height: child && child.height,
+              zOrder: child && child.zOrder,
+              mouseEnabled: child && child.mouseEnabled,
+              textureUrl: textureUrl,
+              graphicsInfo: graphicsInfo,
               numChildren: child && typeof child.numChildren === 'number' ? child.numChildren : null
             };
             if (child && child.graphics && child.graphics._one) summary.graphicsOne = true;
@@ -1064,11 +1214,11 @@
           var childSummary = [];
           if (window.Laya && Laya.stage) {
             for (var childIndex = 0; childIndex < Laya.stage.numChildren; childIndex++) {
-              childSummary.push(summarizeChild(Laya.stage.getChildAt(childIndex), childIndex, 2));
+              childSummary.push(summarizeChild(Laya.stage.getChildAt(childIndex), childIndex, hasQueryFlag('traceDisplay') ? 5 : 2));
             }
           }
           logLine('RUNTIME STATE ' + runtimePollCount + ': gameMain=' + hasGameMain + ' stageChildren=' + stageChildren + ' timerScale=' + layaTimerScale + ' gameInfo=' + JSON.stringify(gameInfo) + ' children=' + JSON.stringify(childSummary));
-          if (runtimePollCount >= 5) clearInterval(runtimePoll);
+          if (runtimePollCount >= (hasQueryFlag('traceDisplay') ? 20 : 5)) clearInterval(runtimePoll);
         }, 2000);
       }
       window.gameMain = new Main();
