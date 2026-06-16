@@ -1829,15 +1829,24 @@
             try {
               var gd = window.GloableData && GloableData.getInstance ? GloableData.getInstance() : null;
               var ui = window.UIManager && UIManager.getInstance ? UIManager.getInstance() : null;
-              var line = gd && gd.currentLine || null;
+              var safeRead = function (object, key) {
+                try {
+                  return object && object[key];
+                } catch (readError) {
+                  return null;
+                }
+              };
+              var line = safeRead(gd, 'currentLine') || null;
+              var iMain = safeRead(gd, 'iMain') || null;
+              var backgroundLayer = safeRead(ui, 'backgroundLayer') || null;
               if (line) {
                 ['runEvent', 'makeEvent', 'eventFinish', 'jumpStory', 'jumpStoryCallBack', 'pause', 'resume'].forEach(function (methodName) {
                   wrapStoryMethod(line, methodName, 'currentLine');
                 });
               }
-              if (gd && gd.iMain) {
+              if (iMain) {
                 ['runEvent', 'makeEvent', 'eventFinish', 'jumpStory', 'jumpStoryCallBack', 'pause', 'resume'].forEach(function (methodName) {
-                  wrapStoryMethod(gd.iMain, methodName, 'iMain');
+                  wrapStoryMethod(iMain, methodName, 'iMain');
                 });
               }
               maybeAutoCreateCharacterConfirm(line);
@@ -1849,17 +1858,17 @@
               maybeStubCode214Name(line);
               var code214State = hasQueryFlag('traceCode214') ? summarizeCode214State(line) : null;
               if (code214State) logLine('CODE214 STATE ' + JSON.stringify(code214State));
-              if (ui && ui.backgroundLayer) {
+              if (backgroundLayer) {
                 ['addImage', 'hideImage', 'moveImage', 'rotationImage', 'addActImage', 'addOAF2ActImage', 'sortImage'].forEach(function (methodName) {
-                  wrapLayerMethod(ui.backgroundLayer, methodName);
+                  wrapLayerMethod(backgroundLayer, methodName);
                 });
               }
               logLine('STORY STATE ' + JSON.stringify({
                 count: storyTraceCount,
                 line: summarizeLineForTrace(line, 2),
-                iMainSameAsLine: !!(gd && gd.iMain && gd.iMain === line),
+                iMainSameAsLine: !!(iMain && iMain === line),
                 code214: code214State,
-                backgroundLayer: summarizeBackgroundLayer(ui && ui.backgroundLayer),
+                backgroundLayer: summarizeBackgroundLayer(backgroundLayer),
                 stageTop: summarizeStageTop()
               }));
             } catch (storyStateError) {
