@@ -636,7 +636,7 @@
           try {
             if (!event || event.Code !== 204 || !line || line.storyId !== 1 || line.pos !== 7) return;
             var oldArgv = Array.prototype.slice.call(event.Argv || []);
-            event.Argv = ['40,470,388,', '41,605,388,', '44,740,388,', '15,555,100,', '34,655,100,', '160,755,100,'];
+            event.Argv = ['40,470,388,', '41,605,388,', '34,740,388,', '44,555,100,', '15,655,100,', '160,755,100,'];
             logLine('PATCH FIRST SCENE LOBBY BUTTONS ' + label + ' ' + JSON.stringify({ oldArgv: oldArgv, newArgv: event.Argv }));
           } catch (patchLobbyEventError) {
             logLine('PATCH FIRST SCENE LOBBY BUTTONS EVENT ERROR ' + (patchLobbyEventError && (patchLobbyEventError.stack || patchLobbyEventError.message) || patchLobbyEventError));
@@ -1605,7 +1605,7 @@
                 return oldArgv[index] === value;
               });
               if (!matchesCurrent) return;
-              event.Argv = ['40,470,388,', '41,605,388,', '44,740,388,', '15,555,100,', '34,655,100,', '160,755,100,'];
+              event.Argv = ['40,470,388,', '41,605,388,', '34,740,388,', '44,555,100,', '15,655,100,', '160,755,100,'];
               window.__runnerFirstSceneLobbyButtonsPatched = true;
               logLine('PATCH FIRST SCENE LOBBY BUTTONS ' + JSON.stringify({ oldArgv: oldArgv, newArgv: event.Argv }));
             } catch (patchLobbyError) {
@@ -1620,7 +1620,7 @@
               var event = line.story && line.story.events && line.story.events[line.pos] || null;
               if (!event || event.Code !== 204) return;
               var oldArgv = Array.prototype.slice.call(event.Argv || []);
-              event.Argv = ['40,470,388,', '41,605,388,', '44,740,388,', '15,555,100,', '34,655,100,', '160,755,100,'];
+              event.Argv = ['40,470,388,', '41,605,388,', '34,740,388,', '44,555,100,', '15,655,100,', '160,755,100,'];
               if (line.currentEvent === event || !line.currentEvent || line.currentEvent.Code === 204) line.currentEvent = event;
               window.__runnerFirstSceneLobbyButtonsPatched = true;
               logLine('PATCH FIRST SCENE LOBBY BUTTONS FORCE ' + JSON.stringify({ oldArgv: oldArgv, newArgv: event.Argv }));
