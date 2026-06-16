@@ -1583,7 +1583,19 @@
             if (!hasQueryFlag('autoNameChoice') || window.__runnerAutoNameChoiceDone) return;
             try {
               var event = line && (line.currentEvent || (line.story && line.story.events && line.story.events[line.pos])) || null;
-              if (!event || event.Code !== 204 || line.pos !== 231 || !line.currentShowEvent || !line.currentShowEvent.finish) return;
+              if (!event || event.Code !== 204 || line.pos !== 231) return;
+              if (!window.__runnerAutoNameChoiceReadyLogged) {
+                window.__runnerAutoNameChoiceReadyLogged = true;
+                logLine('AUTO NAME CHOICE READYCHECK ' + JSON.stringify({
+                  hasShowEvent: !!line.currentShowEvent,
+                  showEventType: line.currentShowEvent && line.currentShowEvent.constructor && line.currentShowEvent.constructor.name || '',
+                  hasFinish: !!(line.currentShowEvent && line.currentShowEvent.finish),
+                  buttonsLength: line.currentShowEvent && line.currentShowEvent.buttons && line.currentShowEvent.buttons.length || 0,
+                  currentLinks: line.currentLinks || [],
+                  argv: Array.prototype.slice.call(event.Argv || [])
+                }));
+              }
+              if (!line.currentShowEvent || !line.currentShowEvent.finish) return;
               var params = new URLSearchParams(window.location.search);
               var choiceIndex = parseInt(params.get('autoNameChoiceIndex') || '1', 10);
               if (!isFinite(choiceIndex)) choiceIndex = 1;
@@ -1859,22 +1871,22 @@
             var summary = {
               index: index,
               type: child && child.constructor ? child.constructor.name : typeof child,
-              name: child && child.name,
-              text: child && (child.text || child.label) || '',
-              visible: child && child.visible,
-              alpha: child && child.alpha,
-              x: child && child.x,
-              y: child && child.y,
-              width: child && child.width,
-              height: child && child.height,
-              zOrder: child && child.zOrder,
-              mouseEnabled: child && child.mouseEnabled,
-              textureUrl: textureUrl,
+              name: child && child.name === undefined ? '' : String(child && child.name || '').slice(0, 80),
+              text: String(child && (child.text || child.label) || '').slice(0, 120),
+              visible: !!(child && child.visible),
+              alpha: Number(child && child.alpha === undefined ? 1 : child && child.alpha),
+              x: Number(child && child.x || 0),
+              y: Number(child && child.y || 0),
+              width: Number(child && child.width || 0),
+              height: Number(child && child.height || 0),
+              zOrder: Number(child && child.zOrder || 0),
+              mouseEnabled: !!(child && child.mouseEnabled),
+              textureUrl: String(textureUrl || '').slice(0, 160),
               graphicsInfo: graphicsInfo,
               numChildren: child && typeof child.numChildren === 'number' ? child.numChildren : null
             };
             if (child && child.graphics && child.graphics._one) summary.graphicsOne = true;
-            if (child && child.texture) summary.textureUrl = child.texture.url;
+            if (child && child.texture && child.texture.url) summary.textureUrl = String(child.texture.url || '').slice(0, 160);
             if (child && depth > 0 && typeof child.numChildren === 'number') {
               summary.children = [];
               for (var nestedIndex = 0; nestedIndex < Math.min(child.numChildren, 5); nestedIndex++) {
