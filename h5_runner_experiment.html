@@ -1628,6 +1628,49 @@
               logLine('PATCH FIRST SCENE LOBBY BUTTONS FORCE ERROR ' + (patchLobbyNowError && (patchLobbyNowError.stack || patchLobbyNowError.message) || patchLobbyNowError));
             }
           };
+          var maybeAutoFirstSceneChoice = function (line) {
+            try {
+              var params = new URLSearchParams(window.location.search);
+              var autoFirstSceneChoiceValue = params.get('autoFirstSceneChoice');
+              if (autoFirstSceneChoiceValue === null || window.__runnerAutoFirstSceneChoiceDone) return;
+              if (!line || line.storyId !== 1 || line.pos !== 7) return;
+              if (!window.__runnerAutoFirstSceneChoiceReadyLogged) {
+                window.__runnerAutoFirstSceneChoiceReadyLogged = true;
+                logLine('AUTO FIRST SCENE READYCHECK ' + JSON.stringify({
+                  autoFirstSceneChoiceValue: autoFirstSceneChoiceValue,
+                  hasShowEvent: !!line.currentShowEvent,
+                  showEventType: line.currentShowEvent && line.currentShowEvent.constructor && line.currentShowEvent.constructor.name || '',
+                  hasFinish: !!(line.currentShowEvent && line.currentShowEvent.finish),
+                  buttonsLength: line.currentShowEvent && line.currentShowEvent.buttons && line.currentShowEvent.buttons.length || 0,
+                  pos: line.pos
+                }));
+              }
+              if (!line.currentShowEvent || !line.currentShowEvent.finish) return;
+              var event = line.story && line.story.events && line.story.events[line.pos] || null;
+              if (!event || event.Code !== 204) return;
+              var choiceIndex = parseInt(autoFirstSceneChoiceValue, 10);
+              if (!isFinite(choiceIndex) || choiceIndex < 0) return;
+              var button = line.currentShowEvent.buttons && line.currentShowEvent.buttons[choiceIndex];
+              var systemButton = button && GloableData.getInstance().gameMainData.System.Buttons[button.index];
+              var branch = line.indentStack && line.indentStack[line.indentStack.length - 1];
+              window.__runnerAutoFirstSceneChoiceDone = true;
+              logLine('AUTO FIRST SCENE CHOICE ' + JSON.stringify({
+                choiceIndex: choiceIndex,
+                buttonIndex: button && button.index,
+                buttonName: systemButton && systemButton.name || '',
+                image1: systemButton && systemButton.image1 && systemButton.image1.name || '',
+                image2: systemButton && systemButton.image2 && systemButton.image2.name || '',
+                currentLinks: line.currentLinks || [],
+                branchJumpList: branch && branch.jumList || branch && branch.jumpList || [],
+                branchFinishIndex: branch && branch.finishIndex,
+                endJump: line.currentShowEvent.endJump,
+                linePos: line.pos
+              }));
+              line.currentShowEvent.finish(choiceIndex);
+            } catch (autoFirstSceneChoiceError) {
+              logLine('AUTO FIRST SCENE CHOICE ERROR ' + (autoFirstSceneChoiceError && (autoFirstSceneChoiceError.stack || autoFirstSceneChoiceError.message) || autoFirstSceneChoiceError));
+            }
+          };
           var maybeStubCode214Name = function (line) {
             if (!hasQueryFlag('stubCode214Name') || window.__runnerCode214NameStubbed) return;
             try {
@@ -1697,7 +1740,12 @@
                 }
               }
               if (methodName === 'makeEvent' || methodName === 'runEvent') patchFirstSceneLobbyButtonsNow(this);
-              return originalMethod.apply(this, arguments);
+              var methodResult = originalMethod.apply(this, arguments);
+              if (methodName === 'makeEvent' || methodName === 'runEvent') {
+                patchFirstSceneLobbyButtonsNow(this);
+                maybeAutoFirstSceneChoice(this);
+              }
+              return methodResult;
             };
             object[methodName].__runnerStoryWrapped = true;
           };
@@ -1739,6 +1787,7 @@
               maybeAutoNameChoice(line);
               patchFirstSceneLobbyButtonsNow(line);
               maybePatchFirstSceneLobbyButtons(line);
+              maybeAutoFirstSceneChoice(line);
               maybeStubCode214Name(line);
               var code214State = hasQueryFlag('traceCode214') ? summarizeCode214State(line) : null;
               if (code214State) logLine('CODE214 STATE ' + JSON.stringify(code214State));
