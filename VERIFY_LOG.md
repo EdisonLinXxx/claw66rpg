@@ -1205,3 +1205,49 @@ Important trace caveat:
 - The next step should keep using/expanding `RUNTIME STATE` unless the `traceDisplay` branch activation issue is resolved.
 
 Current technical conclusion: the black screen is now more likely a runtime display/state problem than a static asset miss. The stage is alive and the game main object exists, but the visible full-screen display stack does not expose an active texture in the current runtime summary, while other full-screen candidate content groups are hidden. The next validation should identify which story/display manager owns `stage.0.0`, `stage.0.2`, and `stage.0.3`, then trace the command that hides content or fails to assign the next background/half-body texture.
+
+## Round 35: Story-State And Background-Layer Trace
+
+- Added optional `traceStoryState=1`.
+- The trace records:
+  - `GloableData.getInstance().currentLine` story id, story name, `pos`, pause/end flags, current event code, and event arguments
+  - `UIManager` owner fields for top display nodes
+  - `UIManager.backgroundLayer` image list, ids, urls, alpha/visible state, and stage paths
+  - wrapped story methods such as `runEvent`, `makeEvent`, `eventFinish`, `jumpStory`, `pause`, and `resume`
+  - wrapped background-layer methods such as `addImage`, `hideImage`, `moveImage`, `addOAF2ActImage`, and `sortImage`
+
+Smoke validation:
+
+| Check | Result |
+| --- | --- |
+| `traceStoryState=1` boot smoke | passed |
+| `stage.0.0` owner | `UIManager.backgroundLayer` |
+| `stage.0.2` owner | `UIManager.textLifeLineLayer` |
+| `stage.0.3` owner | `UIManager.textChoiceLayer` |
+| standalone `DISPLAY STATE` | now emitted in this cache-busted run |
+
+Main-story validation path:
+
+1. reload with `clearStorage=1`, `traceStoryState=1`, `traceDisplay=1`, `traceUiState=1`, and `stubPropShop=1`
+2. click title center
+3. choose first branch target `stage.0.3.0.0`
+4. continue through the create-character scene
+5. choose the second character-confirm target
+6. continue until the next hard stop
+
+Observed progression:
+
+| Story state | Result |
+| --- | --- |
+| first branch | `storyId=1`, `pos=7`, `Code=204`, six branch links |
+| create-character selection | `storyId=1`, `pos=47`, `Code=204`, two branch links |
+| character image cycling | top target changes `graphics/half/创建人物/1.jpg` to `graphics/half/创建人物/2.jpg` |
+| character confirm | second target advances past the selection scene |
+| later stop | `storyId=1`, `pos=237`, `Code=214`, `isPause=true` |
+| visible state at later stop | normal image scene, not black |
+| current background assets | `graphics/background/传送门.jpg`, `graphics/half/创建人物/取名1.jpg`, and related create-character layers |
+| direct keyboard name attempt | `A` + Enter did not advance the story |
+| new real `/shareres/<md5>` 404 | none observed in browser resource/error logs |
+| `Script error. @ :0:0` | none observed |
+
+Current technical conclusion: the previous top-level stage ownership question is resolved. The sampled first-branch main-story path does not reproduce the black screen; it reaches a new deterministic local-play blocker at story event `Code=214`, with the main line paused while a naming/advanced-input event is waiting for UI input. This is now the more immediate local-play blocker for this branch: implement or stub the `Code=214` input flow with a deterministic local default, then continue long-run story probing from `pos=237`.

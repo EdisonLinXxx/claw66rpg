@@ -1158,6 +1158,225 @@
           setTimeout(collectDisplayState, 2500);
           logLine('display trace enabled');
         }
+        if (hasQueryFlag('traceStoryState') && !window.__runnerStoryStateTraceStarted) {
+          window.__runnerStoryStateTraceStarted = true;
+          logLine('story state trace enabled');
+          var storyTraceCount = 0;
+          var shortStoryString = function (value, maxLength) {
+            if (value === null || value === undefined) return '';
+            return String(value).slice(0, maxLength || 120);
+          };
+          var summarizeEventForTrace = function (event) {
+            if (!event) return null;
+            return {
+              code: event.Code,
+              argv: Array.prototype.slice.call(event.Argv || []).map(function (item) {
+                return shortStoryString(item, 160);
+              }).slice(0, 20),
+              indent: event.Indent,
+              links: event.links && event.links.length || 0
+            };
+          };
+          var summarizeLineForTrace = function (line, depth) {
+            if (!line) return null;
+            var story = line.story || null;
+            var currentEvent = line.currentEvent || (story && story.events && story.events[line.pos]) || null;
+            var showEvent = line.currentShowEvent || null;
+            return {
+              storyId: line.storyId,
+              storyName: shortStoryString(line.storyName, 80),
+              pos: line.pos,
+              storyLength: story && story.events && story.events.length || null,
+              isPause: line.isPause,
+              isEnd: line.isEnd,
+              eventRunFinish: line.eventRunFinish,
+              runNumber: line.runNumber,
+              currentEvent: summarizeEventForTrace(currentEvent),
+              showEventType: showEvent && showEvent.constructor && showEvent.constructor.name || typeof showEvent,
+              showEventCode: showEvent && showEvent.code,
+              subStory: depth > 0 ? summarizeLineForTrace(line.subStory, depth - 1) : !!line.subStory
+            };
+          };
+          var getChildPath = function (root, target, rootPath, maxDepth) {
+            var found = '';
+            var visit = function (node, path, depth) {
+              if (!node || found || depth > maxDepth) return;
+              if (node === target) {
+                found = path;
+                return;
+              }
+              if (node.numChildren && typeof node.getChildAt === 'function') {
+                for (var childIndex = 0; childIndex < node.numChildren; childIndex++) {
+                  visit(node.getChildAt(childIndex), path + '.' + childIndex, depth + 1);
+                }
+              }
+            };
+            visit(root, rootPath, 0);
+            return found;
+          };
+          var findUiOwnerFields = function (target) {
+            var matches = [];
+            try {
+              var ui = window.UIManager && UIManager.getInstance ? UIManager.getInstance() : null;
+              if (!ui || !target) return matches;
+              Object.keys(ui).forEach(function (key) {
+                var value = ui[key];
+                if (value === target) {
+                  matches.push('UIManager.' + key);
+                  return;
+                }
+                if (value && typeof value === 'object') {
+                  try {
+                    Object.keys(value).slice(0, 80).forEach(function (childKey) {
+                      if (value[childKey] === target) matches.push('UIManager.' + key + '.' + childKey);
+                    });
+                  } catch (nestedOwnerError) {}
+                }
+              });
+            } catch (ownerError) {}
+            return matches.slice(0, 10);
+          };
+          var summarizeBackgroundLayer = function (layer) {
+            if (!layer) return null;
+            var images = [];
+            try {
+              var values = layer.imageList && layer.imageList.values ? layer.imageList.values() : [];
+              for (var imageIndex = 0; imageIndex < Math.min(values.length, 30); imageIndex++) {
+                var image = values[imageIndex];
+                images.push({
+                  cls: image && image.constructor && image.constructor.name || typeof image,
+                  id: image && (image.id !== undefined ? image.id : image.bgId),
+                  url: shortStoryString(image && (image.url || image.path || image.oaf2Path || image.source), 140),
+                  visible: image && image.visible,
+                  alpha: image && image.alpha,
+                  x: image && image.x,
+                  y: image && image.y,
+                  width: image && image.width,
+                  height: image && image.height,
+                  path: getChildPath(window.Laya && Laya.stage, image, 'stage', 6)
+                });
+              }
+            } catch (imageListError) {
+              images.push({ error: String(imageListError && (imageListError.message || imageListError)) });
+            }
+            return {
+              visible: layer.visible,
+              alpha: layer.alpha,
+              children: layer.numChildren,
+              path: getChildPath(window.Laya && Laya.stage, layer, 'stage', 5),
+              owners: findUiOwnerFields(layer),
+              images: images
+            };
+          };
+          var summarizeStageTop = function () {
+            var stageItems = [];
+            try {
+              var stage = window.Laya && Laya.stage;
+              if (!stage || !stage.numChildren) return stageItems;
+              for (var stageIndex = 0; stageIndex < stage.numChildren; stageIndex++) {
+                var child = stage.getChildAt(stageIndex);
+                var item = {
+                  path: 'stage.' + stageIndex,
+                  cls: child && child.constructor && child.constructor.name || typeof child,
+                  name: child && child.name || '',
+                  visible: child && child.visible,
+                  alpha: child && child.alpha,
+                  width: child && child.width,
+                  height: child && child.height,
+                  children: child && child.numChildren,
+                  owners: findUiOwnerFields(child)
+                };
+                if (child && child.numChildren && typeof child.getChildAt === 'function') {
+                  item.childrenTop = [];
+                  for (var nestedIndex = 0; nestedIndex < Math.min(child.numChildren, 14); nestedIndex++) {
+                    var nested = child.getChildAt(nestedIndex);
+                    item.childrenTop.push({
+                      path: 'stage.' + stageIndex + '.' + nestedIndex,
+                      cls: nested && nested.constructor && nested.constructor.name || typeof nested,
+                      name: nested && nested.name || '',
+                      visible: nested && nested.visible,
+                      alpha: nested && nested.alpha,
+                      width: nested && nested.width,
+                      height: nested && nested.height,
+                      children: nested && nested.numChildren,
+                      owners: findUiOwnerFields(nested)
+                    });
+                  }
+                }
+                stageItems.push(item);
+              }
+            } catch (stageTopError) {
+              stageItems.push({ error: String(stageTopError && (stageTopError.message || stageTopError)) });
+            }
+            return stageItems;
+          };
+          var wrapStoryMethod = function (object, methodName, label) {
+            if (!object || !object[methodName] || object[methodName].__runnerStoryWrapped) return;
+            var originalMethod = object[methodName];
+            object[methodName] = function () {
+              try {
+                logLine('STORY METHOD ' + label + '.' + methodName + ' args=' + JSON.stringify(Array.prototype.slice.call(arguments).map(function (item) {
+                  return shortStoryString(item, 120);
+                })) + ' line=' + JSON.stringify(summarizeLineForTrace(this, 1)));
+              } catch (methodTraceError) {}
+              return originalMethod.apply(this, arguments);
+            };
+            object[methodName].__runnerStoryWrapped = true;
+          };
+          var wrapLayerMethod = function (layer, methodName) {
+            if (!layer || !layer[methodName] || layer[methodName].__runnerStoryWrapped) return;
+            var originalLayerMethod = layer[methodName];
+            layer[methodName] = function () {
+              try {
+                var eventArg = arguments[0];
+                logLine('BG LAYER METHOD ' + methodName + ' event=' + JSON.stringify({
+                  eventType: eventArg && eventArg.constructor && eventArg.constructor.name || typeof eventArg,
+                  id: eventArg && (eventArg.id !== undefined ? eventArg.id : eventArg.bgId),
+                  code: eventArg && eventArg.code,
+                  data: eventArg && eventArg.data ? summarizeEventForTrace(eventArg.data) : null,
+                  path: eventArg && shortStoryString(eventArg.path || eventArg.url || eventArg.fileName, 140)
+                }) + ' layer=' + JSON.stringify(summarizeBackgroundLayer(this)));
+              } catch (layerTraceError) {}
+              return originalLayerMethod.apply(this, arguments);
+            };
+            layer[methodName].__runnerStoryWrapped = true;
+          };
+          var collectStoryState = function () {
+            storyTraceCount += 1;
+            try {
+              var gd = window.GloableData && GloableData.getInstance ? GloableData.getInstance() : null;
+              var ui = window.UIManager && UIManager.getInstance ? UIManager.getInstance() : null;
+              var line = gd && gd.currentLine || null;
+              if (line) {
+                ['runEvent', 'makeEvent', 'eventFinish', 'jumpStory', 'jumpStoryCallBack', 'pause', 'resume'].forEach(function (methodName) {
+                  wrapStoryMethod(line, methodName, 'currentLine');
+                });
+              }
+              if (gd && gd.iMain) {
+                ['runEvent', 'makeEvent', 'eventFinish', 'jumpStory', 'jumpStoryCallBack', 'pause', 'resume'].forEach(function (methodName) {
+                  wrapStoryMethod(gd.iMain, methodName, 'iMain');
+                });
+              }
+              if (ui && ui.backgroundLayer) {
+                ['addImage', 'hideImage', 'moveImage', 'rotationImage', 'addActImage', 'addOAF2ActImage', 'sortImage'].forEach(function (methodName) {
+                  wrapLayerMethod(ui.backgroundLayer, methodName);
+                });
+              }
+              logLine('STORY STATE ' + JSON.stringify({
+                count: storyTraceCount,
+                line: summarizeLineForTrace(line, 2),
+                iMainSameAsLine: !!(gd && gd.iMain && gd.iMain === line),
+                backgroundLayer: summarizeBackgroundLayer(ui && ui.backgroundLayer),
+                stageTop: summarizeStageTop()
+              }));
+            } catch (storyStateError) {
+              logLine('STORY STATE ERROR ' + (storyStateError && (storyStateError.stack || storyStateError.message) || storyStateError));
+            }
+            if (storyTraceCount >= 120) clearInterval(storyTraceTimer);
+          };
+          var storyTraceTimer = setInterval(collectStoryState, 2000);
+          setTimeout(collectStoryState, 1200);
+        }
         logLine('runtime globals Main=' + typeof Main + ' Laya=' + typeof Laya + ' GloableData=' + typeof GloableData);
         var runtimePollCount = 0;
         var runtimePoll = setInterval(function () {

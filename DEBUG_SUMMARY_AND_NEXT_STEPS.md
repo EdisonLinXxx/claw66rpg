@@ -282,6 +282,14 @@ Latest verified behavior:
   - visible full-screen layer exists but no active texture is reported by the reliable runtime summary
   - several full-screen candidate content groups under `stage.0.2` are `visible:false`
   - `d66...` now returns `304`/cache success, so the current black screen is not a new mapped asset miss
+- story-state/background-layer trace found:
+  - `stage.0.0` is `UIManager.backgroundLayer`
+  - `stage.0.2` is `UIManager.textLifeLineLayer`
+  - `stage.0.3` is `UIManager.textChoiceLayer`
+  - the first-branch main-story path does not reproduce the black screen in the latest run
+  - that path reaches `storyId=1`, `pos=237`, `Code=214`, `isPause=true`
+  - visible scene remains normal at that stop; no new real `/shareres/<md5>` 404 and no `Script error. @ :0:0`
+  - `Code=214` appears to be a naming/advanced-input event with args including `姓`, `名`, `昵称`, `国家`, and a direct keyboard attempt (`A` + Enter) did not advance it
 
 ## How To Reproduce The Current Validation
 
@@ -387,14 +395,15 @@ This is still useful for platform feature coverage, but it is no longer the clos
 
 ### Priority 1A: Main Story Longer Run
 
-The latest long-run probe fixed the next mapped missing asset, but the sampled path now stalls on a black screen without a script error or a new real `shareres` miss. The next local-play validation should inspect runtime scene/display state at that black screen:
+The latest story-state probe resolved the top display-layer ownership question and found a new deterministic first-branch blocker before the black-screen path: the story pauses at `storyId=1`, `pos=237`, `Code=214`, apparently waiting for a naming/advanced-input event. The next local-play validation should handle this input event first:
 
-1. keep `traceUiState=1`, `traceStorage=1`, and `traceFullTargets=1` available
-2. keep expanding the reliable `RUNTIME STATE` path; the standalone `DISPLAY STATE` branch did not emit in the browser trace
-3. identify which manager/controller owns `stage.0.0`, `stage.0.2`, and `stage.0.3`
-4. capture current story index/command if the active story controller object is discoverable
-5. determine why visible full-screen layers have no active texture and why candidate content groups under `stage.0.2` are hidden
-6. after fixing the black-screen cause, resume 10-20 transition long-run probing and mirror any new real `/shareres/<md5>` 404
+1. keep `traceStoryState=1`, `traceDisplay=1`, `traceUiState=1`, `traceStorage=1`, and `traceFullTargets=1` available
+2. inspect the runtime class/event implementation for `Code=214`
+3. identify whether the event expects `gameAdvanceUILayer`, `GameAdvanceUILayer`, a Canvas input bridge, or a custom UI callback
+4. add a narrow local-only default input/stub for the required name fields if no visible input can be driven
+5. verify that `currentLine.isPause` clears and `pos` advances beyond `237`
+6. then resume 10-20 transition long-run probing and mirror any new real `/shareres/<md5>` 404
+7. keep the earlier black-screen path tracked separately; if it reappears, use the confirmed owner map: `stage.0.0=backgroundLayer`, `stage.0.2=textLifeLineLayer`, `stage.0.3=textChoiceLayer`
 
 ### Priority 1B: Local Auto-Save And Archive State Trace
 
