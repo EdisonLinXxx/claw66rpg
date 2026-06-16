@@ -1126,3 +1126,44 @@ HTTP log after the baseline showed:
 - only the known `/null%20path` 404 pair appeared
 
 Current technical conclusion: local auto-save now has a proven persistence loop. The runtime writes the auto-save to `localStorage`, the value survives a reload, and the runtime reads the same non-empty save key on initialization. This is enough to treat browser-local auto-save recovery as working for the local-play MVP. Manual archive slot write/load is still a separate UI path and remains unproven.
+
+## Round 33: Main Story Longer-Run Probe
+
+- Local HTTP log baseline: line `5488`.
+- Goal: extend the main-story validation beyond the previous two transitions.
+- Added optional `traceFullTargets=1` to allow `UI TARGETS` to include large/full-screen clickable surfaces when needed.
+
+Long-run observations:
+
+1. Reloaded with `clearStorage=1`, `traceUiState=1`, `traceStorage=1`, and `stubPropShop=1`.
+2. The runner auto-save path still wrote the local auto-save key:
+   - `save0a235c54f16c431ab5736c92997edb47undefined-100`
+   - observed length: `3341`
+3. `UI TARGETS` only exposed the right-side system menu buttons in the sampled black-screen state.
+4. A clipped browser screenshot confirmed a full black viewport.
+5. Coordinate-driven continuation attempts did not increase the auto-save length or expose a new target set.
+
+New resource miss found:
+
+| MD5 | Mapped file | Result |
+| --- | --- | --- |
+| `d66f13cb49738edd14ba4f6aecf577cb` | `graphics/half/创建人物/3.jpg` | mirrored locally |
+
+Mirror command:
+
+```powershell
+python 66rpgProjectDropper\prepare_runner_mirror.py 1569947 --version 364 --root . --mirror-md5 d66f13cb49738edd14ba4f6aecf577cb
+```
+
+Retest after mirroring:
+
+| Check | Result |
+| --- | --- |
+| direct local request for `d66...` | `200` |
+| retest request for `d66...` | `200` |
+| new real `/shareres/<md5>` 404 after retest | none |
+| `Script error. @ :0:0` | none |
+| viewport after continuation attempts | black |
+| auto-save length after continuation attempts | unchanged at `3341` |
+
+Current technical conclusion: the next main-story blocker is no longer a missing mapped asset in this sampled path. The newly discovered `graphics/half/创建人物/3.jpg` miss is fixed, but the long-run path still reaches a black-screen/stalled story state with no script error and no new real `/shareres/<md5>` 404. The next validation should inspect runtime scene/display state during the black screen: visible Laya nodes, active story index/command, current background/half-body resource ids, and whether an overlay or alpha state is hiding the rendered scene.

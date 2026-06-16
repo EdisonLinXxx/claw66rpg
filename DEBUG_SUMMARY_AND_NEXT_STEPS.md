@@ -268,6 +268,14 @@ Latest verified behavior:
   - a reload without `clearStorage=1` reads the same key with length `3341`
   - the restored state exposes story-layer right-side menu targets rather than title-only UI
 - manual archive slot write/read behavior is still not proven in the empty-slot sample
+- main-story longer-run probing found and fixed one new mapped resource miss:
+  - `d66f13cb49738edd14ba4f6aecf577cb` -> `graphics/half/创建人物/3.jpg`
+  - retest returns `200`
+- after that mirror fix, the sampled long-run path still reaches a black-screen/stalled state:
+  - no new real `/shareres/<md5>` 404 after retest
+  - no `Script error. @ :0:0`
+  - auto-save length stays at `3341`
+  - coordinate continuation attempts do not expose a new story target set
 
 ## How To Reproduce The Current Validation
 
@@ -373,13 +381,13 @@ This is still useful for platform feature coverage, but it is no longer the clos
 
 ### Priority 1A: Main Story Longer Run
 
-The latest validation proves two story transitions beyond the first scene and repeated auto-save logs. The next local-play validation should lengthen this path:
+The latest long-run probe fixed the next mapped missing asset, but the sampled path now stalls on a black screen without a script error or a new real `shareres` miss. The next local-play validation should inspect runtime scene/display state at that black screen:
 
-1. use `screenX/screenY` from `UI TARGETS` for browser clicks
-2. continue story/branch targets for 10-20 transitions
-3. record each new background/CG/audio resource wave
-4. mirror any new real `/shareres/<md5>` 404
-5. stop at the first platform/API boundary or parser/runtime error
+1. keep `traceUiState=1`, `traceStorage=1`, and `traceFullTargets=1` available
+2. add a black-screen display trace for visible Laya nodes, alpha, z-order, and current resource URLs
+3. capture current story index/command if the active story controller object is discoverable
+4. identify whether the black screen is caused by hidden/transparent nodes, missing non-`shareres` content, or a story command waiting on state/input
+5. after fixing the black-screen cause, resume 10-20 transition long-run probing and mirror any new real `/shareres/<md5>` 404
 
 ### Priority 1B: Local Auto-Save And Archive State Trace
 

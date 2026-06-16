@@ -974,7 +974,15 @@
                   return /^(click|mousedown|mouseup|mouseover|mouseout|clickHandler)$/i.test(type);
                 });
                 var likelyInteractive = hasActionListener || (!!node.mouseEnabled && !!(text || textureUrl)) || /Button|Btn/i.test(className);
-                if (likelyInteractive && inStageBounds && targetWidth >= 30 && targetHeight >= 25 && targetWidth <= 260 && targetHeight <= 140) {
+                var compactTarget = targetWidth >= 30 && targetHeight >= 25 && targetWidth <= 260 && targetHeight <= 140;
+                var fullTarget = hasQueryFlag('traceFullTargets') &&
+                  hasActionListener &&
+                  path !== 'stage' &&
+                  targetWidth >= 30 &&
+                  targetHeight >= 25 &&
+                  targetWidth <= 980 &&
+                  targetHeight <= 560;
+                if (likelyInteractive && inStageBounds && (compactTarget || fullTarget)) {
                   targets.push({
                     path: path,
                     cls: className,
