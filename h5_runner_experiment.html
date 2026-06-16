@@ -1606,6 +1606,51 @@
               logLine('AUTO NAME CHOICE ERROR ' + (autoNameChoiceError && (autoNameChoiceError.stack || autoNameChoiceError.message) || autoNameChoiceError));
             }
           };
+          var probeAutoNameChoiceState = function (line) {
+            if (!hasQueryFlag('traceAutoNameChoice') || window.__runnerAutoNameChoiceProbeLogged) return;
+            try {
+              var event = line && (line.currentEvent || (line.story && line.story.events && line.story.events[line.pos])) || null;
+              if (!event || event.Code !== 204 || line.pos !== 231) return;
+              window.__runnerAutoNameChoiceProbeLogged = true;
+              var showEvent = line.currentShowEvent || null;
+              var proto = showEvent && Object.getPrototypeOf(showEvent);
+              logLine('AUTO NAME CHOICE PROBE ' + JSON.stringify({
+                storyId: line.storyId,
+                pos: line.pos,
+                isPause: line.isPause,
+                eventRunFinish: line.eventRunFinish,
+                currentLinks: line.currentLinks || [],
+                argv: Array.prototype.slice.call(event.Argv || []),
+                showEvent: showEvent && {
+                  cls: showEvent.constructor && showEvent.constructor.name || typeof showEvent,
+                  code: showEvent.code,
+                  index: showEvent.index,
+                  endJump: showEvent.endJump,
+                  hasFinish: !!showEvent.finish,
+                  keys: Object.keys(showEvent).slice(0, 80),
+                  protoKeys: proto ? Object.keys(proto).slice(0, 80) : []
+                },
+                buttons: showEvent && showEvent.buttons && Array.prototype.slice.call(showEvent.buttons, 0, 10).map(function (button, buttonIndex) {
+                  var systemButton = button && window.GloableData && GloableData.getInstance && GloableData.getInstance().gameMainData && GloableData.getInstance().gameMainData.System
+                    ? GloableData.getInstance().gameMainData.System.Buttons[button.index]
+                    : null;
+                  return {
+                    buttonIndex: buttonIndex,
+                    index: button && button.index,
+                    x: button && button.x,
+                    y: button && button.y,
+                    width: button && button.width,
+                    height: button && button.height,
+                    mouseEnabled: button && button.mouseEnabled,
+                    listeners: button && button._events ? Object.keys(button._events) : [],
+                    systemName: systemButton && systemButton.name || ''
+                  };
+                })
+              }));
+            } catch (probeError) {
+              logLine('AUTO NAME CHOICE PROBE ERROR ' + (probeError && (probeError.stack || probeError.message) || probeError));
+            }
+          };
           var maybePatchFirstSceneLobbyButtons = function (line) {
             if (!hasQueryFlag('patchFirstSceneLobbyButtons') || window.__runnerFirstSceneLobbyButtonsPatched) return;
             try {
@@ -1797,6 +1842,7 @@
               }
               maybeAutoCreateCharacterConfirm(line);
               maybeAutoNameChoice(line);
+              probeAutoNameChoiceState(line);
               patchFirstSceneLobbyButtonsNow(line);
               maybePatchFirstSceneLobbyButtons(line);
               maybeAutoFirstSceneChoice(line);
