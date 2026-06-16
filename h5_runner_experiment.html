@@ -703,6 +703,26 @@
             logLine('patchTitleClick native listeners installed');
           };
           EventCenter.dispatchEvent = function (event) {
+            var summarizeObjectFields = function (value, depth) {
+              if (value === null || value === undefined) return value;
+              if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') return value;
+              if (depth > 2) return value && value.constructor && value.constructor.name ? '[object ' + value.constructor.name + ']' : '[' + typeof value + ']';
+              if (Array.isArray(value)) return value.slice(0, 6).map(function (item) { return summarizeObjectFields(item, depth + 1); });
+              var summary = {};
+              var copied = 0;
+              for (var key in value) {
+                if (!Object.prototype.hasOwnProperty.call(value, key)) continue;
+                if (key.charAt(0) === '_') continue;
+                var field = value[key];
+                if (typeof field === 'function') continue;
+                summary[key] = summarizeObjectFields(field, depth + 1);
+                copied++;
+                if (copied >= 18) break;
+              }
+              if (!copied && value.constructor && value.constructor.name) return '[object ' + value.constructor.name + ']';
+              if (value.constructor && value.constructor.name) summary.__class = value.constructor.name;
+              return summary;
+            };
             var summarizeValue = function (value) {
               if (value === null || value === undefined) return value;
               if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') return value;
@@ -719,6 +739,13 @@
             }
             if (!isNoisyOafFrame) {
               logLine('EVENT dispatch ' + JSON.stringify(eventInfo));
+              if (eventInfo && eventInfo.type && String(eventInfo.type).indexOf('MALL') !== -1) {
+                try {
+                  logLine('MALL EVENT DETAIL ' + eventInfo.type + ' ' + JSON.stringify(summarizeObjectFields(event && event.parameter, 0)));
+                } catch (mallDetailError) {
+                  logLine('MALL EVENT DETAIL ERROR ' + (mallDetailError && (mallDetailError.stack || mallDetailError.message) || mallDetailError));
+                }
+              }
             }
             var dispatchResult = originalDispatchEvent.apply(this, arguments);
             if (event && event.type === GameEventConstant.LOAD_UI_RESOURCE_COMPLETE && event.parameter === UIResouecrLoad.TITLEUI_TYPE) {

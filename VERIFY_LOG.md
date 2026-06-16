@@ -980,3 +980,41 @@ Remaining noise:
 - known `/null%20path` requests still appear.
 
 Current technical conclusion: the new mall can now open and close locally with deterministic fake account state. The previous PropShop malformed URL failures are neutralized when `stubPropShop=1` is enabled. The next useful validation is to click mall item/buy/detail targets under this stub and identify any additional PropShop endpoints needed for purchase/status flows.
+
+## Round 30: Mall Item Target Trace
+
+- Local HTTP log baseline: line `4477`.
+- Added detail logging for mall-related `EventCenter.dispatchEvent` payloads:
+  - `MALL EVENT DETAIL <type> <parameter summary>`
+  - object summaries are depth-limited and skip private/function fields
+
+Validation URL kept `stubPropShop=1`.
+
+Path:
+
+1. reload runner
+2. click title cover `(480,270)`
+3. open main menu `(921,54)`
+4. open mall through `stage.0.6.0.2` `(168,112)`
+5. click mall non-close targets around `(536,413)`, `(632,417)`, and `(775,429)`
+
+Observed mall state:
+
+| Check | Result |
+| --- | --- |
+| mall opens under `stubPropShop=1` | yes |
+| mall target count | `6` |
+| PropShop stub errors | none |
+| real `/shareres/<md5>` 404 | none |
+| `Script error. @ :0:0` | none |
+| new purchase/status endpoint | none observed |
+
+Event findings:
+
+- One item-like click on `(536,413)` emitted `CLICK_NEW_MALL_ITEM_BG`.
+- That sample did not request `/getUserHavePropNum`, `/createBuyOrder`, or any new PropShop endpoint.
+- The target set dropped to `0` in that sample, suggesting the click may move the mall into a transient or visually changed state that the current `UI TARGETS` trace does not describe well.
+- A clean retest with detail logging captured mall refresh events such as `MALL EVENT DETAIL UPDATE_MALL_ITEM -2` and `MALL EVENT DETAIL UPDATE_MALL_ITEM -1`.
+- Repeated clicks on the emitted non-close coordinates did not reliably emit additional mall item/buy events in the current target trace.
+
+Current technical conclusion: the PropShop/opening boundary is stable. The next mall blocker is no longer a missing endpoint; it is insufficient state visibility for the mall item list and selected item. The next useful validation is a mall-specific object/state trace, for example selected item id, visible mall item records, and the mediator/view object handling `CLICK_NEW_MALL_ITEM_BG`.

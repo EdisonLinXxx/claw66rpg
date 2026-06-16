@@ -354,19 +354,23 @@ Validation after a cache-busted reload:
 
 ## Next Debug Direction
 
-### Priority 1: Mall Item/Buy Flow Under Stub
+### Priority 1: Mall Item State/Object Trace
 
 - static assets are now mirrored
 - `GetImageBase64` is now stubbed locally and no longer blocks the mall
 - PropShop owned-item and account-money JSONP calls are now stubbed behind `stubPropShop=1`
+- mall event detail logging is now available for `EventCenter.dispatchEvent`
 
-Treat mall item and buy/detail clicks as the next platform-service target:
+The mall opens reliably under `stubPropShop=1`, and one item-like click on `(536,413)` emitted `CLICK_NEW_MALL_ITEM_BG`. That click did not request `/getUserHavePropNum`, `/createBuyOrder`, or any new PropShop endpoint. Repeated clicks on the currently emitted non-close mall coordinates did not reliably produce additional buy/detail events.
+
+Treat mall item selection state as the next target before adding more endpoint stubs:
 
 1. open mall with `stubPropShop=1`
-2. read the 6-target mall UI
-3. click visible mall item/detail/buy targets if emitted by `UI TARGETS`
-4. classify whether `/getUserHavePropNum`, `/createBuyOrder`, or other endpoints are requested
-5. add only the minimal fake payloads needed to keep local validation deterministic
+2. identify the mall view/mediator object that handles `CLICK_NEW_MALL_ITEM_BG`
+3. capture visible mall item records and selected item id before/after item clicks
+4. map emitted `UI TARGETS` coordinates to actual mall display nodes
+5. then click the confirmed buy/detail control and classify whether `/getUserHavePropNum`, `/createBuyOrder`, or other endpoints are requested
+6. add only the minimal fake payloads needed to keep local validation deterministic
 
 ### Priority 2: Runtime State Trace For Silent Backpack Clicks
 
