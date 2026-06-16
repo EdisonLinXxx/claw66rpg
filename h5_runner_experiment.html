@@ -52,6 +52,41 @@
     function hasQueryFlag(name) {
       return new URLSearchParams(window.location.search).get(name) === '1';
     }
+    if (typeof window.GetImageBase64 !== 'function') {
+      window.GetImageBase64 = function (url, width, height, callback) {
+        var done = function (value) {
+          if (typeof callback === 'function') callback(value || '');
+        };
+        try {
+          var image = new Image();
+          image.crossOrigin = 'anonymous';
+          image.onload = function () {
+            try {
+              var canvas = document.createElement('canvas');
+              canvas.width = width || image.naturalWidth || image.width || 1;
+              canvas.height = height || image.naturalHeight || image.height || 1;
+              var ctx = canvas.getContext('2d');
+              ctx.drawImage(image, 0, 0, canvas.width, canvas.height);
+              var dataUrl = canvas.toDataURL('image/png');
+              logLine('GetImageBase64 OK ' + url + ' -> ' + canvas.width + 'x' + canvas.height);
+              done(dataUrl);
+            } catch (canvasError) {
+              logLine('GetImageBase64 CANVAS ERROR ' + url + ': ' + (canvasError && (canvasError.stack || canvasError.message) || canvasError));
+              done('');
+            }
+          };
+          image.onerror = function () {
+            logLine('GetImageBase64 IMAGE ERROR ' + url);
+            done('');
+          };
+          image.src = url;
+        } catch (error) {
+          logLine('GetImageBase64 ERROR ' + url + ': ' + (error && (error.stack || error.message) || error));
+          done('');
+        }
+      };
+      logLine('GetImageBase64 compatibility stub installed');
+    }
     function shouldTraceNullPath(value) {
       if (!hasQueryFlag('traceNullPath')) return false;
       if (value === null || value === undefined) return true;

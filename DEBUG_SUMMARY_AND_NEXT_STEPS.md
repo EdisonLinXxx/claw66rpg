@@ -248,6 +248,10 @@ Latest verified behavior:
 - enhanced backpack reprobe showed the previous approximate point `(672,193)` is not an emitted clickable target in `bp.6`
 - actual `bp.6` deeper/action targets include `(626,320)` and `(785,354)`; both emit `CLICK_SCUI_BUTTON` but keep the target set stable in the sample window
 - `bp.6` bottom slots `(210,476)`, `(331,476)`, `(451,476)`, `(570,476)`, `(690,476)`, and `(810,476)` are all valid clickable targets; each emits `CLICK_SCUI_BUTTON`, keeps target count stable at 25, and exposes no new real `/shareres/<md5>` 404
+- exact mall target `stage.0.6.0.2` `(168,112)` was revalidated; the old `Script error. @ :0:0` was caused by missing host bridge function `window.GetImageBase64`
+- `h5_runner_experiment.html` now installs a local `GetImageBase64` compatibility stub; after retest, `NEW_MALLUI_TYPE` completes, six item thumbnails are converted to `72x72` data URLs, and the mall opens without script error
+- mall inner target `stage.0.7.2.12` `(921,455)` closes/returns from the mall target set back to the main menu target set
+- remaining mall noise is malformed PropShop JSONP URLs for account money/owned item counts, not a static asset miss
 
 ## How To Reproduce The Current Validation
 
@@ -312,6 +316,7 @@ Second-level resource-miss loop:
 | Welfare/event longer wait | `(956,65)` plus 9s wait | Target set stayed at 14 and no deeper inner target set appeared. |
 | Backpack enhanced reprobe | `bp.6` exact targets `(626,320)`, `(785,354)` | Both are real emitted targets with click listeners and emit `CLICK_SCUI_BUTTON`; target set remains stable and no new resource wave appears. |
 | Backpack `bp.6` bottom slots | `(210,476)`, `(331,476)`, `(451,476)`, `(570,476)`, `(690,476)`, `(810,476)` | All are real emitted targets and emit `CLICK_SCUI_BUTTON`; target set remains 25; only `(331,476)` onward show one image-load event; no script error and no new resource miss. |
+| New mall UI | `stage.0.6.0.2` `(168,112)`, then `stage.0.7.2.12` `(921,455)` | `GetImageBase64` stub removes the previous `Script error`; mall opens to 6 targets, converts six thumbnails, and `(921,455)` closes back to the 23-target main menu. |
 
 Latest resource-miss loop:
 
@@ -339,17 +344,19 @@ Validation after a cache-busted reload:
 
 ## Next Debug Direction
 
-### Priority 1: Platform/Service Boundary
+### Priority 1: PropShop JSONP Stub
 
 - static assets are now mirrored
-- remaining `Script error. @ :0:0` likely needs platform/shop API stubs or deeper runtime hooks
+- `GetImageBase64` is now stubbed locally and no longer blocks the mall
+- the remaining mall boundary is platform/shop account data
 
-Treat `stage.0.6.0.2` / mall as the next platform-service target:
+Treat malformed PropShop requests as the next platform-service target:
 
-1. Capture the exact stack around `LOAD_UI_RESOURCE_COMPLETE:NEW_MALLUI_TYPE`.
-2. Stub or intercept the shop/platform service calls needed after `data/mallnew.bin`.
-3. Distinguish malformed URL bugs from missing platform response data.
-4. Retest mall after stubbing to see whether the `Script error. @ :0:0` disappears.
+1. intercept JSONP script URLs containing `/PropShop/engine/v1/user/getUserHaveAllPropNum`
+2. intercept JSONP script URLs containing `/PropShop/engine/v1/user/getMyAccountMoney`
+3. return minimal callback payloads with deterministic owned-item and account-money state
+4. retest mall opening and item clicks with those platform responses in place
+5. classify whether deeper mall item/buy targets require more PropShop endpoints
 
 ### Priority 2: Runtime State Trace For Silent Backpack Clicks
 

@@ -880,3 +880,56 @@ HTTP result:
 - only known `/null%20path` requests appeared
 
 Current technical conclusion: all sampled `bp.6` bottom slots are valid clickable nodes, but they behave as stable/no-visible-change controls in the 5-second sample window. They do not open deeper target sets, do not trigger UI resource loads, and do not expose missing static resources. The next useful validation is to move to the mall/shop platform boundary (`stage.0.6.0.2`) or add state-variable tracing if these silent backpack clicks need deeper interpretation.
+
+## Round 28: Mall `GetImageBase64` Boundary
+
+- Local HTTP log baseline: line `4423`.
+- Path:
+  1. reload with `clearStorage=1`
+  2. click title cover `(480,270)`
+  3. click main menu `(921,54)`
+  4. click exact mall target `stage.0.6.0.2` `(168,112)`
+
+Pre-fix result:
+
+- main-menu target count before mall click: `23`
+- target count after mall click: `5`
+- `LOAD_UI_RESOURCE_COMPLETE` emitted with parameter `NEW_MALLUI_TYPE`
+- browser console exposed the real underlying error:
+  - `Uncaught TypeError: window.GetImageBase64 is not a function`
+- debug overlay also logged:
+  - `ERROR: Script error. @ :0:0`
+- no new real `/shareres/<md5>` 404 appeared
+
+Fix applied:
+
+- added a local `window.GetImageBase64(url, width, height, callback)` compatibility stub in `h5_runner_experiment.html`
+- implementation loads the image, draws a requested-size canvas, converts it to PNG data URL, and calls the runtime callback
+- failures return an empty string and log the failed URL
+
+Post-fix result:
+
+| Check | Result |
+| --- | --- |
+| `NEW_MALLUI_TYPE` resource completion | emitted once |
+| `GetImageBase64` callback | succeeded 6 times at `72x72` |
+| `Script error. @ :0:0` | gone |
+| real `/shareres/<md5>` 404 | none |
+| mall target set | opens to 6 targets |
+| new mall target | `stage.0.7.2.12` `(921,455)` |
+
+The new mall target `(921,455)` was clicked once:
+
+- target count changed from `6` back to the main-menu `23`
+- no new `Script error`
+- no new resource wave
+- no new real `/shareres/<md5>` 404
+
+Remaining platform issue:
+
+- mall still emits malformed PropShop JSONP script URLs:
+  - `http:https://www.66rpg.com/PropShop/engine/v1/user/getUserHaveAllPropNum...`
+  - `http:https://www.66rpg.com/PropShop/engine/v1/user/getMyAccountMoney...`
+- the browser normalizes these into failed `http://https//www.66rpg.com/...` script loads
+
+Current technical conclusion: the mall was not blocked by missing static assets. The immediate crash was a missing host bridge function, `GetImageBase64`; the compatibility stub allows the new mall UI to open and close. The next useful validation is to stub or intercept the PropShop JSONP responses so mall account/owned-item state is deterministic locally.
