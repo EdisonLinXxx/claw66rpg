@@ -629,6 +629,55 @@
         org_data.DSystem = NewDSystem;
         logLine('new DSystem parser patch enabled');
       }
+      if ((hasQueryFlag('patchFirstSceneLobbyButtons') || hasQueryFlag('traceBranchChoice')) && window.org_event && org_event.ButtonDifEvent && !org_event.ButtonDifEvent.__runnerBranchWrapped) {
+        var OriginalButtonDifEvent = org_event.ButtonDifEvent;
+        var patchLobbyEventArgv = function (event, line, label) {
+          if (!hasQueryFlag('patchFirstSceneLobbyButtons')) return;
+          try {
+            if (!event || event.Code !== 204 || !line || line.storyId !== 1 || line.pos !== 7) return;
+            var oldArgv = Array.prototype.slice.call(event.Argv || []);
+            event.Argv = ['40,470,388,', '41,605,388,', '44,740,388,', '15,555,100,', '34,655,100,', '160,755,100,'];
+            logLine('PATCH FIRST SCENE LOBBY BUTTONS ' + label + ' ' + JSON.stringify({ oldArgv: oldArgv, newArgv: event.Argv }));
+          } catch (patchLobbyEventError) {
+            logLine('PATCH FIRST SCENE LOBBY BUTTONS EVENT ERROR ' + (patchLobbyEventError && (patchLobbyEventError.stack || patchLobbyEventError.message) || patchLobbyEventError));
+          }
+        };
+        var WrappedButtonDifEvent = function (event, line) {
+          patchLobbyEventArgv(event, line, 'before-construct');
+          var instance = new OriginalButtonDifEvent(event, line);
+          if (hasQueryFlag('traceBranchChoice') && instance && !instance.__runnerTraceBranchChoice) {
+            var originalFinish = instance.finish;
+            instance.finish = function (choiceIndex) {
+              try {
+                var button = this.buttons && this.buttons[choiceIndex];
+                var systemButton = button && GloableData.getInstance().gameMainData.System.Buttons[button.index];
+                var branch = this.mainLine && this.mainLine.indentStack && this.mainLine.indentStack[this.mainLine.indentStack.length - 1];
+                logLine('BRANCH CHOICE ' + JSON.stringify({
+                  choiceIndex: choiceIndex,
+                  buttonIndex: button && button.index,
+                  buttonName: systemButton && systemButton.name || '',
+                  image1: systemButton && systemButton.image1 && systemButton.image1.name || '',
+                  image2: systemButton && systemButton.image2 && systemButton.image2.name || '',
+                  currentLinks: this.mainLine && this.mainLine.currentLinks || [],
+                  branchJumpList: branch && branch.jumList || branch && branch.jumpList || [],
+                  branchFinishIndex: branch && branch.finishIndex,
+                  endJump: this.endJump,
+                  linePos: this.mainLine && this.mainLine.pos
+                }));
+              } catch (traceBranchChoiceError) {
+                logLine('BRANCH CHOICE ERROR ' + (traceBranchChoiceError && (traceBranchChoiceError.stack || traceBranchChoiceError.message) || traceBranchChoiceError));
+              }
+              return originalFinish.apply(this, arguments);
+            };
+            instance.__runnerTraceBranchChoice = true;
+          }
+          return instance;
+        };
+        WrappedButtonDifEvent.prototype = OriginalButtonDifEvent.prototype;
+        WrappedButtonDifEvent.__runnerBranchWrapped = true;
+        org_event.ButtonDifEvent = WrappedButtonDifEvent;
+        logLine('ButtonDifEvent branch wrapper enabled');
+      }
       if (window.Main && Main.prototype && Main.prototype.setGameConfig && !Main.prototype.__runnerPatched) {
         var originalSetGameConfig = Main.prototype.setGameConfig;
         Main.prototype.setGameConfig = function () {
@@ -1018,10 +1067,68 @@
                 }
               }
             };
+            var getNodeByPath = function (path) {
+              var node = window.Laya && Laya.stage;
+              var parts = String(path || '').split('.').slice(1);
+              for (var partIndex = 0; node && partIndex < parts.length; partIndex++) {
+                var childIndex = parseInt(parts[partIndex], 10);
+                node = node.getChildAt && isFinite(childIndex) ? node.getChildAt(childIndex) : null;
+              }
+              return node || null;
+            };
+            var summarizeFocusNode = function (node, path, depth, parentX, parentY, parentAlpha, parentVisible) {
+              if (!node || depth > 4) return null;
+              var localX = Number(node.x || 0);
+              var localY = Number(node.y || 0);
+              var globalX = parentX + localX;
+              var globalY = parentY + localY;
+              var alpha = Number(node.alpha === undefined ? 1 : node.alpha);
+              var effectiveAlpha = parentAlpha * alpha;
+              var visible = parentVisible && node.visible !== false && effectiveAlpha > 0.001;
+              var item = {
+                path: path,
+                cls: node.constructor && node.constructor.name || typeof node,
+                name: shortString(node.name || '', 60),
+                text: shortString(node.text || node.label || '', 80),
+                texture: shortString(getTextureUrl(node), 160),
+                visible: node.visible !== false,
+                effectiveVisible: visible,
+                alpha: alpha,
+                effectiveAlpha: Number(effectiveAlpha.toFixed(3)),
+                x: Math.round(globalX),
+                y: Math.round(globalY),
+                w: Math.round(Number(node.width || 0)),
+                h: Math.round(Number(node.height || 0)),
+                mouseEnabled: !!node.mouseEnabled,
+                listeners: getListenerTypes(node),
+                children: node.numChildren || 0,
+                childList: []
+              };
+              if (node.numChildren && typeof node.getChildAt === 'function') {
+                for (var focusChildIndex = 0; focusChildIndex < Math.min(node.numChildren, 12); focusChildIndex++) {
+                  item.childList.push(summarizeFocusNode(
+                    node.getChildAt(focusChildIndex),
+                    path + '.' + focusChildIndex,
+                    depth + 1,
+                    globalX,
+                    globalY,
+                    effectiveAlpha,
+                    visible
+                  ));
+                }
+              }
+              return item;
+            };
             try {
               visit(window.Laya && Laya.stage, 0, 'stage', 0, 0, true);
               logLine('UI STATE ' + JSON.stringify(nodes));
               logLine('UI TARGETS ' + JSON.stringify(targets.slice(0, 30)));
+              if (hasQueryFlag('traceFirstSceneButtons')) {
+                var focusPaths = ['stage.0.3.0.0', 'stage.0.3.0.1', 'stage.0.3.0.2', 'stage.0.3.0.3', 'stage.0.3.0.4', 'stage.0.7'];
+                logLine('UI FOCUS TREE ' + JSON.stringify(focusPaths.map(function (focusPath) {
+                  return summarizeFocusNode(getNodeByPath(focusPath), focusPath, 0, 0, 0, 1, true);
+                })));
+              }
             } catch (uiStateError) {
               logLine('UI STATE ERROR ' + (uiStateError && uiStateError.stack || uiStateError));
             }
@@ -1310,6 +1417,264 @@
             }
             return stageItems;
           };
+          var summarizeCode214State = function (line) {
+            var result = null;
+            try {
+              var event = line && (line.currentEvent || (line.story && line.story.events && line.story.events[line.pos])) || null;
+              if (!event || event.Code !== 214) return null;
+              var index = parseInt(event.Argv && event.Argv[0], 10);
+              var gd = window.GloableData && GloableData.getInstance ? GloableData.getInstance() : null;
+              var ui = window.UIManager && UIManager.getInstance ? UIManager.getInstance() : null;
+              var cui = gd && gd.gameMainData && gd.gameMainData.System && gd.gameMainData.System.Cuis
+                ? gd.gameMainData.System.Cuis[index]
+                : null;
+              var summarizeControls = function (controls) {
+                if (!controls || !controls.length) return [];
+                return Array.prototype.slice.call(controls, 0, 20).map(function (control, controlIndex) {
+                  var keys = [];
+                  try { keys = Object.keys(control).slice(0, 30); } catch (keysError) {}
+                  return {
+                    index: controlIndex,
+                    cls: control && control.constructor && control.constructor.name || typeof control,
+                    type: control && (control.Type !== undefined ? control.Type : control.type),
+                    id: control && (control.ID !== undefined ? control.ID : control.id),
+                    x: control && (control.X !== undefined ? control.X : control.x),
+                    y: control && (control.Y !== undefined ? control.Y : control.y),
+                    w: control && (control.W !== undefined ? control.W : control.w || control.width),
+                    h: control && (control.H !== undefined ? control.H : control.h || control.height),
+                    text: shortStoryString(control && (control.Text || control.text || control.title || control.name), 80),
+                    image: shortStoryString(control && (control.Image || control.image || control.url || control.path), 120),
+                    keys: keys
+                  };
+                });
+              };
+              var summarizeDisplayNode = function (node, path, depth) {
+                if (!node || depth > 5) return null;
+                var keys = [];
+                try { keys = Object.keys(node).slice(0, 60); } catch (nodeKeysError) {}
+                var texture = '';
+                try {
+                  if (node.texture && node.texture.url) texture = node.texture.url;
+                  else if (node.skin) texture = node.skin;
+                  else if (node._skin) texture = node._skin;
+                  else if (node.graphics && node.graphics._one && node.graphics._one.texture && node.graphics._one.texture.url) texture = node.graphics._one.texture.url;
+                } catch (textureError) {}
+                var item = {
+                  path: path,
+                  cls: node.constructor && node.constructor.name || typeof node,
+                  name: node.name || '',
+                  visible: node.visible,
+                  alpha: node.alpha,
+                  x: node.x,
+                  y: node.y,
+                  width: node.width,
+                  height: node.height,
+                  text: shortStoryString(node.text || node.label || node.title || node.value || '', 100),
+                  texture: shortStoryString(texture, 160),
+                  mouseEnabled: node.mouseEnabled,
+                  keys: keys,
+                  children: node.numChildren || 0,
+                  childList: []
+                };
+                if (node.FIndex !== undefined || node.data || node.onloadInter || node.loadingInter || node.controlsArr) {
+                  item.scui = {
+                    FIndex: node.FIndex,
+                    onloadInterComplete: node.onloadInterComplete,
+                    loadingInterComplete: node.loadingInterComplete,
+                    isRunEvent: node.isRunEvent,
+                    needShowSendFlower: node.needShowSendFlower,
+                    controlsArrLength: node.controlsArr && node.controlsArr.length || 0,
+                    viewButtonsLength: node.viewButtons && node.viewButtons.length || 0,
+                    data: node.data && {
+                      cls: node.data.constructor && node.data.constructor.name || typeof node.data,
+                      keys: Object.keys(node.data).slice(0, 60),
+                      loadEventCount: node.data.loadEvent && node.data.loadEvent.length || 0,
+                      afterEventCount: node.data.afterEvent && node.data.afterEvent.length || 0,
+                      controlCount: node.data.controls && node.data.controls.length || 0,
+                      loadEvents: (node.data.loadEvent || []).slice(0, 10).map(summarizeEventForTrace),
+                      afterEvents: (node.data.afterEvent || []).slice(0, 10).map(summarizeEventForTrace),
+                      controls: summarizeControls(node.data.controls)
+                    },
+                    onloadInter: node.onloadInter && {
+                      storyId: node.onloadInter.storyId,
+                      pos: node.onloadInter.pos,
+                      isPause: node.onloadInter.isPause,
+                      isEnd: node.onloadInter.isEnd,
+                      eventRunFinish: node.onloadInter.eventRunFinish,
+                      currentEvent: summarizeEventForTrace(node.onloadInter.currentEvent || (node.onloadInter.story && node.onloadInter.story.events && node.onloadInter.story.events[node.onloadInter.pos]))
+                    },
+                    loadingInter: node.loadingInter && {
+                      storyId: node.loadingInter.storyId,
+                      pos: node.loadingInter.pos,
+                      isPause: node.loadingInter.isPause,
+                      isEnd: node.loadingInter.isEnd,
+                      eventRunFinish: node.loadingInter.eventRunFinish,
+                      currentEvent: summarizeEventForTrace(node.loadingInter.currentEvent || (node.loadingInter.story && node.loadingInter.story.events && node.loadingInter.story.events[node.loadingInter.pos]))
+                    }
+                  };
+                }
+                if (node.numChildren && typeof node.getChildAt === 'function') {
+                  for (var childIndex = 0; childIndex < Math.min(node.numChildren, 20); childIndex++) {
+                    item.childList.push(summarizeDisplayNode(node.getChildAt(childIndex), path + '.' + childIndex, depth + 1));
+                  }
+                }
+                return item;
+              };
+              result = {
+                index: index,
+                argv: Array.prototype.slice.call(event.Argv || []).map(function (item) {
+                  return shortStoryString(item, 160);
+                }),
+                fromIndex: gd && gd.CUIFromIndex,
+                isSCUIShow: ui && ui.isSCUIShow,
+                currentShowEvent: line.currentShowEvent && {
+                  cls: line.currentShowEvent.constructor && line.currentShowEvent.constructor.name || typeof line.currentShowEvent,
+                  code: line.currentShowEvent.code,
+                  index: line.currentShowEvent.index,
+                  isSuiFinish: line.currentShowEvent.isSuiFinish
+                },
+                cui: cui && {
+                  cls: cui.constructor && cui.constructor.name || typeof cui,
+                  keys: Object.keys(cui).slice(0, 60),
+                  loadEventCount: cui.loadEvent && cui.loadEvent.length || 0,
+                  afterEventCount: cui.afterEvent && cui.afterEvent.length || 0,
+                  controlCount: cui.controls && cui.controls.length || 0,
+                  controls: summarizeControls(cui.controls),
+                  loadEvents: (cui.loadEvent || []).slice(0, 10).map(summarizeEventForTrace),
+                  afterEvents: (cui.afterEvent || []).slice(0, 10).map(summarizeEventForTrace)
+                },
+                gameAdvanceUILayer: ui && ui.gameAdvanceUILayer && {
+                  visible: ui.gameAdvanceUILayer.visible,
+                  alpha: ui.gameAdvanceUILayer.alpha,
+                  width: ui.gameAdvanceUILayer.width,
+                  height: ui.gameAdvanceUILayer.height,
+                  children: ui.gameAdvanceUILayer.numChildren,
+                  path: getChildPath(window.Laya && Laya.stage, ui.gameAdvanceUILayer, 'stage', 6),
+                  tree: summarizeDisplayNode(ui.gameAdvanceUILayer, 'gameAdvanceUILayer', 0)
+                },
+                gameSystemUILayer: ui && ui.gameSystemUILayer && {
+                  visible: ui.gameSystemUILayer.visible,
+                  alpha: ui.gameSystemUILayer.alpha,
+                  width: ui.gameSystemUILayer.width,
+                  height: ui.gameSystemUILayer.height,
+                  children: ui.gameSystemUILayer.numChildren,
+                  path: getChildPath(window.Laya && Laya.stage, ui.gameSystemUILayer, 'stage', 6),
+                  tree: summarizeDisplayNode(ui.gameSystemUILayer, 'gameSystemUILayer', 0)
+                }
+              };
+            } catch (code214Error) {
+              result = { error: String(code214Error && (code214Error.stack || code214Error.message) || code214Error) };
+            }
+            return result;
+          };
+          var maybeAutoCreateCharacterConfirm = function (line) {
+            if (!hasQueryFlag('autoCreateCharacterConfirm') || window.__runnerAutoCreateCharacterConfirmed) return;
+            try {
+              var event = line && (line.currentEvent || (line.story && line.story.events && line.story.events[line.pos])) || null;
+              if (!event || event.Code !== 204 || line.pos !== 47 || !line.currentShowEvent || !line.currentShowEvent.finish) return;
+              window.__runnerAutoCreateCharacterConfirmed = true;
+              logLine('AUTO CREATE CHARACTER CONFIRM finish(1)');
+              line.currentShowEvent.finish(1);
+            } catch (autoConfirmError) {
+              logLine('AUTO CREATE CHARACTER CONFIRM ERROR ' + (autoConfirmError && (autoConfirmError.stack || autoConfirmError.message) || autoConfirmError));
+            }
+          };
+          var maybeAutoNameChoice = function (line) {
+            if (!hasQueryFlag('autoNameChoice') || window.__runnerAutoNameChoiceDone) return;
+            try {
+              var event = line && (line.currentEvent || (line.story && line.story.events && line.story.events[line.pos])) || null;
+              if (!event || event.Code !== 204 || line.pos !== 231 || !line.currentShowEvent || !line.currentShowEvent.finish) return;
+              var params = new URLSearchParams(window.location.search);
+              var choiceIndex = parseInt(params.get('autoNameChoiceIndex') || '1', 10);
+              if (!isFinite(choiceIndex)) choiceIndex = 1;
+              window.__runnerAutoNameChoiceDone = true;
+              logLine('AUTO NAME CHOICE finish(' + choiceIndex + ')');
+              line.currentShowEvent.finish(choiceIndex);
+            } catch (autoNameChoiceError) {
+              logLine('AUTO NAME CHOICE ERROR ' + (autoNameChoiceError && (autoNameChoiceError.stack || autoNameChoiceError.message) || autoNameChoiceError));
+            }
+          };
+          var maybePatchFirstSceneLobbyButtons = function (line) {
+            if (!hasQueryFlag('patchFirstSceneLobbyButtons') || window.__runnerFirstSceneLobbyButtonsPatched) return;
+            try {
+              var event = line && line.story && line.story.events && line.story.events[line.pos] || null;
+              if (!event || event.Code !== 204 || line.storyId !== 1 || line.pos !== 7) return;
+              var oldArgv = Array.prototype.slice.call(event.Argv || []);
+              var expected = ['41,470,388,', '42,605,388,', '45,740,388,', '35,655,100,', '16,555,100,', '161,755,100,'];
+              var matchesCurrent = oldArgv.length >= expected.length && expected.every(function (value, index) {
+                return oldArgv[index] === value;
+              });
+              if (!matchesCurrent) return;
+              event.Argv = ['40,470,388,', '41,605,388,', '44,740,388,', '15,555,100,', '34,655,100,', '160,755,100,'];
+              window.__runnerFirstSceneLobbyButtonsPatched = true;
+              logLine('PATCH FIRST SCENE LOBBY BUTTONS ' + JSON.stringify({ oldArgv: oldArgv, newArgv: event.Argv }));
+            } catch (patchLobbyError) {
+              logLine('PATCH FIRST SCENE LOBBY BUTTONS ERROR ' + (patchLobbyError && (patchLobbyError.stack || patchLobbyError.message) || patchLobbyError));
+            }
+          };
+          var patchFirstSceneLobbyButtonsNow = function (line) {
+            if (!hasQueryFlag('patchFirstSceneLobbyButtons')) return;
+            try {
+              if (window.__runnerFirstSceneLobbyButtonsPatched) return;
+              if (!line || line.storyId !== 1 || line.pos !== 7) return;
+              var event = line.story && line.story.events && line.story.events[line.pos] || null;
+              if (!event || event.Code !== 204) return;
+              var oldArgv = Array.prototype.slice.call(event.Argv || []);
+              event.Argv = ['40,470,388,', '41,605,388,', '44,740,388,', '15,555,100,', '34,655,100,', '160,755,100,'];
+              if (line.currentEvent === event || !line.currentEvent || line.currentEvent.Code === 204) line.currentEvent = event;
+              window.__runnerFirstSceneLobbyButtonsPatched = true;
+              logLine('PATCH FIRST SCENE LOBBY BUTTONS FORCE ' + JSON.stringify({ oldArgv: oldArgv, newArgv: event.Argv }));
+            } catch (patchLobbyNowError) {
+              logLine('PATCH FIRST SCENE LOBBY BUTTONS FORCE ERROR ' + (patchLobbyNowError && (patchLobbyNowError.stack || patchLobbyNowError.message) || patchLobbyNowError));
+            }
+          };
+          var maybeStubCode214Name = function (line) {
+            if (!hasQueryFlag('stubCode214Name') || window.__runnerCode214NameStubbed) return;
+            try {
+              var eventAtPos = line && line.story && line.story.events && line.story.events[line.pos] || null;
+              var event = eventAtPos && eventAtPos.Code === 214 ? eventAtPos : line && line.currentEvent || eventAtPos;
+              if (!event || event.Code !== 214) return;
+              var index = parseInt(event.Argv && event.Argv[0], 10);
+              if (index !== 10014) return;
+              window.__runnerCode214NameStubbed = true;
+              var gd = window.GloableData && GloableData.getInstance ? GloableData.getInstance() : null;
+              var strings = gd && gd.dGameSystem && gd.dGameSystem.dGameString;
+              var params = new URLSearchParams(window.location.search);
+              var defaults = {
+                0: params.get('stubSurname') || '苏',
+                1: params.get('stubGivenName') || '清',
+                3: params.get('stubNickname') || '苏清'
+              };
+              if (strings && strings.setVar) {
+                Object.keys(defaults).forEach(function (key) {
+                  strings.setVar(parseInt(key, 10), defaults[key]);
+                });
+              }
+              try {
+                if (window.view && view.SCustomUI && view.SCustomUI.getInstance) view.SCustomUI.getInstance().hideUI();
+              } catch (hideScuiError) {}
+              if (window.UIManager && UIManager.getInstance) {
+                UIManager.getInstance().isSCUIShow = false;
+                if (UIManager.getInstance().gameSystemUILayer && UIManager.getInstance().gameSystemUILayer.setMenuVisible) {
+                  UIManager.getInstance().gameSystemUILayer.setMenuVisible(true);
+                }
+              }
+              if (gd) gd.CUIFromIndex = -1;
+              line.isPause = false;
+              line.eventRunFinish = true;
+              if (line.currentEvent === event) line.currentEvent = null;
+              if (line.currentShowEvent) line.currentShowEvent.isSuiFinish = true;
+              logLine('STUB CODE214 NAME ' + JSON.stringify({
+                index: index,
+                defaults: defaults,
+                pos: line.pos,
+                isPause: line.isPause,
+                eventRunFinish: line.eventRunFinish
+              }));
+            } catch (stubError) {
+              logLine('STUB CODE214 NAME ERROR ' + (stubError && (stubError.stack || stubError.message) || stubError));
+            }
+          };
           var wrapStoryMethod = function (object, methodName, label) {
             if (!object || !object[methodName] || object[methodName].__runnerStoryWrapped) return;
             var originalMethod = object[methodName];
@@ -1319,6 +1684,19 @@
                   return shortStoryString(item, 120);
                 })) + ' line=' + JSON.stringify(summarizeLineForTrace(this, 1)));
               } catch (methodTraceError) {}
+              if (hasQueryFlag('stubCode214Name') && (methodName === 'makeEvent' || methodName === 'runEvent')) {
+                var beforeEventAtPos = this && this.story && this.story.events && this.pos !== undefined && this.story.events[this.pos] || null;
+                var beforeEvent = beforeEventAtPos && beforeEventAtPos.Code === 214 ? beforeEventAtPos : this && this.currentEvent || beforeEventAtPos;
+                if (beforeEvent && beforeEvent.Code === 214 && parseInt(beforeEvent.Argv && beforeEvent.Argv[0], 10) === 10014) {
+                  maybeStubCode214Name(this);
+                  if (this && typeof this.eventFinish === 'function') {
+                    logLine('STUB CODE214 NAME eventFinish() from ' + label + '.' + methodName);
+                    return this.eventFinish();
+                  }
+                  return undefined;
+                }
+              }
+              if (methodName === 'makeEvent' || methodName === 'runEvent') patchFirstSceneLobbyButtonsNow(this);
               return originalMethod.apply(this, arguments);
             };
             object[methodName].__runnerStoryWrapped = true;
@@ -1357,6 +1735,13 @@
                   wrapStoryMethod(gd.iMain, methodName, 'iMain');
                 });
               }
+              maybeAutoCreateCharacterConfirm(line);
+              maybeAutoNameChoice(line);
+              patchFirstSceneLobbyButtonsNow(line);
+              maybePatchFirstSceneLobbyButtons(line);
+              maybeStubCode214Name(line);
+              var code214State = hasQueryFlag('traceCode214') ? summarizeCode214State(line) : null;
+              if (code214State) logLine('CODE214 STATE ' + JSON.stringify(code214State));
               if (ui && ui.backgroundLayer) {
                 ['addImage', 'hideImage', 'moveImage', 'rotationImage', 'addActImage', 'addOAF2ActImage', 'sortImage'].forEach(function (methodName) {
                   wrapLayerMethod(ui.backgroundLayer, methodName);
@@ -1366,6 +1751,7 @@
                 count: storyTraceCount,
                 line: summarizeLineForTrace(line, 2),
                 iMainSameAsLine: !!(gd && gd.iMain && gd.iMain === line),
+                code214: code214State,
                 backgroundLayer: summarizeBackgroundLayer(ui && ui.backgroundLayer),
                 stageTop: summarizeStageTop()
               }));
@@ -1376,6 +1762,17 @@
           };
           var storyTraceTimer = setInterval(collectStoryState, 2000);
           setTimeout(collectStoryState, 1200);
+          if (hasQueryFlag('stubCode214Name') && !window.__runnerCode214NameStubTimer) {
+            window.__runnerCode214NameStubTimer = setInterval(function () {
+              try {
+                var gd = window.GloableData && GloableData.getInstance ? GloableData.getInstance() : null;
+                maybeStubCode214Name(gd && gd.currentLine || null);
+                if (window.__runnerCode214NameStubbed) clearInterval(window.__runnerCode214NameStubTimer);
+              } catch (stubTimerError) {
+                logLine('STUB CODE214 NAME TIMER ERROR ' + (stubTimerError && (stubTimerError.stack || stubTimerError.message) || stubTimerError));
+              }
+            }, 500);
+          }
         }
         logLine('runtime globals Main=' + typeof Main + ' Laya=' + typeof Laya + ' GloableData=' + typeof GloableData);
         var runtimePollCount = 0;
@@ -1385,6 +1782,13 @@
           var layaTimerScale = window.Laya && Laya.timer ? Laya.timer.scale : 'n/a';
           var hasGameMain = !!window.gameMain;
           var gameInfo = window.GloableData && GloableData.getInstance ? GloableData.getInstance().gameInfo : null;
+          var gameInfoSummary = gameInfo ? {
+            gameId: gameInfo.gameId,
+            ver: gameInfo.ver,
+            title: gameInfo.title,
+            userId: gameInfo.userId,
+            gameDataUrl: gameInfo.gameDataUrl
+          } : null;
           var summarizeChild = function (child, index, depth) {
             var textureUrl = '';
             try {
@@ -1436,7 +1840,7 @@
               childSummary.push(summarizeChild(Laya.stage.getChildAt(childIndex), childIndex, hasQueryFlag('traceDisplay') ? 5 : 2));
             }
           }
-          logLine('RUNTIME STATE ' + runtimePollCount + ': gameMain=' + hasGameMain + ' stageChildren=' + stageChildren + ' timerScale=' + layaTimerScale + ' gameInfo=' + JSON.stringify(gameInfo) + ' children=' + JSON.stringify(childSummary));
+          logLine('RUNTIME STATE ' + runtimePollCount + ': gameMain=' + hasGameMain + ' stageChildren=' + stageChildren + ' timerScale=' + layaTimerScale + ' gameInfo=' + JSON.stringify(gameInfoSummary) + ' children=' + JSON.stringify(childSummary));
           if (runtimePollCount >= (hasQueryFlag('traceDisplay') ? 20 : 5)) clearInterval(runtimePoll);
         }, 2000);
       }
