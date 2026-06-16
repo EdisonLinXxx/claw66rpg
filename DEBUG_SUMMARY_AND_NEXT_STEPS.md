@@ -112,6 +112,8 @@ Important flags:
   - suppresses repetitive OAF animation frame `LOAD_IMAGE_COMPLETE` logs.
 - `traceUiState=1`
   - logs current Laya stage nodes and likely clickable `UI TARGETS`.
+- `stubPropShop=1`
+  - stubs local PropShop JSONP responses for mall owned-item and account-money state.
 
 ## Runtime Progress Achieved
 
@@ -252,6 +254,7 @@ Latest verified behavior:
 - `h5_runner_experiment.html` now installs a local `GetImageBase64` compatibility stub; after retest, `NEW_MALLUI_TYPE` completes, six item thumbnails are converted to `72x72` data URLs, and the mall opens without script error
 - mall inner target `stage.0.7.2.12` `(921,455)` closes/returns from the mall target set back to the main menu target set
 - remaining mall noise is malformed PropShop JSONP URLs for account money/owned item counts, not a static asset miss
+- `stubPropShop=1` now intercepts PropShop JSONP script URLs and returns deterministic fake account data; with it enabled, mall opening produces 4 stub hits, 0 PropShop resource errors, 6 `GetImageBase64` conversions, and no script error
 
 ## How To Reproduce The Current Validation
 
@@ -265,6 +268,12 @@ Open:
 
 ```text
 http://127.0.0.1:8765/h5_runner_experiment.html?localRes=1&patchNewDSystem=1&traceRuntime=1&traceTitle=1&traceNullPath=1&quietOafEvents=1&traceUiState=1&patchTitleClick=1&clearStorage=1&hideDebug=1
+```
+
+For mall/platform validation, add:
+
+```text
+stubPropShop=1
 ```
 
 Expected manual flow:
@@ -317,6 +326,7 @@ Second-level resource-miss loop:
 | Backpack enhanced reprobe | `bp.6` exact targets `(626,320)`, `(785,354)` | Both are real emitted targets with click listeners and emit `CLICK_SCUI_BUTTON`; target set remains stable and no new resource wave appears. |
 | Backpack `bp.6` bottom slots | `(210,476)`, `(331,476)`, `(451,476)`, `(570,476)`, `(690,476)`, `(810,476)` | All are real emitted targets and emit `CLICK_SCUI_BUTTON`; target set remains 25; only `(331,476)` onward show one image-load event; no script error and no new resource miss. |
 | New mall UI | `stage.0.6.0.2` `(168,112)`, then `stage.0.7.2.12` `(921,455)` | `GetImageBase64` stub removes the previous `Script error`; mall opens to 6 targets, converts six thumbnails, and `(921,455)` closes back to the 23-target main menu. |
+| PropShop-stubbed mall | same path with `stubPropShop=1` | PropShop JSONP stub hits 4 requests; PropShop script resource errors drop to 0; mall still opens to 6 targets and closes back to 23 targets. |
 
 Latest resource-miss loop:
 
@@ -344,19 +354,19 @@ Validation after a cache-busted reload:
 
 ## Next Debug Direction
 
-### Priority 1: PropShop JSONP Stub
+### Priority 1: Mall Item/Buy Flow Under Stub
 
 - static assets are now mirrored
 - `GetImageBase64` is now stubbed locally and no longer blocks the mall
-- the remaining mall boundary is platform/shop account data
+- PropShop owned-item and account-money JSONP calls are now stubbed behind `stubPropShop=1`
 
-Treat malformed PropShop requests as the next platform-service target:
+Treat mall item and buy/detail clicks as the next platform-service target:
 
-1. intercept JSONP script URLs containing `/PropShop/engine/v1/user/getUserHaveAllPropNum`
-2. intercept JSONP script URLs containing `/PropShop/engine/v1/user/getMyAccountMoney`
-3. return minimal callback payloads with deterministic owned-item and account-money state
-4. retest mall opening and item clicks with those platform responses in place
-5. classify whether deeper mall item/buy targets require more PropShop endpoints
+1. open mall with `stubPropShop=1`
+2. read the 6-target mall UI
+3. click visible mall item/detail/buy targets if emitted by `UI TARGETS`
+4. classify whether `/getUserHavePropNum`, `/createBuyOrder`, or other endpoints are requested
+5. add only the minimal fake payloads needed to keep local validation deterministic
 
 ### Priority 2: Runtime State Trace For Silent Backpack Clicks
 

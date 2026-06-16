@@ -87,6 +87,45 @@
       };
       logLine('GetImageBase64 compatibility stub installed');
     }
+    if (hasQueryFlag('stubPropShop')) {
+      (function () {
+        function getJsonpCallbackName(url) {
+          var match = String(url).match(/[?&]jsonCallBack=([^&]+)/);
+          return match ? decodeURIComponent(match[1]) : '';
+        }
+        function getPropShopPayload(url) {
+          var text = String(url);
+          if (text.indexOf('/PropShop/engine/v1/user/getUserHaveAllPropNum') !== -1) {
+            return { status: 1, data: [] };
+          }
+          if (text.indexOf('/PropShop/engine/v1/user/getMyAccountMoney') !== -1) {
+            return { status: 1, data: { coin_count: 0 } };
+          }
+          if (text.indexOf('/PropShop/engine/v1/user/getUserHavePropNum') !== -1) {
+            return { status: 1, data: [] };
+          }
+          return null;
+        }
+        var scriptSrcDescriptor = Object.getOwnPropertyDescriptor(HTMLScriptElement.prototype, 'src');
+        if (scriptSrcDescriptor && scriptSrcDescriptor.set && !scriptSrcDescriptor.set.__runnerPropShopWrapped) {
+          Object.defineProperty(HTMLScriptElement.prototype, 'src', {
+            get: scriptSrcDescriptor.get,
+            set: function (value) {
+              var payload = getPropShopPayload(value);
+              var callbackName = payload && getJsonpCallbackName(value);
+              if (payload && callbackName) {
+                logLine('PROP SHOP JSONP STUB ' + callbackName + ' ' + value);
+                var script = callbackName + '(' + JSON.stringify(payload) + ');';
+                return scriptSrcDescriptor.set.call(this, 'data:text/javascript;charset=utf-8,' + encodeURIComponent(script));
+              }
+              return scriptSrcDescriptor.set.call(this, value);
+            }
+          });
+          Object.getOwnPropertyDescriptor(HTMLScriptElement.prototype, 'src').set.__runnerPropShopWrapped = true;
+          logLine('PropShop JSONP stub installed');
+        }
+      })();
+    }
     function shouldTraceNullPath(value) {
       if (!hasQueryFlag('traceNullPath')) return false;
       if (value === null || value === undefined) return true;

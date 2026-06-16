@@ -933,3 +933,50 @@ Remaining platform issue:
 - the browser normalizes these into failed `http://https//www.66rpg.com/...` script loads
 
 Current technical conclusion: the mall was not blocked by missing static assets. The immediate crash was a missing host bridge function, `GetImageBase64`; the compatibility stub allows the new mall UI to open and close. The next useful validation is to stub or intercept the PropShop JSONP responses so mall account/owned-item state is deterministic locally.
+
+## Round 29: PropShop JSONP Stub
+
+- Local HTTP log baseline: line `4469`.
+- Added a gated `stubPropShop=1` runner option.
+- The stub intercepts `HTMLScriptElement.src` only for PropShop JSONP URLs and rewrites them to local `data:text/javascript` callback scripts.
+
+Stubbed endpoints:
+
+| Endpoint | Payload |
+| --- | --- |
+| `/PropShop/engine/v1/user/getUserHaveAllPropNum` | `{ "status": 1, "data": [] }` |
+| `/PropShop/engine/v1/user/getMyAccountMoney` | `{ "status": 1, "data": { "coin_count": 0 } }` |
+| `/PropShop/engine/v1/user/getUserHavePropNum` | `{ "status": 1, "data": [] }` |
+
+Validation URL added `stubPropShop=1`.
+
+Path:
+
+1. wait for title target
+2. click title cover `(480,270)`
+3. wait for first-scene targets
+4. click main menu `(921,54)`
+5. click exact mall target `stage.0.6.0.2` `(168,112)`
+6. click mall close/return target `stage.0.7.2.12` `(921,455)`
+
+Result:
+
+| Check | Result |
+| --- | --- |
+| title target count | `1` |
+| first-scene target count | `7` |
+| main-menu target count | `23` |
+| mall target count | `6` |
+| target count after close | `23` |
+| PropShop JSONP stub hits | `4` |
+| PropShop script resource errors | `0` |
+| `GetImageBase64` conversions | `6` |
+| `Script error. @ :0:0` | `0` |
+| real `/shareres/<md5>` 404 | `0` |
+
+Remaining noise:
+
+- `get_home_gray` still fails as a separate platform/telemetry script.
+- known `/null%20path` requests still appear.
+
+Current technical conclusion: the new mall can now open and close locally with deterministic fake account state. The previous PropShop malformed URL failures are neutralized when `stubPropShop=1` is enabled. The next useful validation is to click mall item/buy/detail targets under this stub and identify any additional PropShop endpoints needed for purchase/status flows.
