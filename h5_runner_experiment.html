@@ -1826,6 +1826,47 @@
               return false;
             }
           };
+          var maybeStubCode214Birthday = function (line) {
+            if (!hasQueryFlag('stubCode214Birthday')) return false;
+            try {
+              var eventAtPos = line && line.story && line.story.events && line.story.events[line.pos] || null;
+              var event = eventAtPos && eventAtPos.Code === 214 ? eventAtPos : line && line.currentEvent || eventAtPos;
+              if (!event || event.Code !== 214) return false;
+              var index = parseInt(event.Argv && event.Argv[0], 10);
+              if (index !== 495) return false;
+              var stubKey = String(line && line.pos || 'unknown') + ':' + index;
+              window.__runnerCode214BirthdayStubbedKeys = window.__runnerCode214BirthdayStubbedKeys || {};
+              if (window.__runnerCode214BirthdayStubbedKeys[stubKey]) return true;
+              window.__runnerCode214BirthdayStubbedKeys[stubKey] = true;
+              window.__runnerCode214BirthdayStubbed = true;
+              try {
+                if (window.view && view.SCustomUI && view.SCustomUI.getInstance) view.SCustomUI.getInstance().hideUI();
+              } catch (hideBirthdayScuiError) {}
+              if (window.UIManager && UIManager.getInstance) {
+                UIManager.getInstance().isSCUIShow = false;
+                if (UIManager.getInstance().gameSystemUILayer && UIManager.getInstance().gameSystemUILayer.setMenuVisible) {
+                  UIManager.getInstance().gameSystemUILayer.setMenuVisible(true);
+                }
+              }
+              var gd = window.GloableData && GloableData.getInstance ? GloableData.getInstance() : null;
+              if (gd) gd.CUIFromIndex = -1;
+              line.isPause = false;
+              line.eventRunFinish = true;
+              if (line.currentEvent === event) line.currentEvent = null;
+              if (line.currentShowEvent) line.currentShowEvent.isSuiFinish = true;
+              logLine('STUB CODE214 BIRTHDAY ' + JSON.stringify({
+                index: index,
+                pos: line.pos,
+                key: stubKey,
+                isPause: line.isPause,
+                eventRunFinish: line.eventRunFinish
+              }));
+              return true;
+            } catch (stubBirthdayError) {
+              logLine('STUB CODE214 BIRTHDAY ERROR ' + (stubBirthdayError && (stubBirthdayError.stack || stubBirthdayError.message) || stubBirthdayError));
+              return false;
+            }
+          };
           var wrapStoryMethod = function (object, methodName, label) {
             if (!object || !object[methodName] || object[methodName].__runnerStoryWrapped) return;
             var originalMethod = object[methodName];
@@ -1843,6 +1884,19 @@
                   if (!stubbedName) return originalMethod.apply(this, arguments);
                   if (this && typeof this.eventFinish === 'function') {
                     logLine('STUB CODE214 NAME eventFinish() from ' + label + '.' + methodName);
+                    return this.eventFinish();
+                  }
+                  return undefined;
+                }
+              }
+              if (hasQueryFlag('stubCode214Birthday') && (methodName === 'makeEvent' || methodName === 'runEvent')) {
+                var beforeBirthdayEventAtPos = this && this.story && this.story.events && this.pos !== undefined && this.story.events[this.pos] || null;
+                var beforeBirthdayEvent = beforeBirthdayEventAtPos && beforeBirthdayEventAtPos.Code === 214 ? beforeBirthdayEventAtPos : this && this.currentEvent || beforeBirthdayEventAtPos;
+                if (beforeBirthdayEvent && beforeBirthdayEvent.Code === 214 && parseInt(beforeBirthdayEvent.Argv && beforeBirthdayEvent.Argv[0], 10) === 495) {
+                  var stubbedBirthday = maybeStubCode214Birthday(this);
+                  if (!stubbedBirthday) return originalMethod.apply(this, arguments);
+                  if (this && typeof this.eventFinish === 'function') {
+                    logLine('STUB CODE214 BIRTHDAY eventFinish() from ' + label + '.' + methodName);
                     return this.eventFinish();
                   }
                   return undefined;
@@ -1909,6 +1963,10 @@
               maybePatchFirstSceneLobbyButtons(line);
               maybeAutoFirstSceneChoice(line);
               maybeStubCode214Name(line);
+              if (maybeStubCode214Birthday(line) && line && typeof line.eventFinish === 'function') {
+                logLine('STUB CODE214 BIRTHDAY eventFinish() from collectStoryState');
+                line.eventFinish();
+              }
               var code214State = hasQueryFlag('traceCode214') ? summarizeCode214State(line) : null;
               if (code214State) logLine('CODE214 STATE ' + JSON.stringify(code214State));
               if (backgroundLayer) {
