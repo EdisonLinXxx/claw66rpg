@@ -1618,6 +1618,34 @@
               logLine('AUTO NAME CHOICE ERROR ' + (autoNameChoiceError && (autoNameChoiceError.stack || autoNameChoiceError.message) || autoNameChoiceError));
             }
           };
+          var maybeAutoInnNameChoice = function (line) {
+            if (!hasQueryFlag('autoInnNameChoice') || window.__runnerAutoInnNameChoiceDone) return;
+            try {
+              var event = line && (line.currentEvent || (line.story && line.story.events && line.story.events[line.pos])) || null;
+              if (!event || event.Code !== 204 || line.pos !== 1328) return;
+              if (!line.currentShowEvent || !line.currentShowEvent.finish) return;
+              var params = new URLSearchParams(window.location.search);
+              var sequence = (params.get('autoInnNameChoiceSequence') || '').split(',').map(function (item) {
+                return parseInt(item, 10);
+              }).filter(function (item) {
+                return isFinite(item);
+              });
+              if (!sequence.length) sequence = [0, 2];
+              var sequenceStep = window.__runnerAutoInnNameChoiceStep || 0;
+              if (sequenceStep >= sequence.length) {
+                window.__runnerAutoInnNameChoiceDone = true;
+                return;
+              }
+              var choiceIndex = sequence[sequenceStep];
+              if (!isFinite(choiceIndex)) choiceIndex = 0;
+              window.__runnerAutoInnNameChoiceStep = sequenceStep + 1;
+              window.__runnerAutoInnNameChoiceDone = window.__runnerAutoInnNameChoiceStep >= sequence.length;
+              logLine('AUTO INN NAME CHOICE finish(' + choiceIndex + ') step=' + window.__runnerAutoInnNameChoiceStep + '/' + sequence.length);
+              line.currentShowEvent.finish(choiceIndex);
+            } catch (autoInnNameChoiceError) {
+              logLine('AUTO INN NAME CHOICE ERROR ' + (autoInnNameChoiceError && (autoInnNameChoiceError.stack || autoInnNameChoiceError.message) || autoInnNameChoiceError));
+            }
+          };
           var probeAutoNameChoiceState = function (line) {
             if (!hasQueryFlag('traceAutoNameChoice') || window.__runnerAutoNameChoiceProbeLogged) return;
             try {
@@ -1762,6 +1790,9 @@
                 1: params.get('stubGivenName') || '清',
                 3: params.get('stubNickname') || '苏清'
               };
+              if (String(event.Argv && event.Argv[3] || '').indexOf('客栈名称') !== -1) {
+                defaults[6] = params.get('stubInnName') || '无名客栈';
+              }
               if (strings && strings.setVar) {
                 Object.keys(defaults).forEach(function (key) {
                   strings.setVar(parseInt(key, 10), defaults[key]);
@@ -1872,6 +1903,7 @@
               }
               maybeAutoCreateCharacterConfirm(line);
               maybeAutoNameChoice(line);
+              maybeAutoInnNameChoice(line);
               probeAutoNameChoiceState(line);
               patchFirstSceneLobbyButtonsNow(line);
               maybePatchFirstSceneLobbyButtons(line);
