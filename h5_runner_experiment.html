@@ -1867,6 +1867,34 @@
               return false;
             }
           };
+          var maybeStubInitialVitals = function () {
+            if (!hasQueryFlag('stubInitialVitals') || window.__runnerInitialVitalsStubbed) return;
+            try {
+              var gd = window.GloableData && GloableData.getInstance ? GloableData.getInstance() : null;
+              var vars = gd && gd.dGameSystem && gd.dGameSystem.vars;
+              if (!vars || !vars.setVar) return;
+              var readVar = function (index) {
+                try {
+                  return vars.getVar ? vars.getVar(index) : vars.data && vars.data[index];
+                } catch (readVitalsError) {
+                  return null;
+                }
+              };
+              var stamina = parseInt(readVar(50), 10);
+              var mood = parseInt(readVar(52), 10);
+              if (!isFinite(stamina) || stamina <= 0) vars.setVar(50, parseInt(new URLSearchParams(window.location.search).get('stubInitialStamina') || '100', 10));
+              if (!isFinite(mood) || mood <= 0) vars.setVar(52, parseInt(new URLSearchParams(window.location.search).get('stubInitialMood') || '100', 10));
+              window.__runnerInitialVitalsStubbed = true;
+              logLine('STUB INITIAL VITALS ' + JSON.stringify({
+                staminaBefore: stamina,
+                moodBefore: mood,
+                staminaAfter: readVar(50),
+                moodAfter: readVar(52)
+              }));
+            } catch (stubVitalsError) {
+              logLine('STUB INITIAL VITALS ERROR ' + (stubVitalsError && (stubVitalsError.stack || stubVitalsError.message) || stubVitalsError));
+            }
+          };
           var wrapStoryMethod = function (object, methodName, label) {
             if (!object || !object[methodName] || object[methodName].__runnerStoryWrapped) return;
             var originalMethod = object[methodName];
@@ -1958,6 +1986,7 @@
               maybeAutoCreateCharacterConfirm(line);
               maybeAutoNameChoice(line);
               maybeAutoInnNameChoice(line);
+              maybeStubInitialVitals();
               probeAutoNameChoiceState(line);
               patchFirstSceneLobbyButtonsNow(line);
               maybePatchFirstSceneLobbyButtons(line);
