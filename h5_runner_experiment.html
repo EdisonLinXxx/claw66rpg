@@ -1597,10 +1597,22 @@
               }
               if (!line.currentShowEvent || !line.currentShowEvent.finish) return;
               var params = new URLSearchParams(window.location.search);
-              var choiceIndex = parseInt(params.get('autoNameChoiceIndex') || '1', 10);
+              var sequence = (params.get('autoNameChoiceSequence') || '').split(',').map(function (item) {
+                return parseInt(item, 10);
+              }).filter(function (item) {
+                return isFinite(item);
+              });
+              if (!sequence.length) sequence = [parseInt(params.get('autoNameChoiceIndex') || '1', 10)];
+              var sequenceStep = window.__runnerAutoNameChoiceStep || 0;
+              if (sequenceStep >= sequence.length) {
+                window.__runnerAutoNameChoiceDone = true;
+                return;
+              }
+              var choiceIndex = sequence[sequenceStep];
               if (!isFinite(choiceIndex)) choiceIndex = 1;
-              window.__runnerAutoNameChoiceDone = true;
-              logLine('AUTO NAME CHOICE finish(' + choiceIndex + ')');
+              window.__runnerAutoNameChoiceStep = sequenceStep + 1;
+              window.__runnerAutoNameChoiceDone = window.__runnerAutoNameChoiceStep >= sequence.length;
+              logLine('AUTO NAME CHOICE finish(' + choiceIndex + ') step=' + window.__runnerAutoNameChoiceStep + '/' + sequence.length);
               line.currentShowEvent.finish(choiceIndex);
             } catch (autoNameChoiceError) {
               logLine('AUTO NAME CHOICE ERROR ' + (autoNameChoiceError && (autoNameChoiceError.stack || autoNameChoiceError.message) || autoNameChoiceError));
@@ -1729,14 +1741,19 @@
             }
           };
           var maybeStubCode214Name = function (line) {
-            if (!hasQueryFlag('stubCode214Name') || window.__runnerCode214NameStubbed) return;
+            if (!hasQueryFlag('stubCode214Name')) return false;
             try {
               var eventAtPos = line && line.story && line.story.events && line.story.events[line.pos] || null;
               var event = eventAtPos && eventAtPos.Code === 214 ? eventAtPos : line && line.currentEvent || eventAtPos;
-              if (!event || event.Code !== 214) return;
+              if (!event || event.Code !== 214) return false;
               var index = parseInt(event.Argv && event.Argv[0], 10);
-              if (index !== 10014) return;
+              if (index !== 10014) return false;
+              var stubKey = String(line && line.pos || 'unknown') + ':' + index;
+              window.__runnerCode214NameStubbedKeys = window.__runnerCode214NameStubbedKeys || {};
+              if (window.__runnerCode214NameStubbedKeys[stubKey]) return true;
+              window.__runnerCode214NameStubbedKeys[stubKey] = true;
               window.__runnerCode214NameStubbed = true;
+              window.__runnerCode214NameStubbedCount = Object.keys(window.__runnerCode214NameStubbedKeys).length;
               var gd = window.GloableData && GloableData.getInstance ? GloableData.getInstance() : null;
               var strings = gd && gd.dGameSystem && gd.dGameSystem.dGameString;
               var params = new URLSearchParams(window.location.search);
@@ -1768,11 +1785,14 @@
                 index: index,
                 defaults: defaults,
                 pos: line.pos,
+                key: stubKey,
                 isPause: line.isPause,
                 eventRunFinish: line.eventRunFinish
               }));
+              return true;
             } catch (stubError) {
               logLine('STUB CODE214 NAME ERROR ' + (stubError && (stubError.stack || stubError.message) || stubError));
+              return false;
             }
           };
           var wrapStoryMethod = function (object, methodName, label) {
@@ -1788,7 +1808,8 @@
                 var beforeEventAtPos = this && this.story && this.story.events && this.pos !== undefined && this.story.events[this.pos] || null;
                 var beforeEvent = beforeEventAtPos && beforeEventAtPos.Code === 214 ? beforeEventAtPos : this && this.currentEvent || beforeEventAtPos;
                 if (beforeEvent && beforeEvent.Code === 214 && parseInt(beforeEvent.Argv && beforeEvent.Argv[0], 10) === 10014) {
-                  maybeStubCode214Name(this);
+                  var stubbedName = maybeStubCode214Name(this);
+                  if (!stubbedName) return originalMethod.apply(this, arguments);
                   if (this && typeof this.eventFinish === 'function') {
                     logLine('STUB CODE214 NAME eventFinish() from ' + label + '.' + methodName);
                     return this.eventFinish();
@@ -1883,7 +1904,7 @@
               try {
                 var gd = window.GloableData && GloableData.getInstance ? GloableData.getInstance() : null;
                 maybeStubCode214Name(gd && gd.currentLine || null);
-                if (window.__runnerCode214NameStubbed) clearInterval(window.__runnerCode214NameStubTimer);
+                if (window.__runnerCode214NameStubbedCount >= 2) clearInterval(window.__runnerCode214NameStubTimer);
               } catch (stubTimerError) {
                 logLine('STUB CODE214 NAME TIMER ERROR ' + (stubTimerError && (stubTimerError.stack || stubTimerError.message) || stubTimerError));
               }
