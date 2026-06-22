@@ -646,6 +646,17 @@
         };
         var WrappedButtonDifEvent = function (event, line) {
           patchLobbyEventArgv(event, line, 'before-construct');
+          if (hasQueryFlag('patchFirstSceneLobbyButtons')) {
+            try {
+              if (event && event.Code === 204 && line && line.storyId === 1 && line.pos === 47) {
+                var oldAvatarArgv = Array.prototype.slice.call(event.Argv || []);
+                event.Argv = ['43,830,30,', '20,830,100,'];
+                logLine('PATCH INITIAL AVATAR BUTTONS before-construct ' + JSON.stringify({ oldArgv: oldAvatarArgv, newArgv: event.Argv }));
+              }
+            } catch (patchAvatarEventError) {
+              logLine('PATCH INITIAL AVATAR BUTTONS EVENT ERROR ' + (patchAvatarEventError && (patchAvatarEventError.stack || patchAvatarEventError.message) || patchAvatarEventError));
+            }
+          }
           var instance = new OriginalButtonDifEvent(event, line);
           if ((hasQueryFlag('traceBranchChoice') || hasQueryFlag('patchFirstSceneLobbyButtons')) && instance && !instance.__runnerTraceBranchChoice) {
             var originalFinish = instance.finish;
@@ -1722,6 +1733,16 @@
           var patchFirstSceneLobbyButtonsNow = function (line) {
             if (!hasQueryFlag('patchFirstSceneLobbyButtons')) return;
             try {
+              if (line && line.storyId === 1 && line.pos === 47) {
+                var avatarEvent = line.story && line.story.events && line.story.events[line.pos] || null;
+                if (avatarEvent && avatarEvent.Code === 204) {
+                  var oldAvatarArgv = Array.prototype.slice.call(avatarEvent.Argv || []);
+                  avatarEvent.Argv = ['43,830,30,', '20,830,100,'];
+                  if (line.currentEvent === avatarEvent || !line.currentEvent || line.currentEvent.Code === 204) line.currentEvent = avatarEvent;
+                  logLine('PATCH INITIAL AVATAR BUTTONS FORCE ' + JSON.stringify({ oldArgv: oldAvatarArgv, newArgv: avatarEvent.Argv }));
+                }
+                return;
+              }
               if (window.__runnerFirstSceneLobbyButtonsPatched) return;
               if (!line || line.storyId !== 1 || line.pos !== 7) return;
               var event = line.story && line.story.events && line.story.events[line.pos] || null;
