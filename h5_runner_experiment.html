@@ -652,6 +652,10 @@
                 var oldAvatarArgv = Array.prototype.slice.call(event.Argv || []);
                 event.Argv = ['43,830,30,', '20,830,100,'];
                 logLine('PATCH INITIAL AVATAR BUTTONS before-construct ' + JSON.stringify({ oldArgv: oldAvatarArgv, newArgv: event.Argv }));
+              } else if (event && event.Code === 204 && line && line.storyId === 1 && line.pos === 231) {
+                var oldNameInputArgv = Array.prototype.slice.call(event.Argv || []);
+                event.Argv = ['23,422,205,', '23,422,258,', '25,602,203,', '26,440,310,'];
+                logLine('PATCH NAME INPUT BUTTONS before-construct ' + JSON.stringify({ oldArgv: oldNameInputArgv, newArgv: event.Argv }));
               }
             } catch (patchAvatarEventError) {
               logLine('PATCH INITIAL AVATAR BUTTONS EVENT ERROR ' + (patchAvatarEventError && (patchAvatarEventError.stack || patchAvatarEventError.message) || patchAvatarEventError));
@@ -1740,6 +1744,16 @@
                   avatarEvent.Argv = ['43,830,30,', '20,830,100,'];
                   if (line.currentEvent === avatarEvent || !line.currentEvent || line.currentEvent.Code === 204) line.currentEvent = avatarEvent;
                   logLine('PATCH INITIAL AVATAR BUTTONS FORCE ' + JSON.stringify({ oldArgv: oldAvatarArgv, newArgv: avatarEvent.Argv }));
+                }
+                return;
+              }
+              if (line && line.storyId === 1 && line.pos === 231) {
+                var nameInputEvent = line.story && line.story.events && line.story.events[line.pos] || null;
+                if (nameInputEvent && nameInputEvent.Code === 204) {
+                  var oldNameInputArgv = Array.prototype.slice.call(nameInputEvent.Argv || []);
+                  nameInputEvent.Argv = ['23,422,205,', '23,422,258,', '25,602,203,', '26,440,310,'];
+                  if (line.currentEvent === nameInputEvent || !line.currentEvent || line.currentEvent.Code === 204) line.currentEvent = nameInputEvent;
+                  logLine('PATCH NAME INPUT BUTTONS FORCE ' + JSON.stringify({ oldArgv: oldNameInputArgv, newArgv: nameInputEvent.Argv }));
                 }
                 return;
               }
