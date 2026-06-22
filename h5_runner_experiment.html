@@ -2053,6 +2053,58 @@
             window.__runnerDispatchSCUIButton = dispatchSCUIButton;
             logLine('SCUI button hit patch enabled');
           };
+          var installNewbieChestHitProxy = function () {
+            if (!hasQueryFlag('patchFirstSceneLobbyButtons') || window.__runnerNewbieChestHitProxyPatched) return;
+            if (!window.Laya || !Laya.stage) return;
+            window.__runnerNewbieChestHitProxyPatched = true;
+            var chestBoxes = [
+              { x: 100, y: 218, w: 205, h: 122 },
+              { x: 383, y: 218, w: 205, h: 122 },
+              { x: 669, y: 218, w: 205, h: 122 }
+            ];
+            var originalHitBoxes = [
+              { x: 93, y: 204, w: 69, h: 82 },
+              { x: 376, y: 204, w: 69, h: 82 },
+              { x: 662, y: 204, w: 69, h: 82 }
+            ];
+            var insideBox = function (x, y, box) {
+              return x >= box.x && x <= box.x + box.w && y >= box.y && y <= box.y + box.h;
+            };
+            Laya.stage.on(window.OEvent && OEvent.MOUSE_DOWN || 'mousedown', null, function (event) {
+              try {
+                var gd = window.GloableData && GloableData.getInstance ? GloableData.getInstance() : null;
+                var line = gd && gd.currentLine || null;
+                if (!line || line.storyId !== 1 || line.pos !== 2101) return;
+                var showEvent = line.currentShowEvent || null;
+                if (!showEvent || !showEvent.finish) return;
+                var x = Laya.stage.mouseX;
+                var y = Laya.stage.mouseY;
+                for (var originalIndex = 0; originalIndex < originalHitBoxes.length; originalIndex++) {
+                  if (insideBox(x, y, originalHitBoxes[originalIndex])) return;
+                }
+                for (var choiceIndex = 0; choiceIndex < chestBoxes.length; choiceIndex++) {
+                  if (!insideBox(x, y, chestBoxes[choiceIndex])) continue;
+                  var now = Date.now ? Date.now() : new Date().getTime();
+                  if (window.__runnerNewbieChestHitProxyAt && now - window.__runnerNewbieChestHitProxyAt < 600) return;
+                  window.__runnerNewbieChestHitProxyAt = now;
+                  var button = showEvent.buttons && showEvent.buttons[choiceIndex];
+                  logLine('PATCH NEWBIE CHEST HIT PROXY ' + JSON.stringify({
+                    choiceIndex: choiceIndex,
+                    x: x,
+                    y: y,
+                    buttonIndex: button && button.index,
+                    linePos: line.pos
+                  }));
+                  showEvent.finish(choiceIndex);
+                  if (event && event.stopPropagation) event.stopPropagation();
+                  return;
+                }
+              } catch (chestProxyError) {
+                logLine('PATCH NEWBIE CHEST HIT PROXY ERROR ' + (chestProxyError && (chestProxyError.stack || chestProxyError.message) || chestProxyError));
+              }
+            });
+            logLine('newbie chest hit proxy enabled');
+          };
           var maybeStubInitialVitals = function () {
             if (!hasQueryFlag('stubInitialVitals') || window.__runnerInitialVitalsStubbed) return;
             try {
@@ -2174,6 +2226,7 @@
               maybeAutoInnNameChoice(line);
               maybeStubInitialVitals();
               installSCUIButtonHitPatch();
+              installNewbieChestHitProxy();
               probeAutoNameChoiceState(line);
               patchFirstSceneLobbyButtonsNow(line);
               maybePatchFirstSceneLobbyButtons(line);
