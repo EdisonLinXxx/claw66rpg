@@ -1988,7 +1988,7 @@
                 width = width || 171;
                 height = height || 37;
               }
-              if ((!width || !height) && button && (button.index === 58 || button.index === 27)) {
+              if ((!width || !height) && button && (button.index === 58 || button.index === 27 || button.index === 26)) {
                 width = width || 90;
                 height = height || 50;
               }
@@ -2008,15 +2008,12 @@
               if (!button || !button.tag || !button.tag.event || !button.tag.event.length) return false;
               var gd = window.GloableData && GloableData.getInstance ? GloableData.getInstance() : null;
               var line = gd && gd.currentLine || null;
-              if (isBirthdayConfirmButton(button) && finishCode214Birthday(line, label || 'scui-click')) {
-                if (line && typeof line.eventFinish === 'function') line.eventFinish();
-                return true;
-              }
               try {
                 EventCenter.dispatchEvent(new GameEvent(GameEventConstant.CLICK_SCUI_BUTTON, button));
                 logLine('PATCH SCUI BUTTON HIT DISPATCH ' + JSON.stringify({
                   label: label || '',
                   index: button.index,
+                  isBirthdayConfirm: isBirthdayConfirmButton(button),
                   x: button.x,
                   y: button.y,
                   width: button.width,
@@ -2036,13 +2033,6 @@
                 var currentCode214Index = currentEvent && currentEvent.Code === 214 ? parseInt(currentEvent.Argv && currentEvent.Argv[0], 10) : NaN;
                 var x = Laya.stage.mouseX;
                 var y = Laya.stage.mouseY;
-                if (currentCode214Index === 495 && x >= 820 && x <= 960 && y >= 80 && y <= 180) {
-                  if (finishCode214Birthday(line, 'birthday-confirm-region')) {
-                    if (line && typeof line.eventFinish === 'function') line.eventFinish();
-                    if (event && event.stopPropagation) event.stopPropagation();
-                    return;
-                  }
-                }
                 var scui = view.SCustomUI.getInstance();
                 if (!scui || !scui.visible || !scui.controlsArr || !scui.controlsArr.length) return;
                 for (var index = scui.controlsArr.length - 1; index >= 0; index--) {
