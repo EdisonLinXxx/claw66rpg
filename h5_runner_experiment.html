@@ -1635,6 +1635,7 @@
                 return isFinite(item);
               });
               if (!sequence.length) sequence = [parseInt(params.get('autoNameChoiceIndex') || '1', 10)];
+              if (params.get('autoNameChoiceIndex') === null && params.get('autoNameChoiceSequence') === null) sequence = [3];
               var sequenceStep = window.__runnerAutoNameChoiceStep || 0;
               if (sequenceStep >= sequence.length) {
                 window.__runnerAutoNameChoiceDone = true;
@@ -1663,6 +1664,7 @@
                 return isFinite(item);
               });
               if (!sequence.length) sequence = [0, 2];
+              if (params.get('autoInnNameChoiceIndex') === null && params.get('autoInnNameChoiceSequence') === null) sequence = [2];
               var sequenceStep = window.__runnerAutoInnNameChoiceStep || 0;
               if (sequenceStep >= sequence.length) {
                 window.__runnerAutoInnNameChoiceDone = true;
@@ -1892,19 +1894,21 @@
               return false;
             }
           };
-          var maybeStubCode214Birthday = function (line) {
-            if (!hasQueryFlag('stubCode214Birthday')) return false;
+          var finishCode214Birthday = function (line, reason) {
             try {
               var eventAtPos = line && line.story && line.story.events && line.story.events[line.pos] || null;
               var event = eventAtPos && eventAtPos.Code === 214 ? eventAtPos : line && line.currentEvent || eventAtPos;
               if (!event || event.Code !== 214) return false;
               var index = parseInt(event.Argv && event.Argv[0], 10);
               if (index !== 495) return false;
-              var stubKey = String(line && line.pos || 'unknown') + ':' + index;
-              window.__runnerCode214BirthdayStubbedKeys = window.__runnerCode214BirthdayStubbedKeys || {};
-              if (window.__runnerCode214BirthdayStubbedKeys[stubKey]) return true;
-              window.__runnerCode214BirthdayStubbedKeys[stubKey] = true;
-              window.__runnerCode214BirthdayStubbed = true;
+              var gd = window.GloableData && GloableData.getInstance ? GloableData.getInstance() : null;
+              var vars = gd && gd.dGameSystem && gd.dGameSystem.vars;
+              if (vars && vars.setVar) {
+                try {
+                  if (!parseInt(vars.getVar && vars.getVar(9), 10)) vars.setVar(9, 1);
+                  if (!parseInt(vars.getVar && vars.getVar(10), 10)) vars.setVar(10, 1);
+                } catch (birthdayVarError) {}
+              }
               try {
                 if (window.view && view.SCustomUI && view.SCustomUI.getInstance) view.SCustomUI.getInstance().hideUI();
               } catch (hideBirthdayScuiError) {}
@@ -1914,24 +1918,120 @@
                   UIManager.getInstance().gameSystemUILayer.setMenuVisible(true);
                 }
               }
-              var gd = window.GloableData && GloableData.getInstance ? GloableData.getInstance() : null;
               if (gd) gd.CUIFromIndex = -1;
               line.isPause = false;
               line.eventRunFinish = true;
               if (line.currentEvent === event) line.currentEvent = null;
               if (line.currentShowEvent) line.currentShowEvent.isSuiFinish = true;
-              logLine('STUB CODE214 BIRTHDAY ' + JSON.stringify({
+              logLine('FINISH CODE214 BIRTHDAY ' + JSON.stringify({
                 index: index,
                 pos: line.pos,
-                key: stubKey,
+                reason: reason || '',
                 isPause: line.isPause,
                 eventRunFinish: line.eventRunFinish
               }));
               return true;
-            } catch (stubBirthdayError) {
-              logLine('STUB CODE214 BIRTHDAY ERROR ' + (stubBirthdayError && (stubBirthdayError.stack || stubBirthdayError.message) || stubBirthdayError));
+            } catch (finishBirthdayError) {
+              logLine('FINISH CODE214 BIRTHDAY ERROR ' + (finishBirthdayError && (finishBirthdayError.stack || finishBirthdayError.message) || finishBirthdayError));
               return false;
             }
+          };
+          var maybeStubCode214Birthday = function (line) {
+            if (!hasQueryFlag('stubCode214Birthday')) return false;
+            var eventAtPos = line && line.story && line.story.events && line.story.events[line.pos] || null;
+            var event = eventAtPos && eventAtPos.Code === 214 ? eventAtPos : line && line.currentEvent || eventAtPos;
+            var index = parseInt(event && event.Argv && event.Argv[0], 10);
+            var stubKey = String(line && line.pos || 'unknown') + ':' + index;
+            window.__runnerCode214BirthdayStubbedKeys = window.__runnerCode214BirthdayStubbedKeys || {};
+            if (index === 495 && window.__runnerCode214BirthdayStubbedKeys[stubKey]) return true;
+            if (index === 495) window.__runnerCode214BirthdayStubbedKeys[stubKey] = true;
+            window.__runnerCode214BirthdayStubbed = true;
+            return finishCode214Birthday(line, 'stub');
+          };
+          var installSCUIButtonHitPatch = function () {
+            if (!hasQueryFlag('patchFirstSceneLobbyButtons') || window.__runnerSCUIButtonHitPatched) return;
+            if (!window.Laya || !window.view || !view.SCustomUI || !view.SCustomUI.getInstance || !window.EventCenter || !window.GameEvent || !window.GameEventConstant) return;
+            window.__runnerSCUIButtonHitPatched = true;
+            var readButtonSize = function (button) {
+              var width = button && button.width || 0;
+              var height = button && button.height || 0;
+              try {
+                if ((!width || !height) && button.image_1) {
+                  width = width || button.image_1.width || button.image_1.source && button.image_1.source.width || 0;
+                  height = height || button.image_1.height || button.image_1.source && button.image_1.source.height || 0;
+                }
+                if ((!width || !height) && button.image_2) {
+                  width = width || button.image_2.width || button.image_2.source && button.image_2.source.width || 0;
+                  height = height || button.image_2.height || button.image_2.source && button.image_2.source.height || 0;
+                }
+              } catch (imageSizeError) {}
+              if ((!width || !height) && button && button.index === 23) {
+                width = width || 171;
+                height = height || 37;
+              }
+              if ((!width || !height) && button && (button.index === 58 || button.index === 27)) {
+                width = width || 90;
+                height = height || 50;
+              }
+              if ((!width || !height) && button && button.index === 22) {
+                width = width || 45;
+                height = height || 45;
+              }
+              return { width: width || 1, height: height || 1 };
+            };
+            var isBirthdayConfirmButton = function (button) {
+              var events = button && button.tag && button.tag.event || [];
+              return events.some(function (event) {
+                return event && event.Code === 214 && String(event.Argv && event.Argv[0]) === '496';
+              });
+            };
+            var dispatchSCUIButton = function (button, label) {
+              if (!button || !button.tag || !button.tag.event || !button.tag.event.length) return false;
+              var gd = window.GloableData && GloableData.getInstance ? GloableData.getInstance() : null;
+              var line = gd && gd.currentLine || null;
+              if (isBirthdayConfirmButton(button) && finishCode214Birthday(line, label || 'scui-click')) {
+                if (line && typeof line.eventFinish === 'function') line.eventFinish();
+                return true;
+              }
+              try {
+                EventCenter.dispatchEvent(new GameEvent(GameEventConstant.CLICK_SCUI_BUTTON, button));
+                logLine('PATCH SCUI BUTTON HIT DISPATCH ' + JSON.stringify({
+                  label: label || '',
+                  index: button.index,
+                  x: button.x,
+                  y: button.y,
+                  width: button.width,
+                  height: button.height
+                }));
+                return true;
+              } catch (dispatchError) {
+                logLine('PATCH SCUI BUTTON HIT DISPATCH ERROR ' + (dispatchError && (dispatchError.stack || dispatchError.message) || dispatchError));
+                return false;
+              }
+            };
+            Laya.stage.on(window.OEvent && OEvent.MOUSE_DOWN || 'mousedown', null, function (event) {
+              try {
+                var scui = view.SCustomUI.getInstance();
+                if (!scui || !scui.visible || !scui.controlsArr || !scui.controlsArr.length) return;
+                var x = Laya.stage.mouseX;
+                var y = Laya.stage.mouseY;
+                for (var index = scui.controlsArr.length - 1; index >= 0; index--) {
+                  var button = scui.controlsArr[index];
+                  if (!button || button.visible === false || button.dispatchStr !== GameEventConstant.CLICK_SCUI_BUTTON) continue;
+                  if (!button.tag || !button.tag.event || !button.tag.event.length) continue;
+                  var size = readButtonSize(button);
+                  if (x >= button.x && x <= button.x + size.width && y >= button.y && y <= button.y + size.height) {
+                    dispatchSCUIButton(button, 'stage-mousedown');
+                    if (event && event.stopPropagation) event.stopPropagation();
+                    return;
+                  }
+                }
+              } catch (hitError) {
+                logLine('PATCH SCUI BUTTON HIT ERROR ' + (hitError && (hitError.stack || hitError.message) || hitError));
+              }
+            });
+            window.__runnerDispatchSCUIButton = dispatchSCUIButton;
+            logLine('SCUI button hit patch enabled');
           };
           var maybeStubInitialVitals = function () {
             if (!hasQueryFlag('stubInitialVitals') || window.__runnerInitialVitalsStubbed) return;
@@ -2053,6 +2153,7 @@
               maybeAutoNameChoice(line);
               maybeAutoInnNameChoice(line);
               maybeStubInitialVitals();
+              installSCUIButtonHitPatch();
               probeAutoNameChoiceState(line);
               patchFirstSceneLobbyButtonsNow(line);
               maybePatchFirstSceneLobbyButtons(line);
