@@ -636,8 +636,10 @@
           try {
             if (!event || event.Code !== 204 || !line || line.storyId !== 1 || line.pos !== 7) return;
             var oldArgv = Array.prototype.slice.call(event.Argv || []);
-            event.Argv = ['40,470,388,', '41,605,388,', '34,740,388,', '44,555,100,', '15,655,100,', '160,755,100,'];
-            logLine('PATCH FIRST SCENE LOBBY BUTTONS ' + label + ' ' + JSON.stringify({ oldArgv: oldArgv, newArgv: event.Argv }));
+            event.Argv = ['40,470,388,', '41,605,388,', '44,740,388,', '15,555,100,', '34,655,100,', '160,755,100,'];
+            event.links = [9, 11, 14, 31, 13, 33];
+            if (line) line.currentLinks = event.links.slice();
+            logLine('PATCH FIRST SCENE LOBBY BUTTONS ' + label + ' ' + JSON.stringify({ oldArgv: oldArgv, newArgv: event.Argv, newLinks: event.links }));
           } catch (patchLobbyEventError) {
             logLine('PATCH FIRST SCENE LOBBY BUTTONS EVENT ERROR ' + (patchLobbyEventError && (patchLobbyEventError.stack || patchLobbyEventError.message) || patchLobbyEventError));
           }
@@ -645,15 +647,21 @@
         var WrappedButtonDifEvent = function (event, line) {
           patchLobbyEventArgv(event, line, 'before-construct');
           var instance = new OriginalButtonDifEvent(event, line);
-          if (hasQueryFlag('traceBranchChoice') && instance && !instance.__runnerTraceBranchChoice) {
+          if ((hasQueryFlag('traceBranchChoice') || hasQueryFlag('patchFirstSceneLobbyButtons')) && instance && !instance.__runnerTraceBranchChoice) {
             var originalFinish = instance.finish;
             instance.finish = function (choiceIndex) {
-              try {
+              var effectiveChoiceIndex = choiceIndex;
+              if (hasQueryFlag('patchFirstSceneLobbyButtons') && this.mainLine && this.mainLine.storyId === 1 && this.mainLine.pos === 7) {
+                var firstSceneChoiceMap = [0, 1, 3, 4, 2, 5];
+                if (firstSceneChoiceMap[choiceIndex] !== undefined) effectiveChoiceIndex = firstSceneChoiceMap[choiceIndex];
+              }
+              if (hasQueryFlag('traceBranchChoice')) try {
                 var button = this.buttons && this.buttons[choiceIndex];
                 var systemButton = button && GloableData.getInstance().gameMainData.System.Buttons[button.index];
                 var branch = this.mainLine && this.mainLine.indentStack && this.mainLine.indentStack[this.mainLine.indentStack.length - 1];
                 logLine('BRANCH CHOICE ' + JSON.stringify({
                   choiceIndex: choiceIndex,
+                  effectiveChoiceIndex: effectiveChoiceIndex,
                   buttonIndex: button && button.index,
                   buttonName: systemButton && systemButton.name || '',
                   image1: systemButton && systemButton.image1 && systemButton.image1.name || '',
@@ -667,7 +675,7 @@
               } catch (traceBranchChoiceError) {
                 logLine('BRANCH CHOICE ERROR ' + (traceBranchChoiceError && (traceBranchChoiceError.stack || traceBranchChoiceError.message) || traceBranchChoiceError));
               }
-              return originalFinish.apply(this, arguments);
+              return originalFinish.call(this, effectiveChoiceIndex);
             };
             instance.__runnerTraceBranchChoice = true;
           }
@@ -1702,9 +1710,11 @@
                 return oldArgv[index] === value;
               });
               if (!matchesCurrent) return;
-              event.Argv = ['40,470,388,', '41,605,388,', '34,740,388,', '44,555,100,', '15,655,100,', '160,755,100,'];
+              event.Argv = ['40,470,388,', '41,605,388,', '44,740,388,', '15,555,100,', '34,655,100,', '160,755,100,'];
+              event.links = [9, 11, 14, 31, 13, 33];
+              line.currentLinks = event.links.slice();
               window.__runnerFirstSceneLobbyButtonsPatched = true;
-              logLine('PATCH FIRST SCENE LOBBY BUTTONS ' + JSON.stringify({ oldArgv: oldArgv, newArgv: event.Argv }));
+              logLine('PATCH FIRST SCENE LOBBY BUTTONS ' + JSON.stringify({ oldArgv: oldArgv, newArgv: event.Argv, newLinks: event.links }));
             } catch (patchLobbyError) {
               logLine('PATCH FIRST SCENE LOBBY BUTTONS ERROR ' + (patchLobbyError && (patchLobbyError.stack || patchLobbyError.message) || patchLobbyError));
             }
@@ -1717,10 +1727,12 @@
               var event = line.story && line.story.events && line.story.events[line.pos] || null;
               if (!event || event.Code !== 204) return;
               var oldArgv = Array.prototype.slice.call(event.Argv || []);
-              event.Argv = ['40,470,388,', '41,605,388,', '34,740,388,', '44,555,100,', '15,655,100,', '160,755,100,'];
+              event.Argv = ['40,470,388,', '41,605,388,', '44,740,388,', '15,555,100,', '34,655,100,', '160,755,100,'];
+              event.links = [9, 11, 14, 31, 13, 33];
+              line.currentLinks = event.links.slice();
               if (line.currentEvent === event || !line.currentEvent || line.currentEvent.Code === 204) line.currentEvent = event;
               window.__runnerFirstSceneLobbyButtonsPatched = true;
-              logLine('PATCH FIRST SCENE LOBBY BUTTONS FORCE ' + JSON.stringify({ oldArgv: oldArgv, newArgv: event.Argv }));
+              logLine('PATCH FIRST SCENE LOBBY BUTTONS FORCE ' + JSON.stringify({ oldArgv: oldArgv, newArgv: event.Argv, newLinks: event.links }));
             } catch (patchLobbyNowError) {
               logLine('PATCH FIRST SCENE LOBBY BUTTONS FORCE ERROR ' + (patchLobbyNowError && (patchLobbyNowError.stack || patchLobbyNowError.message) || patchLobbyNowError));
             }
