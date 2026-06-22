@@ -2011,10 +2011,21 @@
             };
             Laya.stage.on(window.OEvent && OEvent.MOUSE_DOWN || 'mousedown', null, function (event) {
               try {
-                var scui = view.SCustomUI.getInstance();
-                if (!scui || !scui.visible || !scui.controlsArr || !scui.controlsArr.length) return;
+                var gd = window.GloableData && GloableData.getInstance ? GloableData.getInstance() : null;
+                var line = gd && gd.currentLine || null;
+                var currentEvent = line && (line.currentEvent || (line.story && line.story.events && line.story.events[line.pos])) || null;
+                var currentCode214Index = currentEvent && currentEvent.Code === 214 ? parseInt(currentEvent.Argv && currentEvent.Argv[0], 10) : NaN;
                 var x = Laya.stage.mouseX;
                 var y = Laya.stage.mouseY;
+                if (currentCode214Index === 495 && x >= 820 && x <= 960 && y >= 80 && y <= 180) {
+                  if (finishCode214Birthday(line, 'birthday-confirm-region')) {
+                    if (line && typeof line.eventFinish === 'function') line.eventFinish();
+                    if (event && event.stopPropagation) event.stopPropagation();
+                    return;
+                  }
+                }
+                var scui = view.SCustomUI.getInstance();
+                if (!scui || !scui.visible || !scui.controlsArr || !scui.controlsArr.length) return;
                 for (var index = scui.controlsArr.length - 1; index >= 0; index--) {
                   var button = scui.controlsArr[index];
                   if (!button || button.visible === false || button.dispatchStr !== GameEventConstant.CLICK_SCUI_BUTTON) continue;
