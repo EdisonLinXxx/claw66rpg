@@ -560,6 +560,24 @@
             throw new Error('new CUI size mismatch declared=' + declaredSize + ' actual=' + actualSize + ' start=' + start);
           }
         };
+        var patchNewCUIData = function (cuiIndex, cuiData) {
+          try {
+            if (cuiIndex !== 495 || !cuiData || !cuiData.controls) return;
+            for (var controlIndex = 0; controlIndex < cuiData.controls.length; controlIndex++) {
+              var control = cuiData.controls[controlIndex];
+              var events = control && control.event || [];
+              var opensBirthdayNext = events.some(function (event) {
+                return event && event.Code === 214 && String(event.Argv && event.Argv[0]) === '496';
+              });
+              if (opensBirthdayNext && control.index === 58) {
+                control.index = 26;
+                logLine('PATCH BIRTHDAY CONFIRM BUTTON INDEX ' + JSON.stringify({ cuiIndex: cuiIndex, controlIndex: controlIndex, newIndex: control.index }));
+              }
+            }
+          } catch (patchCuiError) {
+            logLine('PATCH BIRTHDAY CONFIRM BUTTON INDEX ERROR ' + (patchCuiError && (patchCuiError.stack || patchCuiError.message) || patchCuiError));
+          }
+        };
         var NewDSystem = function (stream) {
           this.Cuis = null;
           this.FontStyleColor = '';
@@ -620,6 +638,7 @@
             for (var cuiIndex = 0; cuiIndex < cuiCount; cuiIndex++) {
               var declaredSize = stream.getInt32();
               this.Cuis[cuiIndex] = new NewCustomUIData(stream, declaredSize);
+              patchNewCUIData(cuiIndex, this.Cuis[cuiIndex]);
             }
             this.MenuIndex = stream.getInt32();
             logLine('new DSystem Cuis parsed=' + cuiCount + ' menuIndex=' + this.MenuIndex + ' pos=' + stream.pos);
