@@ -814,6 +814,7 @@
           };
           var startTitleStory = function (label) {
             var system = GloableData.getInstance().gameMainData.System;
+            window.__runnerTitleStoryStarted = true;
             logLine(label + ' storyId=' + system.StartStoryId);
             UIManager.getInstance().closeView(view.TitleUIMediator.NAME, false);
             if (GloableData.getInstance().isFreeLimit) {
@@ -838,7 +839,11 @@
             window.__runnerTitleClickPatched = true;
             var started = false;
             var handler = function (domEvent) {
-              if (started) return;
+              if (started || window.__runnerTitleStoryStarted) return;
+              try {
+                var gd = window.GloableData && GloableData.getInstance ? GloableData.getInstance() : null;
+                if (gd && gd.currentLine) return;
+              } catch (titleClickStateError) {}
               started = true;
               try {
                 if (domEvent && domEvent.preventDefault) domEvent.preventDefault();
