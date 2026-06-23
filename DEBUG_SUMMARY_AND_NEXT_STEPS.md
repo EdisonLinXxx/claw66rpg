@@ -1,24 +1,27 @@
 # 66RPG Game Grab/Run Technical Debug Summary
 
+更新时间：2026-06-23
+
 ## Scope
 
 - Target platform reference: `https://www.66rpg.com`
 - Target game page: `https://www.66rpg.com/game/1569947`
 - Game name observed from runtime: `【区半挂件】美人客栈`
-- Goal: verify whether a 66RPG game package and required runtime resources can be fetched, mirrored locally, and run inside our own local test page.
-- Legal/commercial evaluation is intentionally out of scope for this technical validation document.
+- Local validation goal: verify whether a 66RPG game package, mapped resources, runtime patches, and platform API substitutes can support a playable H5 game inside our own local runner.
+- MVP implication: this game is the first technical proof sample. The broader MVP direction is to support importing multiple interactive story games into a unified game library, not to limit the platform to this one game.
 
 ## Repository And Test Harness
 
 - Test repo: `https://github.com/EdisonLinXxx/claw66rpg.git`
-- Local working directory used for validation: `D:\remote\wuming\乙女恋爱物语\.tmp-claw66rpg`
+- Local working directory: `D:\remote\wuming\乙女恋爱物语\.tmp-claw66rpg`
 - Source reference copied into the test repo: `PeaShooterR/fuck66rpg`
 - Main local runner: `h5_runner_experiment.html`
 - Mirror helper: `66rpgProjectDropper/prepare_runner_mirror.py`
-- Full round-by-round raw log: `VERIFY_LOG.md`
-- Local mirrored resources directory: `shareres/`
-  - This directory is intentionally not committed.
-  - It contains locally mirrored CDN resources needed by the runner.
+- Local mirrored resource directory: `shareres/`
+  - The directory is ignored by default.
+  - Verified required resources are force-added case by case with `git add -f`.
+- Latest local reports and screenshots are under:
+  - `C:\tmp\claw_verify\`
 
 ## Game Package Facts
 
@@ -37,12 +40,12 @@ Current conclusion: downloading the game package and resolving mapped static res
 
 ## Public Runtime Facts
 
-- Official game pages tested all point to the same public H5 player:
+- Official game pages tested point to the public H5 player:
   - `https://c2.cgyouxi.com/website/hfplayer/v2/bin/main.min.js?v=20210202002`
 - `main.min.js` query parameters are cache busters only.
 - Tested `hfplayer/v1`, `hfplayer/v3`, debug paths, and common `main.js` candidates did not expose a usable alternate runtime.
 
-Current conclusion: the available public runtime is a fixed old player. Compatibility must be handled by runner-side patches or by reimplementing enough parsing/runtime behavior.
+Current conclusion: the available public runtime is a fixed old player. Compatibility must be handled by runner-side patches, local stubs, or targeted reimplementation of missing host/platform behavior.
 
 ## Parser Debug History
 
@@ -51,7 +54,7 @@ Current conclusion: the available public runtime is a fixed old player. Compatib
 - Initial local runner could initialize the official H5 player.
 - It failed in `readGameBin` with:
   - `getInt32 error - Out of bounds`
-- The failure reproduced both from CDN resources and local mirrored resources.
+- The failure reproduced from both CDN resources and local mirrored resources.
 
 Conclusion: the failure was not caused by CORS, CDN access, or local serving. It was a binary parser/runtime compatibility issue.
 
@@ -60,7 +63,7 @@ Conclusion: the failure was not caused by CORS, CDN access, or local serving. It
 - Trace path:
   - `DMain -> DHeader -> DSystem`
 - The public player reads a DSystem button count of `80`.
-- Offline scanning showed the binary actually contains `453` button-shaped records.
+- Offline scanning showed the binary contains `453` button-shaped records.
 - A one-byte pad exists before many button records.
 - Skipping that pad allowed parsing to advance beyond the original failure.
 
@@ -84,14 +87,12 @@ Conclusion: this game uses a newer DSystem layout than the public player expects
 
 Current conclusion: the game binary can be parsed through `DMain` using runner-side schema patches.
 
-## Local Runner Patches
-
-The runner currently uses query flags to enable controlled patches and diagnostics.
+## Local Runner Patches And Flags
 
 Recommended validation URL:
 
 ```text
-http://127.0.0.1:8765/h5_runner_experiment.html?localRes=1&patchNewDSystem=1&traceRuntime=1&traceTitle=1&traceNullPath=1&quietOafEvents=1&traceUiState=1&patchTitleClick=1&clearStorage=1&hideDebug=1
+http://127.0.0.1:8765/h5_runner_experiment.html?localRes=1&patchNewDSystem=1&traceRuntime=1&traceTitle=1&traceBranchChoice=1&traceNullPath=1&quietOafEvents=1&traceUiState=1&patchTitleClick=1&patchFirstSceneLobbyButtons=1&clearStorage=1&hideDebug=1&traceStoryState=1&traceAutoNameChoice=1&autoStartTitle=1&stubCode214Name=1&stubCode214Birthday=1&stubInitialVitals=1&stubPropShop=1&autoFirstSceneChoice=0&autoCreateCharacterConfirm=1&autoNameChoice=1&autoInnNameChoice=1&runId=latest
 ```
 
 Important flags:
@@ -104,18 +105,38 @@ Important flags:
   - logs runtime stage state and key runtime calls.
 - `traceTitle=1`
   - logs title screen configuration and title button data.
-- `patchTitleClick=1`
-  - shims local click/touch events to start the story from the title cover.
+- `traceBranchChoice=1`
+  - logs branch choice decisions such as `BRANCH CHOICE ...`.
 - `traceNullPath=1`
-  - traces likely JS paths that might emit `null path` requests.
+  - traces likely JS paths that might emit invalid path requests.
 - `quietOafEvents=1`
-  - suppresses repetitive OAF animation frame `LOAD_IMAGE_COMPLETE` logs.
+  - suppresses repetitive OAF animation frame logs.
 - `traceUiState=1`
-  - logs current Laya stage nodes and likely clickable `UI TARGETS`.
+  - logs current Laya stage nodes and likely clickable targets.
+- `patchTitleClick=1`
+  - shims local click/touch events to start from the title cover.
+- `patchFirstSceneLobbyButtons=1`
+  - applies local patches for early lobby/create-character/name/birthday/first-scene buttons and hit targets.
+- `traceStoryState=1`
+  - emits story id, position, event code, links, layers, and UI state.
+- `stubCode214Name=1`
+  - stubs the initial name input event where browser input bridging is unreliable.
+- `stubCode214Birthday=1`
+  - stubs birthday/custom UI confirmation.
+- `stubInitialVitals=1`
+  - initializes early player state needed by the opening story flow.
 - `stubPropShop=1`
-  - stubs local PropShop JSONP responses for mall owned-item and account-money state.
+  - stubs local PropShop JSONP responses for mall/account state.
+- `autoFirstSceneChoice=0`
+  - chooses the first opening lobby branch for deterministic validation.
+- `autoCreateCharacterConfirm=1`
+  - advances the create-character confirmation event.
+- `autoNameChoice=1`
+  - advances the name choice event.
+- `autoInnNameChoice=1`
+  - advances the inn-name event.
 
-## Runtime Progress Achieved
+## Current Runtime Progress
 
 The local runner can currently:
 
@@ -125,17 +146,84 @@ The local runner can currently:
 - load the title UI
 - patch title cover click
 - enter the first story scene
-- load first scene background resources
-- load first scene UI resources
-- load create-character related resources
-- load dynamic standing/OAF animation frames
-- continue at least one step after the first scene after mirroring `audio/se/move_1.mp3`
+- complete the early create-character/name/birthday/ability chain
+- complete the newbie chest branch
+- return from the chest reward into the real opening story (`storyId=44`)
+- advance through the opening narrative
+- reach the new-player tutorial choice at `storyId=44`, `pos=318`, `Code=101`
+- click both `看` and `不看` choices
+- enter the tutorial menu at `storyId=44`, `pos=324`, `Code=204`
+- display 11 tutorial/gameplay menu buttons
+- click the `经营` tutorial entry and advance to the follow-up `继续了解 / 都了解了` choice
+- skip the tutorial and enter the inn main screen at `storyId=15`, `pos=648`, `Code=204`
+- display the inn main screen background and visible main buttons
 
-Current technical conclusion: local operation is possible through early gameplay, but full game flow still needs iterative resource and interaction probing.
+Current technical conclusion: this is no longer limited to early title/first-scene validation. The sample game can now reach the main gameplay hub with no local resource miss in the latest validated path.
+
+## Latest Verified Gameplay Chain
+
+Validated path:
+
+1. Title / auto title start
+2. First scene lobby
+3. Create-character confirmation
+4. Name input/choice
+5. Inn-name input/choice
+6. Birthday and ability selection
+7. Newbie chest screen
+8. Left chest reward
+9. Opening story `storyId=44`
+10. New-player tutorial prompt `看 / 不看`
+11. Tutorial menu `storyId=44 pos=324`
+12. Tutorial `经营` branch
+13. Skip-tutorial branch to inn main screen
+14. Inn main screen `storyId=15 pos=648`
+
+Latest important screenshots:
+
+- `C:\tmp\claw_verify\verify_tutorial_menu_pos324.png`
+  - shows tutorial/menu buttons visible.
+- `C:\tmp\claw_verify\verify_menu_manage_stop.png`
+  - shows `经营` tutorial branch follow-up choice visible.
+- `C:\tmp\claw_verify\verify_main_screen_pos648.png`
+  - shows inn main screen background and visible main buttons.
+
+Latest important reports:
+
+- `C:\tmp\claw_verify\verify_tutorial_menu_report.json`
+- `C:\tmp\claw_verify\verify_menu_manage_report.json`
+- `C:\tmp\claw_verify\verify_skip_tutorial_report.json`
+- `C:\tmp\claw_verify\verify_main_screen_report.json`
+
+Latest validation result:
+
+- Tutorial menu reached: `storyId=44`, `pos=324`, `Code=204`
+- Tutorial menu buttons found: `11`
+  - `订单`
+  - `概况`
+  - `后院`
+  - `经营`
+  - `酒宴`
+  - `升级`
+  - `售卖`
+  - `外出`
+  - `————好感————`
+  - `员工`
+  - `外观`
+- Inn main screen reached: `storyId=15`, `pos=648`, `Code=204`
+- Runtime main-screen buttons found: `12`
+  - same 11 visible buttons above
+  - `支线开启`, condition-gated by `主线剧情1 >= 143`
+- Latest main-screen local HTTP errors:
+  - `[]`
+- Latest request failures:
+  - `[]`
+- Recurring page warnings:
+  - audio play interruption warnings, currently non-blocking.
 
 ## Mirrored Resource Status
 
-Known mirrored resources include:
+Known mirrored categories now include:
 
 - main `game.bin`
 - startup/title/font/UI assets
@@ -143,155 +231,87 @@ Known mirrored resources include:
 - first scene background/audio/UI assets
 - create-character assets
 - dynamic standing `OAF/OAF2` resources and frame images
-- `audio/se/move_1.mp3`
-  - MD5: `0839375b26561183ca0bd747ed0dccc3`
-  - local size verified: `32641`
+- early menu/save/settings/mall/backpack/welfare assets
+- create-character, name, birthday, ability, and newbie-chest assets
+- opening story backgrounds, BGM, sound effects, CGs, character portraits, text panel assets
+- tutorial/gameplay menu button assets
+- inn main screen background and side-branch button assets
 
-Current validation status:
+Recent resource commits:
 
-- No new real `/shareres/<md5>` 404 was observed in the latest round.
-- Existing local resource requests generally return `200` or `304`.
-- The only recurring local 404s are the two known `/null%20path` requests.
+- `c594fa6 Fix birthday confirm button display`
+- `26b6864 Restore creation flow event chain`
+- `bea9335 Mirror left chest reward resources`
+- `f91220d Expand newbie chest click targets`
+- `76bc080 Fix ability selection confirm button`
+- `c9a2069 Stabilize newbie chest branch resources`
+- `06a134d Mirror street scene resource`
+- `58f8d7f Mirror opening portrait expression`
+- `d311219 Mirror opening tutorial assets`
+- `5f578db Mirror tutorial branch assets`
+- `1241169 Mirror inn tutorial menu buttons`
+- `d381672 Mirror inn main screen assets`
+
+Current resource conclusion:
+
+- The latest verified path to `storyId=15 pos=648` has no local `/shareres/<md5>` 404.
+- Resource mirroring is an effective loop: collect unique md5 404s, resolve via `api/oapi_map.php`, mirror with `prepare_runner_mirror.py`, force-add only validated files, retest the same path.
 
 ## Known Non-Blocking Issues
 
+### Platform API Boundaries
+
+Observed platform/API boundaries include:
+
+- account/login
+- cloud archive
+- PropShop/mall/account-money state
+- reporting/telemetry
+- investigate/light text endpoints
+- malformed platform URLs in the old runtime such as `http://https//...`
+
+Current interpretation:
+
+- These are not blocking the validated local story/tutorial/main-screen flow.
+- MVP should replace only the minimum required subset:
+  - local user identity
+  - single-game unlock state
+  - local/cloud save replacement
+  - basic resource/report logging
+
+### Audio Warnings
+
+Observed warnings:
+
+- `The play() request was interrupted by a new load request`
+- occasional browser autoplay-related messages
+
+Current interpretation:
+
+- These are currently non-blocking.
+- They should be monitored but not prioritized ahead of gameplay path validation.
+
 ### `/null path`
 
-- The runtime requests `/null%20path` twice during the first-scene/OAF loading window.
-- `traceNullPath=1` wrapped:
-  - `XMLHttpRequest.open`
-  - `fetch`
-  - image/media/source `src`
-  - `ORG.loader.load`
-  - `Laya.loader.load`
-  - `Laya.loader.create`
-- None of those wrappers identified the source stack.
+Earlier builds emitted `/null%20path` requests.
 
-Current interpretation:
+Current status:
 
-- This is likely emitted inside Laya's internal path normalization/loading path or another lower-level runtime path.
-- It has not blocked title entry, story start, first scene loading, or OAF frame playback.
-- Treat it as low priority unless later gameplay becomes blocked by it.
-
-### External Platform API Errors
-
-Observed recurring errors:
-
-- `get_home_gray` JSONP request failure/403
-- malformed PropShop URLs such as:
-  - `http://https//www.66rpg.com/PropShop/...`
-- browser audio autoplay warning:
-  - `NotAllowedError: play() failed because the user didn't interact with the document first`
-
-Current interpretation:
-
-- These are platform/account/payment/telemetry related.
-- They are not currently blocking the local first-scene resource path.
-- They may become important later if save, account, payment, inventory, or platform-specific features are required.
+- A transparent-image fallback now normalizes known null image paths.
+- It is no longer the main blocker in the latest validated flows.
+- Revisit only if a future game path shows visible missing content tied to null-path behavior.
 
 ### Screenshot Capture
 
-- Browser screenshot capture often times out during animated runtime scenes.
-- Current validation relies on:
-  - debug text
-  - console events
-  - local HTTP status logs
-  - `UI STATE` / `UI TARGETS`
+- Direct screenshot capture can be unreliable in animated scenes.
+- Current validation works better with:
+  - Playwright screenshots at known stable stops
+  - console logs
+  - story state snapshots
+  - resource 404 collection
+  - runtime button tables
 
-## Current UI Target Trace
-
-The latest `traceUiState=1` patch now propagates parent visibility:
-
-- hidden title children are no longer included as click targets
-- hidden loading text is no longer included as a click target
-- targets are filtered to centers inside the `960x540` stage
-
-Stable first-scene `UI TARGETS` after title click:
-
-| Path | Center | Size | Notes |
-| --- | --- | --- | --- |
-| `stage.0.3.0.0` | `(536,413)` | `132x50` | clicked once; no target-set change after 4s |
-| `stage.0.3.0.1` | `(632,417)` | `54x58` | not yet isolated |
-| `stage.0.3.0.2` | `(775,429)` | `69x82` | not yet isolated |
-| `stage.0.3.0.3` | `(678,128)` | `45x55` | not yet isolated |
-| `stage.0.3.0.4` | `(582,129)` | `54x58` | not yet isolated |
-| `stage.0.7.0` | `(921,54)` | `42x52` | not yet isolated |
-| `stage.0.7.1` | `(921,124)` | `42x52` | not yet isolated |
-
-## Latest Round Result
-
-Latest pushed commit before this document:
-
-- `122b206 Filter visible UI targets for gameplay probing`
-
-Latest verified behavior:
-
-- isolated click classification was completed for the stable first-scene `UI TARGETS`
-- `(536,413)` is state-sensitive: in an isolated run it advanced into create-character resources rather than remaining a no-op
-- `(632,417)` and `(775,429)` open/load save-file UI paths
-- `(582,129)` opens/loads settings UI
-- `(921,54)` opens the main menu overlay
-- `(921,124)` reaches a platform/API boundary with malformed `get_game_info` JSONP URL
-- the first `(921,54)` probe exposed a real menu/UI resource wave; `prepare_runner_mirror.py --mirror-log .http-server.err.log` mirrored the missing mapped assets
-- after mirroring, repeating `(921,54)` returned the former menu `/shareres` requests as `200`
-- only the known two `/null%20path` 404s remain in the retest window
-- first-level main menu overlay classification is now complete
-- resource-heavy menu subviews, including mall, backpack/items, welfare/event, gallery, pet/sign-in/wardrobe/image assets, were mirrored from the HTTP log
-- representative retests for mall, backpack/items, and welfare/event targets no longer show real `/shareres/<md5>` 404s
-- mall still emits `Script error. @ :0:0`, likely a platform/shop service boundary rather than a static asset problem
-- second-level submenu probing is now complete for representative backpack/items, welfare/event, CG/gallery, and two-button submenu targets
-- second-level retests after mirroring no longer show real `/shareres/<md5>` 404s; only known `/null%20path` requests remain
-- deeper two-button submenu targets have been classified: `(432,478)` is confirm/transition-like, `(617,474)` is refresh/reopen-like, and `(925,503)` closes/returns
-- two-button deeper probing exposed `称号4.jpg` and `称号2.jpg`; both are now mirrored and return `200`
-- backpack deeper probing found `(925,496)` is close/return, while `(672,193)` and `(343,327)` did not hit effective buttons in the sampled states
-- welfare/event right-side target `(956,65)` still exposes no further inner target set after a 9-second stabilization wait
-- `UI TARGETS` now includes reliable `x/y` aliases, bounds, texture hints, listener lists, and `likelyInteractive`
-- first-scene target output was revalidated after the trace enhancement and still returns the expected 7 clickable targets
-- enhanced backpack reprobe showed the previous approximate point `(672,193)` is not an emitted clickable target in `bp.6`
-- actual `bp.6` deeper/action targets include `(626,320)` and `(785,354)`; both emit `CLICK_SCUI_BUTTON` but keep the target set stable in the sample window
-- `bp.6` bottom slots `(210,476)`, `(331,476)`, `(451,476)`, `(570,476)`, `(690,476)`, and `(810,476)` are all valid clickable targets; each emits `CLICK_SCUI_BUTTON`, keeps target count stable at 25, and exposes no new real `/shareres/<md5>` 404
-- exact mall target `stage.0.6.0.2` `(168,112)` was revalidated; the old `Script error. @ :0:0` was caused by missing host bridge function `window.GetImageBase64`
-- `h5_runner_experiment.html` now installs a local `GetImageBase64` compatibility stub; after retest, `NEW_MALLUI_TYPE` completes, six item thumbnails are converted to `72x72` data URLs, and the mall opens without script error
-- mall inner target `stage.0.7.2.12` `(921,455)` closes/returns from the mall target set back to the main menu target set
-- remaining mall noise is malformed PropShop JSONP URLs for account money/owned item counts, not a static asset miss
-- `stubPropShop=1` now intercepts PropShop JSONP script URLs and returns deterministic fake account data; with it enabled, mall opening produces 4 stub hits, 0 PropShop resource errors, 6 `GetImageBase64` conversions, and no script error
-- browser click automation must use screen-scaled coordinates when the canvas is displayed larger than `960x540`; `UI TARGETS` now includes `screenX/screenY`
-- the main story path was revalidated with scaled clicks:
-  - first scene `stage.0.3.0.0` `(536,413)` advanced into a CG/story scene
-  - next story target `(896,55)` advanced again to a visually distinct CG/story scene
-  - both transitions emitted `自动存档` and `自动存档204`
-- manual archive/save UI opens from `stage.0.3.0.1` `(632,417)`
-- cloud archive access is blocked by the expected login boundary: `未登录不能使用云存档。`
-- local auto-save persistence is now proven:
-  - `traceStorage=1` shows auto-save writing `localStorage` key `save0a235c54f16c431ab5736c92997edb47undefined-100`
-  - the saved value grew from length `3045` to `3341` across story advances
-  - a reload without `clearStorage=1` reads the same key with length `3341`
-  - the restored state exposes story-layer right-side menu targets rather than title-only UI
-- manual archive slot write/read behavior is still not proven in the empty-slot sample
-- main-story longer-run probing found and fixed one new mapped resource miss:
-  - `d66f13cb49738edd14ba4f6aecf577cb` -> `graphics/half/创建人物/3.jpg`
-  - retest returns `200`
-- after that mirror fix, the sampled long-run path still reaches a black-screen/stalled state:
-  - no new real `/shareres/<md5>` 404 after retest
-  - no `Script error. @ :0:0`
-  - auto-save length stays at `3341`
-  - coordinate continuation attempts do not expose a new story target set
-- black-screen runtime display trace found:
-  - stage and game main remain alive
-  - main stage child is visible, `960x540`, and has 13 children
-  - visible full-screen layer exists but no active texture is reported by the reliable runtime summary
-  - several full-screen candidate content groups under `stage.0.2` are `visible:false`
-  - `d66...` now returns `304`/cache success, so the current black screen is not a new mapped asset miss
-- story-state/background-layer trace found:
-  - `stage.0.0` is `UIManager.backgroundLayer`
-  - `stage.0.2` is `UIManager.textLifeLineLayer`
-  - `stage.0.3` is `UIManager.textChoiceLayer`
-  - the first-branch main-story path does not reproduce the black screen in the latest run
-  - that path reaches `storyId=1`, `pos=237`, `Code=214`, `isPause=true`
-  - visible scene remains normal at that stop; no new real `/shareres/<md5>` 404 and no `Script error. @ :0:0`
-  - `Code=214` appears to be a naming/advanced-input event with args including `姓`, `名`, `昵称`, `国家`, and a direct keyboard attempt (`A` + Enter) did not advance it
-
-## How To Reproduce The Current Validation
+## How To Reproduce Current Validation
 
 From repo root:
 
@@ -302,214 +322,202 @@ python -m http.server 8765 --bind 127.0.0.1
 Open:
 
 ```text
-http://127.0.0.1:8765/h5_runner_experiment.html?localRes=1&patchNewDSystem=1&traceRuntime=1&traceTitle=1&traceNullPath=1&quietOafEvents=1&traceUiState=1&patchTitleClick=1&clearStorage=1&hideDebug=1
+http://127.0.0.1:8765/h5_runner_experiment.html?localRes=1&patchNewDSystem=1&traceRuntime=1&traceTitle=1&traceBranchChoice=1&traceNullPath=1&quietOafEvents=1&traceUiState=1&patchTitleClick=1&patchFirstSceneLobbyButtons=1&clearStorage=1&hideDebug=1&traceStoryState=1&traceAutoNameChoice=1&autoStartTitle=1&stubCode214Name=1&stubCode214Birthday=1&stubInitialVitals=1&stubPropShop=1&autoFirstSceneChoice=0&autoCreateCharacterConfirm=1&autoNameChoice=1&autoInnNameChoice=1&runId=latest
 ```
 
-For mall/platform validation, add:
+Expected path for manual checking:
 
-```text
-stubPropShop=1
-```
-
-Expected manual flow:
-
-1. Wait for the title screen to finish loading.
-2. Click the title cover around `(480,270)`.
-3. Wait for first scene resources to load.
-4. Inspect debug log for latest `UI TARGETS`.
-5. Click one target coordinate.
-6. Check:
-   - whether `UI TARGETS` changed
-   - whether `LOAD_UI_RESOURCE_COMPLETE` count changed
-   - whether new `/shareres/<md5>` 404 appears in local server logs
-   - whether only known `/null%20path` 404 remains
-
-## Latest Isolated Target Classification
-
-| Target path | Coordinate | Behavior |
-| --- | --- | --- |
-| `stage.0.3.0.0` | `(536,413)` | dialogue/branch advance into create-character resources |
-| `stage.0.3.0.1` | `(632,417)` | save-file UI |
-| `stage.0.3.0.2` | `(775,429)` | save-file UI plus extra resource wave |
-| `stage.0.3.0.3` | `(678,128)` | branch/menu transition; target set reduced |
-| `stage.0.3.0.4` | `(582,129)` | settings UI |
-| `stage.0.7.0` | `(921,54)` | main menu overlay; resource wave now mirrored |
-| `stage.0.7.1` | `(921,124)` | platform/API boundary; malformed `get_game_info` JSONP |
-
-## Latest Second-Level Findings
-
-| Path | Tested targets | Current result |
-| --- | --- | --- |
-| Backpack/items | `(74,46)` through `(74,422)`, `(46,481)`, `(159,69)`, `(159,184)`, `(159,299)` | Category/page switching works; `(74,328)` exposed title/sign-in resources now mirrored; side/detail slots mostly emit `CLICK_SCUI_BUTTON` without meaningful target-set change. |
-| Welfare/event | right-side targets around `x=956`, left target `(74,465)` | Right-side vertical menu targets emit `CLICK_SCUI_BUTTON` and keep the menu pattern; left target collapses/returns to the first-scene/right-button target set. |
-| CG/gallery | `(536,413)`, `(632,417)`, `(775,429)` | Gallery item clicks emit `SHOW_CG_UI_ITEM_MSG` and `SHOW_CG_UI_ITEM`; no mapped resource miss. |
-| Two-button submenu | `(124,182)`, `(124,221)` | Top option opens a deeper UI with targets near `(432,478)`, `(617,474)`, `(925,503)`; bottom option is mostly no-op/menu remains. |
-
-Second-level resource-miss loop:
-
-- newly mirrored mapped misses include title/label, sign-in button, locked-title, and `audio/se/error_1.mp3`
-- representative retests for backpack `bp.6`, welfare `wf.0`, and welfare `wf.left` show no new real `/shareres/<md5>` `404`
-- browser autoplay `NotAllowedError` during automated reloads is currently treated as noise, not a game-resource failure
-
-## Latest Deeper UI Findings
-
-| Path | Tested targets | Current result |
-| --- | --- | --- |
-| Two-button deeper UI | `(432,478)`, `(617,474)`, `(925,503)` | `(432,478)` triggers a transition/resource load and reduces the target set; `(617,474)` reloads/keeps the deeper UI; `(925,503)` closes back to first-scene/right-button targets. |
-| Backpack deeper pages | `(925,496)`, `(672,193)`, `(343,327)` | `(925,496)` is a reliable close/return target; the other two sampled coordinates did not trigger effective button events in their sampled states. |
-| Welfare/event longer wait | `(956,65)` plus 9s wait | Target set stayed at 14 and no deeper inner target set appeared. |
-| Backpack enhanced reprobe | `bp.6` exact targets `(626,320)`, `(785,354)` | Both are real emitted targets with click listeners and emit `CLICK_SCUI_BUTTON`; target set remains stable and no new resource wave appears. |
-| Backpack `bp.6` bottom slots | `(210,476)`, `(331,476)`, `(451,476)`, `(570,476)`, `(690,476)`, `(810,476)` | All are real emitted targets and emit `CLICK_SCUI_BUTTON`; target set remains 25; only `(331,476)` onward show one image-load event; no script error and no new resource miss. |
-| New mall UI | `stage.0.6.0.2` `(168,112)`, then `stage.0.7.2.12` `(921,455)` | `GetImageBase64` stub removes the previous `Script error`; mall opens to 6 targets, converts six thumbnails, and `(921,455)` closes back to the 23-target main menu. |
-| PropShop-stubbed mall | same path with `stubPropShop=1` | PropShop JSONP stub hits 4 requests; PropShop script resource errors drop to 0; mall still opens to 6 targets and closes back to 23 targets. |
-
-Latest resource-miss loop:
-
-- newly mirrored mapped misses from two-button deeper UI:
-  - `c5be296d8fc3dfb5ac20bbbbb180b4a1` -> `graphics/other/称号/称号/称号4.jpg`
-  - `87d0fc55a07cda95560a418edefb542a` -> `graphics/other/称号/称号/称号2.jpg`
-- after retest, both returned `200`
-- no new real `/shareres/<md5>` 404 was observed during the backpack deeper and welfare long-wait checks
-
-## Latest Target Trace Improvements
-
-`traceUiState=1` now emits richer target metadata:
-
-- center aliases: `x`, `y`, `cx`, `cy`
-- visible/click bounds: `left`, `top`, `right`, `bottom`, `w`, `h`
-- event metadata: `listeners`, `mouseEnabled`, `likelyInteractive`
-- resource hints: inherited single-child `texture`
-- coordinate source: `boundsSource`
-
-Validation after a cache-busted reload:
-
-- first-scene target count: 7
-- known centers preserved: `(536,413)`, `(632,417)`, `(775,429)`, `(678,128)`, `(582,129)`, `(921,54)`, `(921,124)`
-- main-menu target output retains known target centers while adding listener and bounds metadata
+1. Wait until the game reaches the newbie chest flow.
+2. Click left chest.
+3. Click the top-left return button on the reward screen.
+4. Advance opening story until the `看 / 不看` choice.
+5. Click:
+   - top diamond around `(480,235)` for `看`
+   - bottom diamond around `(480,315)` for `不看`
+6. If `看`:
+   - expect tutorial menu at `storyId=44 pos=324`
+   - expect 11 visible tutorial/gameplay buttons
+7. If `不看`:
+   - expect inn main screen at `storyId=15 pos=648`
+   - expect main inn background and visible buttons
+8. Check console/logs for:
+   - new real `/shareres/<md5>` 404
+   - page crash
+   - script errors
+   - story state not changing after repeated clicks
 
 ## Next Debug Direction
 
-### Priority 1: Local Play MVP Validation
+### Priority 1: Validate Inn Main Screen Buttons
 
-This is still useful for platform feature coverage, but it is no longer the closest path to the local-play MVP. For local playability, prioritize the story/save items below first.
+Current highest-value next step is no longer title/first-scene probing. Start from `storyId=15 pos=648` and validate each visible main-screen entry:
 
-### Priority 1A: Main Story Longer Run
+- `订单`
+- `概况`
+- `后院`
+- `经营`
+- `酒宴`
+- `升级`
+- `售卖`
+- `外出`
+- `————好感————`
+- `员工`
+- `外观`
 
-The latest story-state probe resolved the top display-layer ownership question and found a new deterministic first-branch blocker before the black-screen path: the story pauses at `storyId=1`, `pos=237`, `Code=214`, apparently waiting for a naming/advanced-input event. The next local-play validation should handle this input event first:
+For each button:
 
-1. keep `traceStoryState=1`, `traceDisplay=1`, `traceUiState=1`, `traceStorage=1`, and `traceFullTargets=1` available
-2. inspect the runtime class/event implementation for `Code=214`
-3. identify whether the event expects `gameAdvanceUILayer`, `GameAdvanceUILayer`, a Canvas input bridge, or a custom UI callback
-4. add a narrow local-only default input/stub for the required name fields if no visible input can be driven
-5. verify that `currentLine.isPause` clears and `pos` advances beyond `237`
-6. then resume 10-20 transition long-run probing and mirror any new real `/shareres/<md5>` 404
-7. keep the earlier black-screen path tracked separately; if it reappears, use the confirmed owner map: `stage.0.0=backgroundLayer`, `stage.0.2=textLifeLineLayer`, `stage.0.3=textChoiceLayer`
+1. start from a clean run or a saved main-screen state
+2. click the exact runtime button coordinate
+3. record:
+   - target button name/index
+   - resulting `storyId`
+   - resulting `pos`
+   - resulting `Code`
+   - visible UI state
+   - local resource 404s
+   - page errors
+   - screenshots
+4. if new resource 404s appear:
+   - resolve md5 in `api/oapi_map.php`
+   - mirror with `prepare_runner_mirror.py`
+   - force-add only the needed `shareres/<prefix>/<md5>` files
+   - commit and push
+   - rerun the same button path
 
-### Priority 1B: Local Auto-Save And Archive State Trace
+### Priority 2: Formalize Auto Validation Scripts
 
-Auto-save persistence is now proven through `localStorage` writes and reload reads. Manual archive UI opens, cloud save is correctly blocked by login, but local slot write/read is not proven yet. The next save/load validation should focus on the manual archive path:
+The current scripts are useful but ad hoc. Next step should create a reusable validation harness:
 
-1. keep `traceStorage=1` enabled for write/read evidence
-2. hook archive/save manager methods if discoverable
-3. capture archive list data before/after manual archive clicks
-4. identify the exact local slot/button target that writes a manual save
+- reusable browser launch
+- stage-to-screen coordinate conversion
+- story state extractor
+- local 404 collector
+- screenshot capture at named checkpoints
+- route helpers:
+  - clean start
+  - reach newbie chest
+  - reach opening story
+  - reach tutorial menu
+  - reach inn main screen
+- JSON report output per route/button
+
+Goal:
+
+- each imported game should produce a comparable validation report.
+
+### Priority 3: Save/Load Validation From Main Screen
+
+Earlier auto-save persistence was proven through `localStorage` reads/writes, but manual save/load behavior still needs a focused validation pass.
+
+Next validation:
+
+1. reach inn main screen
+2. trigger manual save UI
+3. identify save slot write target
+4. write a manual save
 5. reload without `clearStorage=1`
-6. verify whether manual archive entries survive reload and can restore to the same story node
+6. verify restoration to the expected story/main-screen state
+7. document storage keys and save format evidence
 
-### Priority 1C: Mall Item State/Object Trace
+MVP reason:
 
-For non-core platform coverage, keep the previous mall direction:
+- long-form games need reliable continue play.
 
-1. open mall with `stubPropShop=1`
-2. identify the mall view/mediator object that handles `CLICK_NEW_MALL_ITEM_BG`
-3. capture visible mall item records and selected item id before/after item clicks
-4. map emitted `UI TARGETS` coordinates to actual mall display nodes
-5. then click the confirmed buy/detail control and classify whether `/getUserHavePropNum`, `/createBuyOrder`, or other endpoints are requested
-6. add only the minimal fake payloads needed to keep local validation deterministic
+### Priority 4: Platform Replacement Boundary
 
-### Priority 2: Runtime State Trace For Silent Backpack Clicks
+Identify the minimal host/platform APIs required for MVP:
 
-The exact `bp.6` clickable targets are now classified at the UI/resource level. If backpack behavior still matters, the next useful step is not more coordinate probing; it is state tracing:
+- local user identity
+- per-game unlock state
+- save/load state
+- resource reporting
+- basic order confirmation
 
-1. hook variable/save mutations around `CLICK_SCUI_BUTTON`
-2. capture selected category/page/item ids
-3. compare before/after snapshots for `(626,320)`, `(785,354)`, and bottom slots
-4. decide whether these controls are intentionally silent, locked, or waiting on game state
+Do not attempt to fully clone 66RPG platform behavior. Stub or replace only what blocks local play.
 
-### Priority 3: Continue Resource-Miss Loop
+### Priority 5: Multi-Game Import Feasibility
+
+After this sample game's main hub is stable, test at least two additional games from different categories:
+
+- one female-oriented/romance game
+- one male-oriented or non-romance interactive story game
+
+For each:
+
+1. fetch package and map
+2. parse with existing `patchNewDSystem`
+3. measure whether the same parser patches work
+4. mirror minimum startup resources
+5. reach title/first scene
+6. identify whether new binary/runtime schemas appear
+
+Goal:
+
+- determine whether the adapter is game-specific or reusable across a 20-game MVP library.
+
+## Resource-Miss Loop
 
 If a target triggers a new real `/shareres/<md5>` 404:
 
-1. use `Map.bin` to resolve MD5 to original asset path
-2. mirror that MD5 locally with `prepare_runner_mirror.py`
-3. reload and repeat the same click path
-4. commit/push each verification round
-
-Example mirror command:
+1. resolve MD5 to original asset path:
 
 ```powershell
-python 66rpgProjectDropper\prepare_runner_mirror.py 1569947 --version 364 --root . --mirror-md5 <md5> --mirror-log .http-server.err.log
+$env:PYTHONIOENCODING='utf-8'
+@'
+import json
+md5='<md5>'
+d=json.load(open('api/oapi_map.php',encoding='utf-8'))
+print([x for x in d['data'] if len(x)>2 and str(x[2]).lower()==md5])
+'@ | python -
 ```
 
-### Priority 4: Better Runtime State Trace
+2. mirror that MD5 locally:
 
-If isolated clicks do not clearly classify behavior, add trace hooks for:
+```powershell
+$env:PYTHONIOENCODING='utf-8'
+python 66rpgProjectDropper\prepare_runner_mirror.py 1569947 --version 364 --root . --mirror-md5 <md5>
+```
 
-- mouse/touch event dispatch on Laya display nodes
-- current story id / chapter id / command pointer if discoverable
-- selected menu/custom UI id
-- dialogue text state
-- save/global variable state changes
+3. force-add only the needed file:
 
-Goal:
+```powershell
+git add -f shareres\<prefix>\<md5>
+```
 
-- detect gameplay progress even when visual targets do not visibly change.
+4. commit/push each verification round.
 
-### Priority 5: Deeper `/null path` Source
+5. rerun the same click path and confirm:
 
-Only pursue this if it becomes blocking.
-
-Potential hooks:
-
-- `Laya.URL.formatURL`
-- Laya internal loader URL normalization
-- resource manager path conversion functions
-- image texture creation from empty path
-
-Goal:
-
-- determine whether `/null path` is harmless empty-image behavior or a real missing asset reference.
-
-### Priority 6: Platform Feature Boundary
-
-Later validation should identify which features require 66RPG platform services:
-
-- account/login
-- save sync
-- inventory/props
-- payment/flowers
-- ranking/comment/community APIs
-
-Goal:
-
-- define the minimum MVP-compatible subset for our own site.
+- local 404 is gone
+- visible UI is fixed
+- no new script/page error appeared
 
 ## MVP Implication For Our Site
 
-Based on current technical validation, the simplest MVP direction is:
+Based on current technical validation, the practical MVP direction is:
 
-- host a local/static game runner page
-- mirror only the resources needed for selected games
-- support basic start/play flow
-- initially ignore or stub platform APIs that are not needed for core story playback
-- add resource-miss collection tooling for each imported game
-- add a simple game detail page and play button, not a full 66RPG platform clone
+- build a game library front end, not a full 66RPG clone
+- import games through a repeatable grab/parse/mirror/validate pipeline
+- keep the original H5 runtime where possible
+- use runner-side patches and host API stubs only where needed
+- sell each paid game as one-time unlock
+- provide 3-5 free games for acquisition and trust
+- maintain per-game validation reports before public listing
+- add AI as an enhancement layer:
+  - game summary
+  - character summary
+  - tags
+  - 攻略/提示
+  - recommendations
 
 Current feasibility assessment:
 
 - Static package acquisition: feasible.
 - Local resource mirroring: feasible.
-- Early H5 runtime execution: feasible with patches.
-- Full-game reliable operation: not verified yet.
-- Platform feature replacement: not started.
-- Next decisive test: isolated target-click classification and continued resource-miss mirroring.
+- Patched H5 runtime execution: feasible.
+- Opening story and tutorial flow: feasible.
+- Inn main hub entry: feasible.
+- Main-screen button coverage: partially validated, next priority.
+- Save/load replacement: partially validated, needs main-screen pass.
+- Platform feature replacement: bounded and should be minimal.
+- Multi-game scalability: not verified yet; next decisive MVP test after this sample stabilizes.
