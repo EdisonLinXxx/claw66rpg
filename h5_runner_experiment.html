@@ -126,11 +126,19 @@
         }
       })();
     }
-    function shouldTraceNullPath(value) {
-      if (!hasQueryFlag('traceNullPath')) return false;
+    var NULL_PATH_IMAGE_SRC = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==';
+    function isNullPathValue(value) {
       if (value === null || value === undefined) return true;
       var text = String(value);
       return text === '' || /(^|\/)null(\s|%20)path($|\?)/i.test(text) || /^null(\s|%20)path$/i.test(text);
+    }
+    function shouldTraceNullPath(value) {
+      return hasQueryFlag('traceNullPath') && isNullPathValue(value);
+    }
+    function normalizeNullImagePath(label, value) {
+      if (!isNullPathValue(value)) return value;
+      logNullPath(label, value);
+      return NULL_PATH_IMAGE_SRC;
     }
     function logNullPath(label, value) {
       if (!shouldTraceNullPath(value)) return;
@@ -253,7 +261,18 @@
           });
           Object.getOwnPropertyDescriptor(proto, prop).set.__runnerNullPathWrapped = true;
         }
-        if (window.HTMLImageElement) wrapUrlDescriptor(HTMLImageElement.prototype, 'src', 'HTMLImageElement');
+        if (window.HTMLImageElement) {
+          var imageSrcDescriptor = Object.getOwnPropertyDescriptor(HTMLImageElement.prototype, 'src');
+          if (imageSrcDescriptor && imageSrcDescriptor.set && !imageSrcDescriptor.set.__runnerNullImagePathWrapped) {
+            Object.defineProperty(HTMLImageElement.prototype, 'src', {
+              get: imageSrcDescriptor.get,
+              set: function (value) {
+                return imageSrcDescriptor.set.call(this, normalizeNullImagePath('HTMLImageElement.src', value));
+              }
+            });
+            Object.getOwnPropertyDescriptor(HTMLImageElement.prototype, 'src').set.__runnerNullImagePathWrapped = true;
+          }
+        }
         if (window.HTMLMediaElement) wrapUrlDescriptor(HTMLMediaElement.prototype, 'src', 'HTMLMediaElement');
         if (window.HTMLSourceElement) wrapUrlDescriptor(HTMLSourceElement.prototype, 'src', 'HTMLSourceElement');
         if (window.fetch && !window.fetch.__runnerNullPathWrapped) {
