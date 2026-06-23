@@ -562,20 +562,29 @@
         };
         var patchNewCUIData = function (cuiIndex, cuiData) {
           try {
-            if (cuiIndex !== 495 || !cuiData || !cuiData.controls) return;
+            if (!cuiData || !cuiData.controls) return;
+            var controlOpensCui = function (control, targetIndex) {
+              var events = control && control.event || [];
+              return events.some(function (event) {
+                return event && event.Code === 214 && String(event.Argv && event.Argv[0]) === String(targetIndex);
+              });
+            };
             for (var controlIndex = 0; controlIndex < cuiData.controls.length; controlIndex++) {
               var control = cuiData.controls[controlIndex];
-              var events = control && control.event || [];
-              var opensBirthdayNext = events.some(function (event) {
-                return event && event.Code === 214 && String(event.Argv && event.Argv[0]) === '496';
-              });
-              if (opensBirthdayNext && control.index === 58) {
+              if (cuiIndex === 495 && controlOpensCui(control, 496) && control.index === 58) {
                 control.index = 26;
                 logLine('PATCH BIRTHDAY CONFIRM BUTTON INDEX ' + JSON.stringify({ cuiIndex: cuiIndex, controlIndex: controlIndex, newIndex: control.index }));
               }
+              if (cuiIndex === 496 && controlOpensCui(control, 497) && control.index === 27) {
+                var oldAbilityConfirm = { index: control.index, x: control.x, y: control.y };
+                control.index = 26;
+                control.x = 860;
+                control.y = 420;
+                logLine('PATCH ABILITY CONFIRM BUTTON ' + JSON.stringify({ cuiIndex: cuiIndex, controlIndex: controlIndex, old: oldAbilityConfirm, newIndex: control.index, x: control.x, y: control.y }));
+              }
             }
           } catch (patchCuiError) {
-            logLine('PATCH BIRTHDAY CONFIRM BUTTON INDEX ERROR ' + (patchCuiError && (patchCuiError.stack || patchCuiError.message) || patchCuiError));
+            logLine('PATCH NEW CUI DATA ERROR ' + (patchCuiError && (patchCuiError.stack || patchCuiError.message) || patchCuiError));
           }
         };
         var NewDSystem = function (stream) {
