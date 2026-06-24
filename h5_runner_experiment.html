@@ -755,11 +755,14 @@
       if (window.Main && Main.prototype && Main.prototype.setGameConfig && !Main.prototype.__runnerPatched) {
         var originalSetGameConfig = Main.prototype.setGameConfig;
         Main.prototype.setGameConfig = function () {
-          HttpURL.CGV2_SERVER_URL = 'http://127.0.0.1:8765/';
+          var runnerLocalBaseUrl = (window.location.protocol === 'http:' || window.location.protocol === 'https:') && window.location.host
+            ? window.location.protocol + '//' + window.location.host + '/'
+            : 'http://127.0.0.1:8765/';
+          HttpURL.CGV2_SERVER_URL = runnerLocalBaseUrl;
           var result = originalSetGameConfig.apply(this, arguments);
-          HttpURL.CGV2_SERVER_URL = 'http://127.0.0.1:8765/';
+          HttpURL.CGV2_SERVER_URL = runnerLocalBaseUrl;
           if (hasQueryFlag('localRes')) {
-            HttpURL.M_RESOUSE_SERVER_URL = 'http://127.0.0.1:8765/';
+            HttpURL.M_RESOUSE_SERVER_URL = runnerLocalBaseUrl;
             logLine('local resource mirror enabled');
           }
           GloableData.getInstance().serverPath = 'https://c2.cgyouxi.com/website/hfplayer/v2/bin/';
