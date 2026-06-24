@@ -198,7 +198,7 @@ def is_pre_main_state(state):
     if not state:
         return True
     story_id = state.get("storyId")
-    return story_id in (None, 1, 44, 118)
+    return story_id in (None, 1, 44, 118) or (story_id == 15 and state.get("code") == 101)
 
 
 def stage_to_viewport(page, x, y):
@@ -225,6 +225,22 @@ def click_stage(page, x, y):
     page.mouse.click(view_x, view_y)
 
 
+def finish_show_event(page, choice_index):
+    return page.evaluate(
+        """
+        (choiceIndex) => {
+          const gd = window.GloableData && GloableData.getInstance ? GloableData.getInstance() : null;
+          const line = gd && gd.currentLine;
+          const showEvent = line && line.currentShowEvent;
+          if (!showEvent || typeof showEvent.finish !== 'function') return false;
+          showEvent.finish(choiceIndex);
+          return true;
+        }
+        """,
+        choice_index,
+    )
+
+
 def choice_y_for_index(count, idx):
     if count == 2:
         return [235, 315][idx] if idx < 2 else 315
@@ -238,9 +254,19 @@ def drive_pre_main_state(page, state):
         page.wait_for_timeout(150)
         return
     code = state.get("code")
+    story_id = state.get("storyId")
+    pos = state.get("pos")
     show_event = state.get("showEvent") or {}
     buttons = show_event.get("buttons") or []
     if code == 204 and buttons:
+        known_choices = {
+            (1, 47): 1,
+            (1, 231): 3,
+            (1, 1328): 2,
+        }
+        known_choice = known_choices.get((story_id, pos))
+        if known_choice is not None and finish_show_event(page, known_choice):
+            return
         button = buttons[0]
         if button.get("index") == 10:
             click_stage(page, 34, 41)
@@ -249,6 +275,8 @@ def drive_pre_main_state(page, state):
     elif code == 101:
         argv = state.get("argv") or []
         choice_index = 1 if len(argv) == 2 else max(len(argv) - 1, 0)
+        if finish_show_event(page, choice_index):
+            return
         click_stage(page, 480, choice_y_for_index(len(argv), choice_index))
     else:
         click_stage(page, 480, 500)
@@ -317,6 +345,7 @@ def validate_button_debug_jump(page, httpd, base_url, args, idx, run_id):
 
     buttons = (main_state.get("showEvent") or {}).get("buttons") or []
     button = buttons[idx]
+    page.evaluate("window.__runnerDisableCode214NameStub = true")
     click_x = float(button.get("x") or 0) + args.button_center_x
     click_y = float(button.get("y") or 0) + args.button_center_y
     click_stage(page, click_x, click_y)
@@ -333,6 +362,7 @@ def validate_button_full_route(page, base_url, args, idx, run_id):
         raise RuntimeError(f"full route did not reach the main screen for button index {idx}; last_state={current_state}")
     buttons = ((main_state or {}).get("showEvent") or {}).get("buttons") or []
     button = buttons[idx] if len(buttons) > idx else BUTTON_FALLBACKS[idx]
+    page.evaluate("window.__runnerDisableCode214NameStub = true")
     click_x = float(button.get("x") or 0) + args.button_center_x
     click_y = float(button.get("y") or 0) + args.button_center_y
     click_stage(page, click_x, click_y)
@@ -487,11 +517,12 @@ def main():
                         )
                     print(
                         f"[ok] button {idx:02d} {summaries[-1]['buttonName']} "
-                        f"status={summaries[-1]['status']} 404={summaries[-1]['local404Count']}"
+                        f"status={summaries[-1]['status']} 404={summaries[-1]['local404Count']}",
+                        flush=True,
                     )
                 except Exception as error:
                     errors.append({"buttonIndex": idx, "error": str(error)})
-                    print(f"[error] button {idx:02d}: {error}", file=sys.stderr)
+                    print(f"[error] button {idx:02d}: {error}", file=sys.stderr, flush=True)
             browser.close()
     finally:
         httpd.shutdown()

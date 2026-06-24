@@ -2141,12 +2141,15 @@
           };
           var maybeStubCode214Name = function (line) {
             if (!hasQueryFlag('stubCode214Name')) return false;
+            if (window.__runnerDisableCode214NameStub) return false;
             try {
               var eventAtPos = line && line.story && line.story.events && line.story.events[line.pos] || null;
               var event = eventAtPos && eventAtPos.Code === 214 ? eventAtPos : line && line.currentEvent || eventAtPos;
               if (!event || event.Code !== 214) return false;
               var index = parseInt(event.Argv && event.Argv[0], 10);
-              if (index !== 10014) return false;
+              var nameFields = String(event.Argv && event.Argv[3] || '');
+              var isNameEvent = index === 10014 || index === 10007 || (nameFields.indexOf('姓,') !== -1 && nameFields.indexOf('名,') !== -1);
+              if (!isNameEvent) return false;
               var stubKey = String(line && line.pos || 'unknown') + ':' + index;
               window.__runnerCode214NameStubbedKeys = window.__runnerCode214NameStubbedKeys || {};
               if (window.__runnerCode214NameStubbedKeys[stubKey]) return true;
@@ -2429,7 +2432,10 @@
               if (hasQueryFlag('stubCode214Name') && (methodName === 'makeEvent' || methodName === 'runEvent')) {
                 var beforeEventAtPos = this && this.story && this.story.events && this.pos !== undefined && this.story.events[this.pos] || null;
                 var beforeEvent = beforeEventAtPos && beforeEventAtPos.Code === 214 ? beforeEventAtPos : this && this.currentEvent || beforeEventAtPos;
-                if (beforeEvent && beforeEvent.Code === 214 && parseInt(beforeEvent.Argv && beforeEvent.Argv[0], 10) === 10014) {
+                var beforeNameIndex = beforeEvent && beforeEvent.Code === 214 ? parseInt(beforeEvent.Argv && beforeEvent.Argv[0], 10) : NaN;
+                var beforeNameFields = beforeEvent && beforeEvent.Code === 214 ? String(beforeEvent.Argv && beforeEvent.Argv[3] || '') : '';
+                var beforeIsNameEvent = beforeNameIndex === 10014 || beforeNameIndex === 10007 || (beforeNameFields.indexOf('姓,') !== -1 && beforeNameFields.indexOf('名,') !== -1);
+                if (beforeEvent && beforeEvent.Code === 214 && beforeIsNameEvent) {
                   var stubbedName = maybeStubCode214Name(this);
                   if (!stubbedName) return originalMethod.apply(this, arguments);
                   if (this && typeof this.eventFinish === 'function') {
