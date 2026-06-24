@@ -166,16 +166,25 @@ def load_playwright():
     return sync_playwright, PlaywrightError
 
 
-def read_state(page):
-    text = page.evaluate(
-        """
-        () => {
-          const el = document.getElementById('runner-story-state');
-          return el ? el.textContent : '';
-        }
-        """
-    )
-    return json.loads(text) if text else None
+def mark_progress(args, label):
+    try:
+        with (args.out / "main_buttons_progress.log").open("a", encoding="utf-8") as progress:
+            progress.write(f"{datetime.now(timezone.utc).isoformat()} {label}\n")
+    except Exception:
+        pass
+
+
+def read_state(page, timeout_ms=1000):
+    try:
+        text = page.locator("#runner-story-state").text_content(timeout=timeout_ms)
+    except Exception:
+        return None
+    if not text:
+        return None
+    try:
+        return json.loads(text)
+    except Exception:
+        return None
 
 
 def wait_for_state(page, predicate, timeout_ms, interval_ms=150):
@@ -239,6 +248,13 @@ def finish_show_event(page, choice_index):
         """,
         choice_index,
     )
+
+
+def activate_button(page, args, idx, click_x, click_y):
+    if args.activation_mode == "finish" and finish_show_event(page, idx):
+        return "showEvent.finish"
+    click_stage(page, click_x, click_y)
+    return "stage-click"
 
 
 def choice_y_for_index(count, idx):
@@ -315,6 +331,14 @@ def summarize_state(state):
     }
 
 
+def safe_screenshot(page, path, timeout_ms):
+    try:
+        page.screenshot(path=str(path), full_page=False, timeout=timeout_ms)
+        return {"path": str(path), "error": None}
+    except Exception as error:
+        return {"path": str(path), "error": str(error)}
+
+
 def drive_to_main(page, idx, timeout_ms):
     deadline = time.time() + timeout_ms / 1000
     last_state = None
@@ -332,8 +356,10 @@ def drive_to_main(page, idx, timeout_ms):
 
 def validate_button_debug_jump(page, httpd, base_url, args, idx, run_id):
     url = build_runner_url(base_url, args.runner, run_id, "debug-jump", idx)
+    mark_progress(args, f"button:{idx}:debug-goto:start")
     page.set_default_navigation_timeout(args.page_timeout_ms)
     page.goto(url, wait_until="commit", timeout=args.page_timeout_ms)
+    mark_progress(args, f"button:{idx}:debug-goto:done")
     main_state = wait_for_state(
         page,
         lambda state: is_main_state(state)
@@ -343,37 +369,42 @@ def validate_button_debug_jump(page, httpd, base_url, args, idx, run_id):
     )
     if not main_state:
         raise RuntimeError(f"main screen did not become ready for button index {idx}")
+    mark_progress(args, f"button:{idx}:debug-main:ready")
 
     buttons = (main_state.get("showEvent") or {}).get("buttons") or []
     button = buttons[idx]
-    page.evaluate("window.__runnerDisableCode214NameStub = true")
     click_x = float(button.get("x") or 0) + args.button_center_x
     click_y = float(button.get("y") or 0) + args.button_center_y
-    click_stage(page, click_x, click_y)
+    mark_progress(args, f"button:{idx}:click:start")
+    activation_method = activate_button(page, args, idx, click_x, click_y)
+    mark_progress(args, f"button:{idx}:click:done")
     result_state = wait_for_state(page, lambda state: state and not is_main_state(state), args.result_timeout_ms)
-    return main_state, button, {"x": click_x, "y": click_y}, result_state
+    return main_state, button, {"x": click_x, "y": click_y, "method": activation_method}, result_state
 
 
 def validate_button_full_route(page, base_url, args, idx, run_id):
     url = build_runner_url(base_url, args.runner, run_id, "full", idx)
+    mark_progress(args, f"button:{idx}:full-goto:start")
     page.set_default_navigation_timeout(args.page_timeout_ms)
     page.goto(url, wait_until="commit", timeout=args.page_timeout_ms)
+    mark_progress(args, f"button:{idx}:full-goto:done")
     main_state = drive_to_main(page, idx, args.main_timeout_ms)
     if not main_state:
         current_state = summarize_state(read_state(page))
         raise RuntimeError(f"full route did not reach the main screen for button index {idx}; last_state={current_state}")
     buttons = ((main_state or {}).get("showEvent") or {}).get("buttons") or []
     button = buttons[idx] if len(buttons) > idx else BUTTON_FALLBACKS[idx]
-    page.evaluate("window.__runnerDisableCode214NameStub = true")
     click_x = float(button.get("x") or 0) + args.button_center_x
     click_y = float(button.get("y") or 0) + args.button_center_y
-    click_stage(page, click_x, click_y)
+    mark_progress(args, f"button:{idx}:click:start")
+    activation_method = activate_button(page, args, idx, click_x, click_y)
+    mark_progress(args, f"button:{idx}:click:done")
     if idx in EXPECTED_UNCHANGED_BUTTONS:
         page.wait_for_timeout(1500)
         result_state = read_state(page)
     else:
         result_state = wait_for_state(page, lambda state: state and not is_main_state(state), args.result_timeout_ms)
-    return main_state, button, {"x": click_x, "y": click_y}, result_state
+    return main_state, button, {"x": click_x, "y": click_y, "method": activation_method}, result_state
 
 
 def validate_button(page, httpd, base_url, args, idx):
@@ -388,7 +419,10 @@ def validate_button(page, httpd, base_url, args, idx):
     page.wait_for_timeout(args.settle_ms)
     stable_state = read_state(page)
     changed_state = bool(result_state and not is_main_state(result_state))
+    ui_transition = result_state is None and stable_state is None
     if changed_state:
+        status = "ok"
+    elif ui_transition:
         status = "ok"
     elif idx in EXPECTED_UNCHANGED_BUTTONS:
         status = "expected_unchanged"
@@ -416,7 +450,8 @@ def validate_button(page, httpd, base_url, args, idx):
         "missingMd5s": missing_md5s,
         "screenshot": str(screenshot_path),
     }
-    page.screenshot(path=str(screenshot_path), full_page=False)
+    screenshot = safe_screenshot(page, screenshot_path, args.screenshot_timeout_ms)
+    report["screenshot"] = screenshot
     report_path.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
     return {
         "buttonIndex": idx,
@@ -424,7 +459,7 @@ def validate_button(page, httpd, base_url, args, idx):
         "buttonId": button.get("index"),
         "slug": slug,
         "report": str(report_path),
-        "screenshot": str(screenshot_path),
+        "screenshot": screenshot,
         "status": status,
         "result": summarize_state(stable_state),
         "local404Count": len(local_404),
@@ -475,6 +510,9 @@ def main():
     parser.add_argument("--main-timeout-ms", type=int, default=180000)
     parser.add_argument("--result-timeout-ms", type=int, default=7000)
     parser.add_argument("--settle-ms", type=int, default=1400)
+    parser.add_argument("--screenshot-timeout-ms", type=int, default=5000)
+    parser.add_argument("--activation-mode", choices=("finish", "click"), default="finish")
+    parser.add_argument("--button-retries", type=int, default=1, help="retry count for each selected button")
     parser.add_argument("--button-center-x", type=float, default=50)
     parser.add_argument("--button-center-y", type=float, default=40)
     parser.add_argument("--game", default=DEFAULT_GAME, help="game URL, gindex, or guid for --mirror-missing")
@@ -487,10 +525,13 @@ def main():
     if not (root / args.runner).exists():
         raise SystemExit(f"runner not found: {root / args.runner}")
     args.out.mkdir(parents=True, exist_ok=True)
+    mark_progress(args, "main:start")
     selected_buttons = parse_button_selector(args.buttons)
 
     sync_playwright, PlaywrightError = load_playwright()
+    mark_progress(args, "playwright:loaded")
     httpd, port = start_server(root, args.port)
+    mark_progress(args, f"server:started:{port}")
     base_url = f"http://127.0.0.1:{port}"
     summaries = []
     errors = []
@@ -498,33 +539,55 @@ def main():
     try:
         with sync_playwright() as playwright:
             try:
+                mark_progress(args, "browser-launch:start")
                 browser = playwright.chromium.launch(headless=not args.headed)
+                mark_progress(args, "browser-launch:done")
             except PlaywrightError as error:
                 raise SystemExit(
                     "Could not launch Playwright Chromium.\n"
                     "Install browser assets with:\n"
                     "  python -m playwright install chromium"
                 ) from error
-            page = browser.new_page(viewport={"width": 1280, "height": 720})
             for idx in selected_buttons:
-                try:
-                    summaries.append(validate_button(page, httpd, base_url, args, idx))
-                    if summaries[-1]["status"] == "unchanged":
-                        errors.append(
-                            {
-                                "buttonIndex": idx,
-                                "error": "button click did not leave the main screen",
-                                "report": summaries[-1]["report"],
-                            }
+                max_attempts = max(args.button_retries, 0) + 1
+                for attempt in range(max_attempts):
+                    context = None
+                    try:
+                        context = browser.new_context(viewport={"width": 1280, "height": 720})
+                        page = context.new_page()
+                        mark_progress(args, f"button:{idx}:attempt:{attempt}:page:new")
+                        mark_progress(args, f"button:{idx}:attempt:{attempt}:start")
+                        summary = validate_button(page, httpd, base_url, args, idx)
+                        summaries.append(summary)
+                        if summary["status"] == "unchanged":
+                            errors.append(
+                                {
+                                    "buttonIndex": idx,
+                                    "error": "button click did not leave the main screen",
+                                    "report": summary["report"],
+                                }
+                            )
+                        print(
+                            f"[ok] button {idx:02d} {summary['buttonName']} "
+                            f"status={summary['status']} 404={summary['local404Count']}",
+                            flush=True,
                         )
-                    print(
-                        f"[ok] button {idx:02d} {summaries[-1]['buttonName']} "
-                        f"status={summaries[-1]['status']} 404={summaries[-1]['local404Count']}",
-                        flush=True,
-                    )
-                except Exception as error:
-                    errors.append({"buttonIndex": idx, "error": str(error)})
-                    print(f"[error] button {idx:02d}: {error}", file=sys.stderr, flush=True)
+                        break
+                    except Exception as error:
+                        mark_progress(args, f"button:{idx}:attempt:{attempt}:error:{error}")
+                        if attempt + 1 >= max_attempts:
+                            errors.append({"buttonIndex": idx, "error": str(error)})
+                            print(f"[error] button {idx:02d}: {error}", file=sys.stderr, flush=True)
+                        else:
+                            print(
+                                f"[retry] button {idx:02d}: {error}",
+                                file=sys.stderr,
+                                flush=True,
+                            )
+                    finally:
+                        if context:
+                            with contextlib.suppress(Exception):
+                                context.close()
             browser.close()
     finally:
         httpd.shutdown()

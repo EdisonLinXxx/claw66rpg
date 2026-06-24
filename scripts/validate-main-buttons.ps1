@@ -15,6 +15,9 @@ param(
     [string]$Out = $(if ($IsWindows -or $env:OS -eq "Windows_NT") { "C:\tmp\claw_verify_main_full" } else { "/tmp/claw_verify_main_full" }),
     [ValidateSet("full", "debug-jump")]
     [string]$RouteMode = "full",
+    [ValidateSet("finish", "click")]
+    [string]$ActivationMode = "finish",
+    [int]$ButtonRetries = 1,
     [int]$Port = 8765,
     [switch]$Headed,
     [switch]$MirrorMissing
@@ -30,7 +33,9 @@ $arguments = @(
     "--root", $repoRoot,
     "--out", $Out,
     "--port", [string]$Port,
-    "--route-mode", $RouteMode
+    "--route-mode", $RouteMode,
+    "--activation-mode", $ActivationMode,
+    "--button-retries", [string]$ButtonRetries
 )
 
 if ($Buttons.Trim()) {

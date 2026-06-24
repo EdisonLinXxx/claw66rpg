@@ -34,7 +34,7 @@ param(
     [int]$DebugJumpIndex = 5,
     [int]$RestoreSettleSteps = 8,
     [int]$MaxNoStateSteps = 60,
-    [bool]$SkipMainButtons = $true,
+    [bool]$SkipMainButtons = $false,
     [switch]$SkipAutoplay,
     [switch]$SkipSaveLoad,
     [switch]$Headed,
