@@ -1383,6 +1383,66 @@
               subStory: depth > 0 ? summarizeLineForTrace(line.subStory, depth - 1) : !!line.subStory
             };
           };
+          var summarizeRunnerStateForDom = function (line, code214State) {
+            if (!line) return null;
+            var story = line.story || null;
+            var currentEvent = line.currentEvent || (story && story.events && story.events[line.pos]) || null;
+            var showEvent = line.currentShowEvent || null;
+            var gd = window.GloableData && GloableData.getInstance ? GloableData.getInstance() : null;
+            var systemButtons = gd && gd.gameMainData && gd.gameMainData.System && gd.gameMainData.System.Buttons || [];
+            var buttons = [];
+            if (showEvent && showEvent.buttons) {
+              for (var buttonIndex = 0; buttonIndex < showEvent.buttons.length; buttonIndex++) {
+                var button = showEvent.buttons[buttonIndex];
+                var systemButton = button && systemButtons[button.index] || null;
+                buttons.push({
+                  idx: buttonIndex,
+                  index: button && button.index,
+                  name: shortStoryString(systemButton && systemButton.name, 80),
+                  x: button && button.x,
+                  y: button && button.y,
+                  width: button && button.width,
+                  height: button && button.height,
+                  visible: button && button.visible
+                });
+              }
+            }
+            return {
+              count: storyTraceCount,
+              storyId: line.storyId,
+              storyName: shortStoryString(line.storyName, 80),
+              pos: line.pos,
+              code: currentEvent && currentEvent.Code,
+              argv: currentEvent && Array.prototype.slice.call(currentEvent.Argv || []).map(function (item) {
+                return shortStoryString(item, 160);
+              }).slice(0, 20) || [],
+              currentLinks: currentEvent && currentEvent.links ? Array.prototype.slice.call(currentEvent.links) : (line.currentLinks ? Array.prototype.slice.call(line.currentLinks) : []),
+              showEvent: {
+                type: showEvent && showEvent.constructor && showEvent.constructor.name || '',
+                code: showEvent && showEvent.code,
+                buttonsLength: buttons.length,
+                buttons: buttons,
+                hasFinish: !!(showEvent && showEvent.finish),
+                endJump: showEvent && showEvent.endJump
+              },
+              code214: code214State
+            };
+          };
+          var writeRunnerStoryStateDom = function (state) {
+            try {
+              if (!state) return;
+              window.__runnerStoryState = state;
+              var el = document.getElementById('runner-story-state');
+              if (!el) {
+                el = document.createElement('pre');
+                el.id = 'runner-story-state';
+                el.style.display = 'none';
+                document.body.appendChild(el);
+              }
+              el.textContent = JSON.stringify(state);
+              if (document.body) document.body.setAttribute('data-runner-story-state-updated', String(Date.now()));
+            } catch (domStateError) {}
+          };
           var getChildPath = function (root, target, rootPath, maxDepth) {
             var found = '';
             var visit = function (node, path, depth) {
@@ -1883,6 +1943,202 @@
               logLine('AUTO FIRST SCENE CHOICE ERROR ' + (autoFirstSceneChoiceError && (autoFirstSceneChoiceError.stack || autoFirstSceneChoiceError.message) || autoFirstSceneChoiceError));
             }
           };
+          var maybeAutoCode1010Choice = function (line) {
+            try {
+              var params = new URLSearchParams(window.location.search);
+              var autoCode1010ChoiceValue = params.get('autoCode1010Choice');
+              if (autoCode1010ChoiceValue === null) return;
+              var eventAtPos = line && line.story && line.story.events && line.story.events[line.pos] || null;
+              var eventAtPosCode = eventAtPos && (eventAtPos.Code !== undefined ? eventAtPos.Code : eventAtPos.code);
+              var event = eventAtPos && eventAtPosCode === 1010 ? eventAtPos : line && line.currentEvent || eventAtPos;
+              var eventCode = event && (event.Code !== undefined ? event.Code : event.code);
+              if (!line || !event || eventCode !== 1010 || !line.currentShowEvent || !line.currentShowEvent.finish) return;
+              var eventLinks = event.links || event.Links || [];
+              var eventArgv = event.Argv || event.argv || [];
+              var choiceCount = eventLinks.length;
+              var choiceIndex = autoCode1010ChoiceValue === 'last' ? choiceCount - 1 : parseInt(autoCode1010ChoiceValue, 10);
+              if (!isFinite(choiceIndex) || choiceIndex < 0) return;
+              if (choiceCount > 0 && choiceIndex >= choiceCount) choiceIndex = choiceCount - 1;
+              var key = String(line.storyId) + ':' + String(line.pos) + ':' + String(choiceIndex);
+              window.__runnerAutoCode1010ChoiceDone = window.__runnerAutoCode1010ChoiceDone || {};
+              if (window.__runnerAutoCode1010ChoiceDone[key]) return;
+              window.__runnerAutoCode1010ChoiceDone[key] = true;
+              logLine('AUTO CODE1010 CHOICE ' + JSON.stringify({
+                storyId: line.storyId,
+                pos: line.pos,
+                choiceIndex: choiceIndex,
+                argv: Array.prototype.slice.call(eventArgv).map(function (item) {
+                  return shortStoryString(item, 120);
+                }),
+                currentLinks: Array.prototype.slice.call(eventLinks)
+              }));
+              line.currentShowEvent.finish(choiceIndex);
+            } catch (autoCode1010ChoiceError) {
+              logLine('AUTO CODE1010 CHOICE ERROR ' + (autoCode1010ChoiceError && (autoCode1010ChoiceError.stack || autoCode1010ChoiceError.message) || autoCode1010ChoiceError));
+            }
+          };
+          var maybeAutoCode101Choice = function (line) {
+            try {
+              var params = new URLSearchParams(window.location.search);
+              var autoCode101ChoiceValue = params.get('autoCode101Choice');
+              if (autoCode101ChoiceValue === null) return;
+              var eventAtPos = line && line.story && line.story.events && line.story.events[line.pos] || null;
+              var eventAtPosCode = eventAtPos && (eventAtPos.Code !== undefined ? eventAtPos.Code : eventAtPos.code);
+              var event = eventAtPos && eventAtPosCode === 101 ? eventAtPos : line && line.currentEvent || eventAtPos;
+              var eventCode = event && (event.Code !== undefined ? event.Code : event.code);
+              if (!line || !event || eventCode !== 101 || !line.currentShowEvent || !line.currentShowEvent.finish) return;
+              var scopedStoryId = params.get('autoCode101StoryId');
+              var scopedPos = params.get('autoCode101Pos');
+              if (scopedStoryId !== null && String(line.storyId) !== String(scopedStoryId)) return;
+              if (scopedPos !== null && String(line.pos) !== String(scopedPos)) return;
+              var eventLinks = event.links || event.Links || [];
+              var eventArgv = event.Argv || event.argv || [];
+              var choiceCount = eventLinks.length;
+              var choiceIndex = autoCode101ChoiceValue === 'last' ? choiceCount - 1 : parseInt(autoCode101ChoiceValue, 10);
+              if (!isFinite(choiceIndex) || choiceIndex < 0) return;
+              if (choiceCount > 0 && choiceIndex >= choiceCount) choiceIndex = choiceCount - 1;
+              var key = String(line.storyId) + ':' + String(line.pos) + ':' + String(choiceIndex);
+              window.__runnerAutoCode101ChoiceDone = window.__runnerAutoCode101ChoiceDone || {};
+              if (window.__runnerAutoCode101ChoiceDone[key]) return;
+              window.__runnerAutoCode101ChoiceDone[key] = true;
+              logLine('AUTO CODE101 CHOICE ' + JSON.stringify({
+                storyId: line.storyId,
+                pos: line.pos,
+                choiceIndex: choiceIndex,
+                argv: Array.prototype.slice.call(eventArgv).map(function (item) {
+                  return shortStoryString(item, 120);
+                }),
+                currentLinks: Array.prototype.slice.call(eventLinks)
+              }));
+              line.currentShowEvent.finish(choiceIndex);
+            } catch (autoCode101ChoiceError) {
+              logLine('AUTO CODE101 CHOICE ERROR ' + (autoCode101ChoiceError && (autoCode101ChoiceError.stack || autoCode101ChoiceError.message) || autoCode101ChoiceError));
+            }
+          };
+          var maybeAutoCode100Text = function (line) {
+            try {
+              if (!hasQueryFlag('autoCode100Text')) return;
+              var eventAtPos = line && line.story && line.story.events && line.story.events[line.pos] || null;
+              var eventAtPosCode = eventAtPos && (eventAtPos.Code !== undefined ? eventAtPos.Code : eventAtPos.code);
+              var event = eventAtPos && eventAtPosCode === 100 ? eventAtPos : line && line.currentEvent || eventAtPos;
+              var eventCode = event && (event.Code !== undefined ? event.Code : event.code);
+              if (!line || !event || eventCode !== 100 || typeof line.eventFinish !== 'function') return;
+              var params = new URLSearchParams(window.location.search);
+              var scopedStoryId = params.get('autoCode100StoryId');
+              var scopedPos = params.get('autoCode100Pos');
+              if (scopedStoryId !== null) {
+                var storyIds = scopedStoryId.split(',').map(function (value) { return value.trim(); }).filter(Boolean);
+                if (storyIds.indexOf(String(line.storyId)) < 0) return;
+              }
+              if (scopedPos !== null && String(line.pos) !== String(scopedPos)) return;
+              var key = String(line.storyId) + ':' + String(line.pos) + ':' + String(eventCode);
+              window.__runnerAutoCode100TextDone = window.__runnerAutoCode100TextDone || {};
+              if (window.__runnerAutoCode100TextDone[key]) return;
+              window.__runnerAutoCode100TextDone[key] = true;
+              logLine('AUTO CODE100 TEXT eventFinish ' + JSON.stringify({
+                storyId: line.storyId,
+                pos: line.pos
+              }));
+              line.eventFinish();
+            } catch (autoCode100TextError) {
+              logLine('AUTO CODE100 TEXT ERROR ' + (autoCode100TextError && (autoCode100TextError.stack || autoCode100TextError.message) || autoCode100TextError));
+            }
+          };
+          var maybeDebugJumpStory = function (line, iMain) {
+            try {
+              var params = new URLSearchParams(window.location.search);
+              var jumpMain = hasQueryFlag('debugJumpMain');
+              var storyIdValue = params.get('debugJumpStoryId');
+              if (!jumpMain && storyIdValue === null) return;
+              var storyId = parseInt(storyIdValue || '15', 10);
+              var jumpIndex = parseInt(params.get('debugJumpIndex') || (jumpMain ? '648' : '1'), 10);
+              if (!isFinite(storyId) || !isFinite(jumpIndex) || storyId <= 0 || jumpIndex <= 0) return;
+              var key = String(storyId) + ':' + String(jumpIndex);
+              window.__runnerDebugJumpStoryDone = window.__runnerDebugJumpStoryDone || {};
+              if (window.__runnerDebugJumpStoryDone[key]) return;
+              var targetLine = iMain || line;
+              var gdForReadyCheck = GloableData.getInstance();
+              var uiForReadyCheck = UIManager.getInstance && UIManager.getInstance();
+              if (!gdForReadyCheck || !gdForReadyCheck.fontBitmapData || !uiForReadyCheck || !uiForReadyCheck.backgroundLayer) return;
+              if (!targetLine || typeof targetLine.jumpStoryCallBack !== 'function' || typeof targetLine.jumpToIndex !== 'function' || typeof targetLine.eventFinish !== 'function') return;
+              window.__runnerDebugJumpStoryDone[key] = true;
+              logLine('DEBUG JUMP STORY ' + JSON.stringify({ storyId: storyId, jumpIndex: jumpIndex }));
+              targetLine.jumpStoryCallBack(storyId, function () {
+                var gd = null;
+                var originalSnap = null;
+                try {
+                  gd = GloableData.getInstance();
+                  originalSnap = gd && gd.snap;
+                  if (gd && typeof gd.snap === 'function') {
+                    gd.snap = function () {
+                      logLine('DEBUG JUMP STORY suppress snap');
+                    };
+                  }
+                  targetLine.isPause = false;
+                  targetLine.jumpToIndex(jumpIndex);
+                  targetLine.eventFinish();
+                  if (gd && originalSnap) {
+                    setTimeout(function () {
+                      gd.snap = originalSnap;
+                    }, 0);
+                  }
+                } catch (jumpCallbackError) {
+                  if (gd && originalSnap) gd.snap = originalSnap;
+                  logLine('DEBUG JUMP STORY CALLBACK ERROR ' + (jumpCallbackError && (jumpCallbackError.stack || jumpCallbackError.message) || jumpCallbackError));
+                }
+              });
+            } catch (debugJumpStoryError) {
+              logLine('DEBUG JUMP STORY ERROR ' + (debugJumpStoryError && (debugJumpStoryError.stack || debugJumpStoryError.message) || debugJumpStoryError));
+            }
+          };
+          var maybeAutoDailyRandomText = function (line) {
+            try {
+              if (!hasQueryFlag('autoDailyRandomText')) return;
+              var eventAtPos = line && line.story && line.story.events && line.story.events[line.pos] || null;
+              var event = eventAtPos && eventAtPos.Code === 100 ? eventAtPos : line && line.currentEvent || eventAtPos;
+              if (!line || line.storyId !== 118 || !event || event.Code !== 100 || typeof line.eventFinish !== 'function') return;
+              var key = String(line.storyId) + ':' + String(line.pos) + ':' + String(event.Code);
+              window.__runnerAutoDailyRandomTextDone = window.__runnerAutoDailyRandomTextDone || {};
+              if (window.__runnerAutoDailyRandomTextDone[key]) return;
+              window.__runnerAutoDailyRandomTextDone[key] = true;
+              logLine('AUTO DAILY RANDOM TEXT eventFinish ' + JSON.stringify({
+                storyId: line.storyId,
+                pos: line.pos,
+                sample: shortStoryString(event.Argv && event.Argv[2], 120)
+              }));
+              line.eventFinish();
+            } catch (autoDailyRandomTextError) {
+              logLine('AUTO DAILY RANDOM TEXT ERROR ' + (autoDailyRandomTextError && (autoDailyRandomTextError.stack || autoDailyRandomTextError.message) || autoDailyRandomTextError));
+            }
+          };
+          var maybeAutoMainScreenButton = function (line) {
+            try {
+              var params = new URLSearchParams(window.location.search);
+              var autoMainScreenButtonValue = params.get('autoMainScreenButtonIdx');
+              if (autoMainScreenButtonValue === null || window.__runnerAutoMainScreenButtonDone) return;
+              var eventAtPos = line && line.story && line.story.events && line.story.events[line.pos] || null;
+              var event = eventAtPos && eventAtPos.Code === 204 ? eventAtPos : line && line.currentEvent || eventAtPos;
+              if (!line || line.storyId !== 15 || line.pos !== 648 || !event || event.Code !== 204) return;
+              if (!line.currentShowEvent || !line.currentShowEvent.finish || !line.currentShowEvent.buttons) return;
+              var choiceIndex = parseInt(autoMainScreenButtonValue, 10);
+              if (!isFinite(choiceIndex) || choiceIndex < 0 || choiceIndex >= line.currentShowEvent.buttons.length) return;
+              var button = line.currentShowEvent.buttons[choiceIndex];
+              var systemButton = button && GloableData.getInstance().gameMainData.System.Buttons[button.index];
+              window.__runnerAutoMainScreenButtonDone = true;
+              logLine('AUTO MAIN SCREEN BUTTON ' + JSON.stringify({
+                choiceIndex: choiceIndex,
+                buttonIndex: button && button.index,
+                buttonName: systemButton && systemButton.name || '',
+                x: button && button.x,
+                y: button && button.y,
+                currentLinks: event.links ? Array.prototype.slice.call(event.links) : [],
+                endJump: line.currentShowEvent.endJump
+              }));
+              line.currentShowEvent.finish(choiceIndex);
+            } catch (autoMainScreenButtonError) {
+              logLine('AUTO MAIN SCREEN BUTTON ERROR ' + (autoMainScreenButtonError && (autoMainScreenButtonError.stack || autoMainScreenButtonError.message) || autoMainScreenButtonError));
+            }
+          };
           var maybeStubCode214Name = function (line) {
             if (!hasQueryFlag('stubCode214Name')) return false;
             try {
@@ -2256,9 +2512,15 @@
               installSCUIButtonHitPatch();
               installNewbieChestHitProxy();
               probeAutoNameChoiceState(line);
+              maybeDebugJumpStory(line, iMain);
               patchFirstSceneLobbyButtonsNow(line);
               maybePatchFirstSceneLobbyButtons(line);
               maybeAutoFirstSceneChoice(line);
+              maybeAutoCode1010Choice(line);
+              maybeAutoCode101Choice(line);
+              maybeAutoCode100Text(line);
+              maybeAutoDailyRandomText(line);
+              maybeAutoMainScreenButton(line);
               maybeStubCode214Name(line);
               if (maybeStubCode214Birthday(line) && line && typeof line.eventFinish === 'function') {
                 logLine('STUB CODE214 BIRTHDAY eventFinish() from collectStoryState');
@@ -2271,6 +2533,7 @@
                   wrapLayerMethod(backgroundLayer, methodName);
                 });
               }
+              writeRunnerStoryStateDom(summarizeRunnerStateForDom(line, code214State));
               logLine('STORY STATE ' + JSON.stringify({
                 count: storyTraceCount,
                 line: summarizeLineForTrace(line, 2),
@@ -2282,7 +2545,8 @@
             } catch (storyStateError) {
               logLine('STORY STATE ERROR ' + (storyStateError && (storyStateError.stack || storyStateError.message) || storyStateError));
             }
-            if (storyTraceCount >= 120) clearInterval(storyTraceTimer);
+            var storyTraceLimit = parseInt(new URLSearchParams(window.location.search).get('storyTraceLimit') || '120', 10);
+            if (storyTraceLimit > 0 && storyTraceCount >= storyTraceLimit) clearInterval(storyTraceTimer);
           };
           var storyTraceTimer = setInterval(collectStoryState, 2000);
           setTimeout(collectStoryState, 1200);
