@@ -23,7 +23,6 @@ DEFAULT_MAIN_BUTTONS = "0,1,2,3,4,5,6,7,9,10,11"
 KNOWN_SHOW_EVENT_CHOICES = {
     (1, 47): [1],
     (1, 231): [3],
-    (1, 1316): [2, 3],
     (1, 1328): [0, 2],
 }
 
@@ -42,10 +41,23 @@ def state_key(state):
 
 def read_live_state(page, timeout_ms):
     try:
-        text = page.locator("#runner-story-state").text_content(timeout=timeout_ms)
+        page.set_default_timeout(timeout_ms)
+        text = page.evaluate(
+            """
+            () => {
+              const node = document.getElementById('runner-story-state');
+              return node ? node.textContent : '';
+            }
+            """
+        )
     except Exception:
         return None
-    return json.loads(text) if text else None
+    if not text:
+        return None
+    try:
+        return json.loads(text)
+    except Exception:
+        return None
 
 
 def finish_line_event(page):
@@ -175,6 +187,10 @@ def drive_state(page, args, state, context):
     }
 
     if code in (101, 1010, 204):
+        if state.get("storyId") == 1 and state.get("pos") in (1316, 2075):
+            page.wait_for_timeout(args.idle_wait_ms)
+            action.update({"acted": False, "method": "wait:auto-name-choice"})
+            return action
         choice_index, reason = choose_index(args, state, context)
         action.update({"choiceIndex": choice_index, "choiceReason": reason})
         if finish_show_event(page, choice_index):
@@ -225,6 +241,29 @@ def build_context(args):
     }
 
 
+def recover_no_state(page, args, context, last_state, last_action):
+    recoveries = context.setdefault("recoveries", {})
+    if not last_state or not last_action:
+        return {"acted": False, "method": "wait:no-state", "choiceIndex": None, "choiceReason": ""}
+
+    key = state_key(last_state)
+    if key == "1:1316:204" and last_action.get("choiceIndex") == 2 and not recoveries.get("name-confirm"):
+        recoveries["name-confirm"] = True
+        if finish_show_event(page, 3):
+            return {"acted": True, "method": "recovery:showEvent.finish(3)", "choiceIndex": 3, "choiceReason": "recovery"}
+        click_stage(page, 440 + args.button_center_x, 310 + args.button_center_y)
+        return {"acted": True, "method": "recovery:click-name-confirm", "choiceIndex": 3, "choiceReason": "recovery"}
+
+    if key == "1:2075:204" and last_action.get("choiceIndex") in (0, 1) and not recoveries.get("inn-confirm"):
+        recoveries["inn-confirm"] = True
+        if finish_show_event(page, 2):
+            return {"acted": True, "method": "recovery:showEvent.finish(2)", "choiceIndex": 2, "choiceReason": "recovery"}
+        click_stage(page, 530 + args.button_center_x, 300 + args.button_center_y)
+        return {"acted": True, "method": "recovery:click-inn-confirm", "choiceIndex": 2, "choiceReason": "recovery"}
+
+    return {"acted": False, "method": "wait:no-state", "choiceIndex": None, "choiceReason": ""}
+
+
 def run_autoplay(page, httpd, base_url, args):
     run_id = f"autoplay_{int(time.time() * 1000)}"
     url = build_runner_url(base_url, args.runner, run_id, "full", 0)
@@ -241,9 +280,12 @@ def run_autoplay(page, httpd, base_url, args):
     final_error = None
     unique_states = {}
     last_state = None
+    previous_state = None
+    previous_action = None
 
     print(f"loading: {url}", flush=True)
-    page.goto(url, wait_until="domcontentloaded", timeout=args.page_timeout_ms)
+    page.set_default_navigation_timeout(args.page_timeout_ms)
+    page.goto(url, wait_until="commit", timeout=args.page_timeout_ms)
     if args.initial_wait_ms:
         print(f"waiting for runner init: {args.initial_wait_ms}ms", flush=True)
         page.wait_for_timeout(args.initial_wait_ms)
@@ -255,7 +297,8 @@ def run_autoplay(page, httpd, base_url, args):
                 break
 
             state = read_live_state(page, args.evaluate_timeout_ms)
-            last_state = state
+            if state:
+                last_state = state
             key = state_key(state)
             unique_states[key] = summarize_state(state) if state else None
 
@@ -268,7 +311,13 @@ def run_autoplay(page, httpd, base_url, args):
                 last_key = key
                 same_key_actions = 0
 
-            action = drive_state(page, args, state, context)
+            if state is None and no_state_steps == 2:
+                action = recover_no_state(page, args, context, previous_state, previous_action)
+            else:
+                action = drive_state(page, args, state, context)
+            if state is not None:
+                previous_state = state
+                previous_action = action
             if action.get("acted"):
                 same_key_actions += 1
 

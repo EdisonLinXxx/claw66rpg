@@ -332,7 +332,8 @@ def drive_to_main(page, idx, timeout_ms):
 
 def validate_button_debug_jump(page, httpd, base_url, args, idx, run_id):
     url = build_runner_url(base_url, args.runner, run_id, "debug-jump", idx)
-    page.goto(url, wait_until="domcontentloaded", timeout=args.page_timeout_ms)
+    page.set_default_navigation_timeout(args.page_timeout_ms)
+    page.goto(url, wait_until="commit", timeout=args.page_timeout_ms)
     main_state = wait_for_state(
         page,
         lambda state: is_main_state(state)
@@ -355,7 +356,8 @@ def validate_button_debug_jump(page, httpd, base_url, args, idx, run_id):
 
 def validate_button_full_route(page, base_url, args, idx, run_id):
     url = build_runner_url(base_url, args.runner, run_id, "full", idx)
-    page.goto(url, wait_until="domcontentloaded", timeout=args.page_timeout_ms)
+    page.set_default_navigation_timeout(args.page_timeout_ms)
+    page.goto(url, wait_until="commit", timeout=args.page_timeout_ms)
     main_state = drive_to_main(page, idx, args.main_timeout_ms)
     if not main_state:
         current_state = summarize_state(read_state(page))

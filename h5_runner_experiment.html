@@ -1725,7 +1725,7 @@
             if (!hasQueryFlag('autoNameChoice') || window.__runnerAutoNameChoiceDone) return;
             try {
               var event = line && (line.currentEvent || (line.story && line.story.events && line.story.events[line.pos])) || null;
-              if (!event || event.Code !== 204 || line.pos !== 231) return;
+              if (!event || event.Code !== 204 || (line.pos !== 231 && line.pos !== 1316)) return;
               if (!window.__runnerAutoNameChoiceReadyLogged) {
                 window.__runnerAutoNameChoiceReadyLogged = true;
                 logLine('AUTO NAME CHOICE READYCHECK ' + JSON.stringify({
@@ -1765,7 +1765,7 @@
             if (!hasQueryFlag('autoInnNameChoice') || window.__runnerAutoInnNameChoiceDone) return;
             try {
               var event = line && (line.currentEvent || (line.story && line.story.events && line.story.events[line.pos])) || null;
-              if (!event || event.Code !== 204 || line.pos !== 1328) return;
+              if (!event || event.Code !== 204 || (line.pos !== 1328 && line.pos !== 2075)) return;
               if (!line.currentShowEvent || !line.currentShowEvent.finish) return;
               var params = new URLSearchParams(window.location.search);
               var sequence = (params.get('autoInnNameChoiceSequence') || '').split(',').map(function (item) {

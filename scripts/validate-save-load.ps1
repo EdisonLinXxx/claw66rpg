@@ -17,6 +17,9 @@ param(
     [int]$SaveAfterSteps = 24,
     [int]$AdvanceSteps = 8,
     [int]$ContinueSteps = 5,
+    [int]$DebugJumpStoryId = 44,
+    [int]$DebugJumpIndex = 5,
+    [int]$RestoreSettleSteps = 8,
     [int]$MaxNoStateSteps = 60,
     [ValidateSet("round-robin", "first", "last")]
     [string]$ChoicePolicy = "round-robin",
@@ -39,6 +42,9 @@ $arguments = @(
     "--save-after-steps", [string]$SaveAfterSteps,
     "--advance-steps", [string]$AdvanceSteps,
     "--continue-steps", [string]$ContinueSteps,
+    "--debug-jump-story-id", [string]$DebugJumpStoryId,
+    "--debug-jump-index", [string]$DebugJumpIndex,
+    "--restore-settle-steps", [string]$RestoreSettleSteps,
     "--max-no-state-steps", [string]$MaxNoStateSteps,
     "--choice-policy", $ChoicePolicy,
     "--main-buttons", $MainButtons

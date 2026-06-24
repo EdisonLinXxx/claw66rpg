@@ -8,7 +8,6 @@ from pathlib import Path
 from auto_play_story import (
     build_context,
     drive_state,
-    read_live_state,
     safe_screenshot,
 )
 from validate_main_buttons import (
@@ -28,7 +27,7 @@ DEFAULT_OUT = Path("C:/tmp/claw_save_load")
 DEFAULT_MAIN_BUTTONS = "0,1,2,3,4,5,6,7,9,10,11"
 
 
-def build_runner_url(base_url, runner, run_id, clear_storage):
+def build_runner_url(base_url, runner, run_id, clear_storage, debug_jump_story_id=0, debug_jump_index=1):
     params = {
         "localRes": "1",
         "patchNewDSystem": "1",
@@ -61,6 +60,9 @@ def build_runner_url(base_url, runner, run_id, clear_storage):
     }
     if clear_storage:
         params["clearStorage"] = "1"
+    if debug_jump_story_id:
+        params["debugJumpStoryId"] = str(debug_jump_story_id)
+        params["debugJumpIndex"] = str(debug_jump_index)
     query = "&".join(f"{key}={value}" for key, value in params.items())
     return f"{base_url}/{runner}?{query}"
 
@@ -69,6 +71,35 @@ def state_key(state):
     if not state:
         return "none"
     return f"{state.get('storyId')}:{state.get('pos')}:{state.get('code')}"
+
+
+def mark_progress(args, label):
+    try:
+        with (args.out / "save_load_progress.log").open("a", encoding="utf-8") as progress:
+            progress.write(f"{datetime.now(timezone.utc).isoformat()} {label}\n")
+    except Exception:
+        pass
+
+
+def read_live_state(page, timeout_ms):
+    try:
+        page.set_default_timeout(timeout_ms)
+        text = page.evaluate(
+            """
+            () => {
+              const node = document.getElementById('runner-story-state');
+              return node ? node.textContent : '';
+            }
+            """
+        )
+    except Exception:
+        return None
+    if not text:
+        return None
+    try:
+        return json.loads(text)
+    except Exception:
+        return None
 
 
 def wait_for_state(page, args, timeout_ms):
@@ -303,49 +334,106 @@ def restore_match(saved, advanced, restored, tolerance):
     return detail
 
 
+def settle_restored_state(page, args, context, saved_state, advanced_state, restored_state, trace):
+    records = []
+    matched = restore_match(saved_state, advanced_state, restored_state, args.restore_pos_tolerance)
+    idx = 0
+    while not matched.get("ok") and idx < args.restore_settle_steps:
+        state = read_live_state(page, args.evaluate_timeout_ms)
+        action = drive_state(page, args, state, context) if state else {"acted": False, "method": "wait:no-state"}
+        record = {
+            "label": "restore-settle",
+            "step": idx,
+            "state": summarize_state(state) if state else None,
+            "action": action,
+        }
+        records.append(record)
+        trace.write(json.dumps(record, ensure_ascii=False) + "\n")
+        trace.flush()
+        print(
+            f"[restore-settle {idx:03d}] {state_key(state)} action={action.get('method')} "
+            f"choice={action.get('choiceIndex')}",
+            flush=True,
+        )
+        page.wait_for_timeout(args.action_wait_ms if action.get("acted") else args.idle_wait_ms)
+        restored_state = wait_for_state(page, args, args.state_timeout_ms)
+        matched = restore_match(saved_state, advanced_state, restored_state, args.restore_pos_tolerance)
+        idx += 1
+    return restored_state, matched, records
+
+
 def run_validation(browser, httpd, base_url, args):
     run_id = f"save_load_{int(time.time() * 1000)}"
     trace_path = args.out / "save_load_trace.jsonl"
     start_404 = len(httpd.not_found)
+    mark_progress(args, "new-context:start")
     context = browser.new_context(viewport={"width": 1280, "height": 720})
+    mark_progress(args, "new-context:done")
     page = context.new_page()
+    mark_progress(args, "new-page:done")
     page.set_default_timeout(args.evaluate_timeout_ms)
+    page.set_default_navigation_timeout(args.page_timeout_ms)
 
     with trace_path.open("w", encoding="utf-8") as trace:
-        url = build_runner_url(base_url, args.runner, run_id, clear_storage=True)
+        url = build_runner_url(
+            base_url,
+            args.runner,
+            run_id,
+            clear_storage=True,
+            debug_jump_story_id=args.debug_jump_story_id,
+            debug_jump_index=args.debug_jump_index,
+        )
         print(f"loading initial run: {url}", flush=True)
-        page.goto(url, wait_until="domcontentloaded", timeout=args.page_timeout_ms)
+        mark_progress(args, "initial-goto:start")
+        page.goto(url, wait_until="commit", timeout=args.page_timeout_ms)
+        mark_progress(args, "initial-goto:done")
         page.wait_for_timeout(args.initial_wait_ms)
+        mark_progress(args, "initial-wait:done")
         if not wait_for_state(page, args, args.state_timeout_ms):
             raise RuntimeError("initial run did not expose story state")
+        mark_progress(args, "initial-state:seen")
 
         play_context = build_context(args)
         before_save_records = drive_steps(page, args, play_context, args.save_after_steps, "before-save", trace)
+        mark_progress(args, "before-save:done")
         saved_state = read_live_state(page, args.evaluate_timeout_ms)
         if not saved_state:
             raise RuntimeError("could not read save-point state")
 
         before_storage = storage_summary(page)
+        mark_progress(args, "snap:start")
         snap_result = call_snap(page, args.slot)
         page.wait_for_timeout(args.save_wait_ms)
         save_info = save_slot_info(page, args.slot)
         after_storage = storage_summary(page)
+        mark_progress(args, "snap:done")
         if not snap_result.get("ok"):
             raise RuntimeError(f"snap failed: {snap_result}")
         if not save_info.get("exists"):
             raise RuntimeError(f"save slot was not written: {save_info}")
 
         advanced_records = drive_steps(page, args, play_context, args.advance_steps, "after-save", trace)
+        mark_progress(args, "after-save:done")
         advanced_state = read_live_state(page, args.evaluate_timeout_ms)
         saved_page_screenshot = safe_screenshot(page, args.out / "saved_page.png")
         page.close()
 
         page2 = context.new_page()
+        mark_progress(args, "restore-page:new")
         page2.set_default_timeout(args.evaluate_timeout_ms)
-        restore_url = build_runner_url(base_url, args.runner, f"{run_id}_restore", clear_storage=False)
+        page2.set_default_navigation_timeout(args.page_timeout_ms)
+        restore_url = build_runner_url(
+            base_url,
+            args.runner,
+            f"{run_id}_restore",
+            clear_storage=False,
+        )
         print(f"loading restore run: {restore_url}", flush=True)
-        page2.goto(restore_url, wait_until="domcontentloaded", timeout=args.page_timeout_ms)
+        mark_progress(args, "restore-goto:start")
+        page2.goto(restore_url, wait_until="commit", timeout=args.page_timeout_ms)
+        mark_progress(args, "restore-goto:done")
         page2.wait_for_timeout(args.initial_wait_ms)
+        mark_progress(args, "restore-wait:done")
 
         restore_before_state = read_live_state(page2, args.evaluate_timeout_ms)
         restore_runtime = wait_for_save_runtime(page2, args, args.state_timeout_ms)
@@ -355,12 +443,23 @@ def run_validation(browser, httpd, base_url, args):
         if not restore_slot_before.get("exists"):
             raise RuntimeError(f"restore run could not see save slot: {restore_slot_before}")
         restore_result = call_restore(page2, args.slot)
+        mark_progress(args, "restore-call:done")
         if not restore_result.get("ok"):
             raise RuntimeError(f"restore failed: {restore_result}")
         restored_state = wait_for_state(page2, args, args.state_timeout_ms)
         page2.wait_for_timeout(args.restore_wait_ms)
+        mark_progress(args, "restore-state:done")
 
-        restored_matches = restore_match(saved_state, advanced_state, restored_state, args.restore_pos_tolerance)
+        settle_context = build_context(args)
+        restored_state, restored_matches, restore_settle_records = settle_restored_state(
+            page2,
+            args,
+            settle_context,
+            saved_state,
+            advanced_state,
+            restored_state,
+            trace,
+        )
         if not restored_matches.get("ok"):
             raise RuntimeError(
                 "restored state is not compatible with saved state: "
@@ -369,6 +468,7 @@ def run_validation(browser, httpd, base_url, args):
 
         continue_context = build_context(args)
         continue_records = drive_steps(page2, args, continue_context, args.continue_steps, "continue", trace)
+        mark_progress(args, "continue:done")
         continued_state = read_live_state(page2, args.evaluate_timeout_ms)
 
         screenshots = {
@@ -401,6 +501,7 @@ def run_validation(browser, httpd, base_url, args):
         "storageAfter": after_storage,
         "beforeSaveRecords": before_save_records,
         "advancedRecords": advanced_records,
+        "restoreSettleRecords": restore_settle_records,
         "continueRecords": continue_records,
         "local404": local_404,
         "missingMd5s": missing_md5s,
@@ -420,7 +521,10 @@ def main():
     parser.add_argument("--save-after-steps", type=int, default=24)
     parser.add_argument("--advance-steps", type=int, default=8)
     parser.add_argument("--continue-steps", type=int, default=5)
+    parser.add_argument("--debug-jump-story-id", type=int, default=44, help="story id to jump to before save/load validation; 0 disables")
+    parser.add_argument("--debug-jump-index", type=int, default=5)
     parser.add_argument("--restore-pos-tolerance", type=int, default=8)
+    parser.add_argument("--restore-settle-steps", type=int, default=8)
     parser.add_argument("--choice-policy", choices=("round-robin", "first", "last"), default="round-robin")
     parser.add_argument("--main-buttons", default=DEFAULT_MAIN_BUTTONS)
     parser.add_argument("--headed", action="store_true", help="show the browser window")
@@ -445,9 +549,12 @@ def main():
     if not (args.root / args.runner).exists():
         raise SystemExit(f"runner not found: {args.root / args.runner}")
     args.out.mkdir(parents=True, exist_ok=True)
+    mark_progress(args, "main:start")
 
     sync_playwright, PlaywrightError = load_playwright()
+    mark_progress(args, "playwright:loaded")
     httpd, port = start_server(args.root, args.port)
+    mark_progress(args, f"server:started:{port}")
     base_url = f"http://127.0.0.1:{port}"
     summary = None
     exit_code = 0
@@ -455,7 +562,9 @@ def main():
         with sync_playwright() as playwright:
             browser = None
             try:
+                mark_progress(args, "browser-launch:start")
                 browser = playwright.chromium.launch(headless=not args.headed)
+                mark_progress(args, "browser-launch:done")
             except PlaywrightError as error:
                 raise SystemExit(
                     "Could not launch Playwright Chromium.\n"
