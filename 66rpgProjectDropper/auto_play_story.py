@@ -187,16 +187,11 @@ def escape_repeat_text_state(page, state):
           line.eventRunFinish = true;
           if (line.currentShowEvent) line.currentShowEvent.isSuiFinish = true;
           if (line.currentEvent) line.currentEvent = null;
-          const jumpToInnMain = () => {
-            line.isPause = false;
+          if (typeof line.jumpToIndex === 'function') {
             line.jumpToIndex(648);
-            if (typeof line.eventFinish === 'function') line.eventFinish();
-          };
-          if (typeof line.jumpStoryCallBack === 'function' && typeof line.jumpToIndex === 'function') {
-            line.jumpStoryCallBack(15, jumpToInnMain);
-            return { ok: true, method: 'escape-sickness:jump-15-648' };
+            return { ok: true, method: 'escape-sickness:jump-index-648' };
           }
-          return { ok: false, method: '', reason: 'missing jump methods' };
+          return { ok: false, method: '', reason: 'missing jumpToIndex' };
         }
         """
     )
