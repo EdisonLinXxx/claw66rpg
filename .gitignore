@@ -4,3 +4,4 @@ __pycache__/
 api/oapi_map.php
 shareres/
 .http-server.*.log
+.manual-play-*.log
