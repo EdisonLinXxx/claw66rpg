@@ -189,13 +189,16 @@ def drive_state(page, args, state, context):
         page.wait_for_timeout(args.idle_wait_ms)
         return {"acted": False, "method": "wait:no-state"}
 
+    key = state_key(state)
+    drive_visit = context["drive_visits"].get(key, 0)
+    context["drive_visits"][key] = drive_visit + 1
     code = state.get("code")
     action = {
         "acted": False,
         "method": "",
         "choiceIndex": None,
         "choiceReason": "",
-        "stateKey": state_key(state),
+        "stateKey": key,
     }
 
     if code in (101, 1010, 204):
@@ -205,14 +208,21 @@ def drive_state(page, args, state, context):
             return action
         choice_index, reason = choose_index(args, state, context)
         action.update({"choiceIndex": choice_index, "choiceReason": reason})
-        if finish_show_event(page, choice_index):
-            action.update({"acted": True, "method": f"showEvent.finish({choice_index})"})
-            return action
         buttons = ((state.get("showEvent") or {}).get("buttons") or [])
         if buttons and choice_index < len(buttons):
             button = buttons[choice_index]
-            click_stage(page, float(button.get("x") or 0) + args.button_center_x, float(button.get("y") or 0) + args.button_center_y)
-            action.update({"acted": True, "method": "click-button-fallback"})
+            try:
+                click_stage(
+                    page,
+                    float(button.get("x") or 0) + args.button_center_x,
+                    float(button.get("y") or 0) + args.button_center_y,
+                )
+                action.update({"acted": True, "method": "click-button"})
+                return action
+            except Exception as error:
+                action["clickError"] = str(error)
+        if finish_show_event(page, choice_index):
+            action.update({"acted": True, "method": f"showEvent.finish({choice_index})"})
             return action
 
     if code == 214:
@@ -221,6 +231,10 @@ def drive_state(page, args, state, context):
         return action
 
     if code == 100:
+        if drive_visit and len(state.get("currentLinks") or []) > 1:
+            click_stage(page, 480, 500)
+            action.update({"acted": True, "method": "stage-click:repeat-code100"})
+            return action
         result = finish_line_event(page)
         action.update({"acted": bool(result.get("ok")), "method": result.get("method") or result.get("reason") or "code100"})
         return action
@@ -269,6 +283,7 @@ def build_context(args):
     if not main_buttons:
         main_buttons = parse_int_list(DEFAULT_MAIN_BUTTONS)
     return {
+        "drive_visits": {},
         "state_visits": {},
         "main_buttons": main_buttons,
         "main_cursor": 0,
