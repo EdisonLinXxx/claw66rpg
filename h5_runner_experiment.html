@@ -50,7 +50,11 @@
       console.log(text);
     }
     function hasQueryFlag(name) {
-      return new URLSearchParams(window.location.search).get(name) === '1';
+      var params = new URLSearchParams(window.location.search);
+      var value = params.get(name);
+      if (value !== null) return value === '1';
+      if (name === 'patchFirstSceneLobbyButtons') return params.get('autoStartTitle') === '1';
+      return false;
     }
     if (typeof window.GetImageBase64 !== 'function') {
       window.GetImageBase64 = function (url, width, height, callback) {
