@@ -1251,3 +1251,35 @@ Observed progression:
 | `Script error. @ :0:0` | none observed |
 
 Current technical conclusion: the previous top-level stage ownership question is resolved. The sampled first-branch main-story path does not reproduce the black screen; it reaches a new deterministic local-play blocker at story event `Code=214`, with the main line paused while a naming/advanced-input event is waiting for UI input. This is now the more immediate local-play blocker for this branch: implement or stub the `Code=214` input flow with a deterministic local default, then continue long-run story probing from `pos=237`.
+
+## Round 36: Final Three-Policy Story Coverage Collection
+
+- Ran the final merged story collection with the three autoplay choice policies in one combined report:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\collect-story-coverage.ps1 -DurationSeconds 300 -MaxSteps 250 -Out C:\tmp\claw_story_coverage_final -Policies "round-robin,first,last"
+```
+
+Combined report:
+
+- `C:\tmp\claw_story_coverage_final\story_coverage_report.md`
+- repository copy: `reports/2026-06-25-story-coverage-final-report.md`
+
+Result:
+
+| Policy | Status | OK | Trace | Unique states | Missing MD5s | Last state |
+| --- | --- | --- | ---: | ---: | ---: | --- |
+| `round-robin` | `duration_reached` | yes | 127 | 113 | 0 | `55:93:204` |
+| `first` | `duration_reached` | yes | 132 | 111 | 0 | `44:421:100` |
+| `last` | `duration_reached` | yes | 127 | 106 | 0 | `14:520:100` |
+
+Merged coverage:
+
+- overall status: `ok`
+- total trace entries: `386`
+- total runtime seconds: `906.126`
+- unique story states: `153`
+- missing MD5s: `0`
+- story IDs covered: `1`, `6`, `14`, `15`, `16`, `44`, `54`, `55`, `118`
+
+Current technical conclusion: the final three-policy merged collection passes. All three strategies are `ok` in the same final report, and no mapped static resource miss remains in this validation window.
