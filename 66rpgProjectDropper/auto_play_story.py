@@ -325,6 +325,12 @@ def drive_state(page, args, state, context):
         action.update({"acted": bool(result.get("ok")), "method": result.get("method") or result.get("reason") or "code100"})
         return action
 
+    if code == 203:
+        result = finish_line_event(page)
+        if result.get("ok"):
+            action.update({"acted": True, "method": result.get("method") or "code203 eventFinish()"})
+            return action
+
     click_stage(page, 480, 500)
     action.update({"acted": True, "method": "stage-click"})
     return action
