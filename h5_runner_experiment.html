@@ -880,13 +880,19 @@
           };
           var autoStartTitle = function () {
             if (!hasQueryFlag('autoStartTitle')) return;
-            setTimeout(function () {
+            var attempts = 0;
+            var tryStart = function () {
+              attempts += 1;
               try {
+                var gd = window.GloableData && GloableData.getInstance ? GloableData.getInstance() : null;
+                if (window.__runnerTitleStoryStarted || (gd && gd.currentLine)) return;
                 startTitleStory('AUTO TITLE START');
               } catch (autoError) {
                 logLine('AUTO TITLE START ERROR ' + (autoError && autoError.stack || autoError));
+                if (attempts < 30) setTimeout(tryStart, 500);
               }
-            }, 800);
+            };
+            setTimeout(tryStart, 800);
           };
           var patchTitleClick = function () {
             if (!hasQueryFlag('patchTitleClick') || window.__runnerTitleClickPatched) return;
