@@ -286,7 +286,7 @@ def drive_state(page, args, state, context):
         return action
 
     if code == 100:
-        if drive_visit and len(state.get("currentLinks") or []) > 1:
+        if key == "15:104:100" and drive_visit:
             click_stage(page, 480, 500)
             action.update({"acted": True, "method": "stage-click:repeat-code100"})
             return action
