@@ -360,6 +360,12 @@ def drive_state(page, args, state, context):
         action.update({"acted": bool(result.get("ok")), "method": result.get("method") or result.get("reason") or "code100"})
         return action
 
+    if code == 102:
+        result = finish_line_event(page)
+        if result.get("ok"):
+            action.update({"acted": True, "method": result.get("method") or "code102 eventFinish()"})
+            return action
+
     if code in (203, 205):
         escape_inn_stop = escape_inn_stop_state(page, state)
         if escape_inn_stop.get("ok"):
