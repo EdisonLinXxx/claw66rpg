@@ -696,7 +696,8 @@
             if (!event || event.Code !== 204 || !line || line.storyId !== 1 || line.pos !== 7) return;
             var oldArgv = Array.prototype.slice.call(event.Argv || []);
             event.Argv = ['40,470,388,', '41,605,388,', '44,740,388,', '15,555,100,', '34,655,100,', '160,755,100,'];
-            event.links = [9, 11, 14, 31, 13, 33];
+            // Keep links in engine jumList order; finish() remaps the visual 2/3/4 buttons.
+            event.links = [9, 11, 13, 14, 31, 33];
             if (line) line.currentLinks = event.links.slice();
             logLine('PATCH FIRST SCENE LOBBY BUTTONS ' + label + ' ' + JSON.stringify({ oldArgv: oldArgv, newArgv: event.Argv, newLinks: event.links }));
           } catch (patchLobbyEventError) {
@@ -2059,7 +2060,8 @@
               });
               if (!matchesCurrent) return;
               event.Argv = ['40,470,388,', '41,605,388,', '44,740,388,', '15,555,100,', '34,655,100,', '160,755,100,'];
-              event.links = [9, 11, 14, 31, 13, 33];
+              // Keep links in engine jumList order; finish() remaps the visual 2/3/4 buttons.
+              event.links = [9, 11, 13, 14, 31, 33];
               line.currentLinks = event.links.slice();
               window.__runnerFirstSceneLobbyButtonsPatched = true;
               logLine('PATCH FIRST SCENE LOBBY BUTTONS ' + JSON.stringify({ oldArgv: oldArgv, newArgv: event.Argv, newLinks: event.links }));
@@ -2106,7 +2108,8 @@
               if (!event || event.Code !== 204) return;
               var oldArgv = Array.prototype.slice.call(event.Argv || []);
               event.Argv = ['40,470,388,', '41,605,388,', '44,740,388,', '15,555,100,', '34,655,100,', '160,755,100,'];
-              event.links = [9, 11, 14, 31, 13, 33];
+              // Keep links in engine jumList order; finish() remaps the visual 2/3/4 buttons.
+              event.links = [9, 11, 13, 14, 31, 33];
               line.currentLinks = event.links.slice();
               if (line.currentEvent === event || !line.currentEvent || line.currentEvent.Code === 204) line.currentEvent = event;
               window.__runnerFirstSceneLobbyButtonsPatched = true;
