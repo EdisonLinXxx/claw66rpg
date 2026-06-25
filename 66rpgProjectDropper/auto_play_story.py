@@ -202,16 +202,21 @@ def escape_repeat_text_state(page, state):
     )
 
 
-def escape_code203_state(page, state):
-    if not state or not (state.get("storyId") == 15 and state.get("pos") == 1190 and state.get("code") == 203):
-        return {"ok": False, "method": "", "reason": "no code203 escape"}
+def escape_inn_stop_state(page, state):
+    known_stop = state and state.get("storyId") == 15 and (
+        (state.get("pos") == 1190 and state.get("code") == 203)
+        or (state.get("pos") == 1189 and state.get("code") == 205)
+    )
+    if not known_stop:
+        return {"ok": False, "method": "", "reason": "no inn stop escape"}
     return page.evaluate(
         """
         () => {
           const gd = window.GloableData && GloableData.getInstance ? GloableData.getInstance() : null;
           const line = gd && gd.currentLine;
-          if (!line || line.storyId !== 15 || line.pos !== 1190) {
-            return { ok: false, method: '', reason: 'not at inn code203 stop' };
+          const atKnownStop = line && line.storyId === 15 && (line.pos === 1190 || line.pos === 1189);
+          if (!atKnownStop) {
+            return { ok: false, method: '', reason: 'not at inn stop' };
           }
           line.isPause = false;
           line.eventRunFinish = true;
@@ -224,7 +229,7 @@ def escape_code203_state(page, state):
           };
           if (typeof line.jumpStoryCallBack === 'function' && typeof line.jumpToIndex === 'function') {
             line.jumpStoryCallBack(15, jumpToInnMain);
-            return { ok: true, method: 'escape-code203:jump-15-648' };
+            return { ok: true, method: 'escape-inn-stop:jump-15-648' };
           }
           return { ok: false, method: '', reason: 'missing jump methods' };
         }
@@ -355,10 +360,10 @@ def drive_state(page, args, state, context):
         action.update({"acted": bool(result.get("ok")), "method": result.get("method") or result.get("reason") or "code100"})
         return action
 
-    if code == 203:
-        escape_code203 = escape_code203_state(page, state)
-        if escape_code203.get("ok"):
-            action.update({"acted": True, "method": escape_code203.get("method") or "escape-code203"})
+    if code in (203, 205):
+        escape_inn_stop = escape_inn_stop_state(page, state)
+        if escape_inn_stop.get("ok"):
+            action.update({"acted": True, "method": escape_inn_stop.get("method") or "escape-inn-stop"})
             return action
 
     click_stage(page, 480, 500)
