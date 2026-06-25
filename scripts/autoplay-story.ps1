@@ -17,6 +17,7 @@ param(
     [int]$Port = 8865,
     [ValidateSet("round-robin", "first", "last")]
     [string]$ChoicePolicy = "round-robin",
+    [int]$ChoiceLoopEscapeAfter = 4,
     [string]$MainButtons = "0,1,2,3,4,5,6,7,9,10,11",
     [switch]$Headed,
     [switch]$MirrorMissing
@@ -35,6 +36,7 @@ $arguments = @(
     "--duration-seconds", [string]$DurationSeconds,
     "--max-steps", [string]$MaxSteps,
     "--choice-policy", $ChoicePolicy,
+    "--choice-loop-escape-after", [string]$ChoiceLoopEscapeAfter,
     "--main-buttons", $MainButtons
 )
 

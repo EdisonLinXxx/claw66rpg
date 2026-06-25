@@ -21,6 +21,7 @@ from validate_main_buttons import (
 DEFAULT_OUT = Path("C:/tmp/claw_autoplay")
 DEFAULT_MAIN_BUTTONS = "0,1,2,3,4,5,6,7,9,10,11"
 KNOWN_SHOW_EVENT_CHOICES = {
+    (1, 7): [0],
     (1, 47): [1],
     (1, 231): [3],
     (1, 1328): [0, 2],
@@ -161,6 +162,17 @@ def choose_index(args, state, context):
         return 0, "main-fallback"
 
     count = choice_count_for_state(state)
+    if (
+        args.choice_policy in ("first", "last")
+        and args.choice_loop_escape_after
+        and count > 1
+        and visit >= args.choice_loop_escape_after
+    ):
+        escape_visit = visit - args.choice_loop_escape_after + 1
+        if args.choice_policy == "first":
+            return escape_visit % count, "first-loop-escape"
+        return count - 1 - (escape_visit % count), "last-loop-escape"
+
     if args.choice_policy == "first":
         return 0, "first"
     if args.choice_policy == "last":
@@ -431,6 +443,7 @@ def main():
     parser.add_argument("--max-same-state-actions", type=int, default=6)
     parser.add_argument("--max-no-state-steps", type=int, default=8)
     parser.add_argument("--choice-policy", choices=("round-robin", "first", "last"), default="round-robin")
+    parser.add_argument("--choice-loop-escape-after", type=int, default=4, help="for first/last policies, rotate choices after this many repeated visits to the same choice state; 0 disables")
     parser.add_argument("--main-buttons", default=DEFAULT_MAIN_BUTTONS, help="comma separated main-screen button indices to cycle")
     parser.add_argument("--headed", action="store_true", help="show the browser window")
     parser.add_argument("--page-timeout-ms", type=int, default=15000)

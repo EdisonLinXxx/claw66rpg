@@ -83,6 +83,8 @@ def run_autoplay_policy(args, policy, index):
         str(args.max_steps),
         "--choice-policy",
         policy,
+        "--choice-loop-escape-after",
+        str(args.choice_loop_escape_after),
         "--main-buttons",
         args.main_buttons,
     ]
@@ -264,6 +266,7 @@ def main():
     parser.add_argument("--start-port", type=int, default=8895)
     parser.add_argument("--port-step", type=int, default=10)
     parser.add_argument("--main-buttons", default=DEFAULT_MAIN_BUTTONS)
+    parser.add_argument("--choice-loop-escape-after", type=int, default=4)
     parser.add_argument("--headed", action="store_true")
     parser.add_argument("--mirror-missing", action="store_true")
     args = parser.parse_args()
