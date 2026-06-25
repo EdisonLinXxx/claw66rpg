@@ -53,7 +53,15 @@
       var params = new URLSearchParams(window.location.search);
       var value = params.get(name);
       if (value !== null) return value === '1';
-      if (name === 'patchFirstSceneLobbyButtons') return params.get('autoStartTitle') === '1';
+      var playableDefaultFlags = {
+        patchFirstSceneLobbyButtons: true,
+        quietOafEvents: true,
+        stubPropShop: true,
+        stubInitialVitals: true,
+        traceRuntime: true,
+        traceStoryState: true
+      };
+      if (params.get('autoStartTitle') === '1' && playableDefaultFlags[name]) return true;
       return false;
     }
     if (typeof window.GetImageBase64 !== 'function') {
