@@ -1283,3 +1283,47 @@ Merged coverage:
 - story IDs covered: `1`, `6`, `14`, `15`, `16`, `44`, `54`, `55`, `118`
 
 Current technical conclusion: the final three-policy merged collection passes. All three strategies are `ok` in the same final report, and no mapped static resource miss remains in this validation window.
+
+## Round 37: Longer Coverage Resource Wave
+
+- Started a longer three-policy collection to move beyond the 5-minute baseline:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\collect-story-coverage.ps1 -DurationSeconds 1800 -MaxSteps 900 -TimeoutSeconds 2400 -Out C:\tmp\claw_story_coverage_long_30m -Policies "round-robin,first,last"
+```
+
+Initial result:
+
+- `round-robin` reached deeper management/map states than the previous final report.
+- It exposed new mapped static resource misses and stopped making useful progress around `57:1355:1010`.
+
+New mirrored resources:
+
+| MD5 | Local mirror path |
+| --- | --- |
+| `b45a257f034cf39cda28fce740277358` | `shareres/b4/b45a257f034cf39cda28fce740277358` |
+| `f386d14ed0640d8d8460582b0fb4325a` | `shareres/f3/f386d14ed0640d8d8460582b0fb4325a` |
+| `f9d0f589c4a6d8272b4a3c47cdf8f5db` | `shareres/f9/f9d0f589c4a6d8272b4a3c47cdf8f5db` |
+| `3e478efeaeac3640aa727c966e2c1ab5` | `shareres/3e/3e478efeaeac3640aa727c966e2c1ab5` |
+| `42a71e1e70038f47d646c1d13fd2a74f` | `shareres/42/42a71e1e70038f47d646c1d13fd2a74f` |
+| `5bd85705bf1165c1ad16e06c26bdd10d` | `shareres/5b/5bd85705bf1165c1ad16e06c26bdd10d` |
+
+Final confirmation command:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\autoplay-story.ps1 -DurationSeconds 720 -MaxSteps 340 -Out C:\tmp\claw_autoplay_confirm_after_more_mirrors -Port 8935 -ChoicePolicy round-robin
+```
+
+Final confirmation result:
+
+| Check | Result |
+| --- | --- |
+| status | `duration_reached` |
+| trace count | `310` |
+| unique story states | `177` |
+| local 404 count | `0` |
+| missing MD5 count | `0` |
+| last state | `54:287:100` |
+| duration | `721.6s` |
+
+Current technical conclusion: the 30-minute-per-policy run uncovered a new resource wave instead of producing a clean final pass. After mirroring six resources, the 720-second `round-robin` confirmation passes with no local 404 and no missing MD5s. The next validation should rerun the full `round-robin,first,last` 30-minute collection from the updated mirror.
