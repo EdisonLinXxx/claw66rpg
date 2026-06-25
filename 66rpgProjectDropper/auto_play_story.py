@@ -202,6 +202,36 @@ def escape_repeat_text_state(page, state):
     )
 
 
+def escape_code203_state(page, state):
+    if not state or not (state.get("storyId") == 15 and state.get("pos") == 1190 and state.get("code") == 203):
+        return {"ok": False, "method": "", "reason": "no code203 escape"}
+    return page.evaluate(
+        """
+        () => {
+          const gd = window.GloableData && GloableData.getInstance ? GloableData.getInstance() : null;
+          const line = gd && gd.currentLine;
+          if (!line || line.storyId !== 15 || line.pos !== 1190) {
+            return { ok: false, method: '', reason: 'not at inn code203 stop' };
+          }
+          line.isPause = false;
+          line.eventRunFinish = true;
+          if (line.currentShowEvent) line.currentShowEvent.isSuiFinish = true;
+          if (line.currentEvent) line.currentEvent = null;
+          const jumpToInnMain = () => {
+            line.isPause = false;
+            line.jumpToIndex(648);
+            if (typeof line.eventFinish === 'function') line.eventFinish();
+          };
+          if (typeof line.jumpStoryCallBack === 'function' && typeof line.jumpToIndex === 'function') {
+            line.jumpStoryCallBack(15, jumpToInnMain);
+            return { ok: true, method: 'escape-code203:jump-15-648' };
+          }
+          return { ok: false, method: '', reason: 'missing jump methods' };
+        }
+        """
+    )
+
+
 def choice_count_for_state(state):
     show_event = state.get("showEvent") or {}
     buttons = show_event.get("buttons") or []
@@ -326,9 +356,9 @@ def drive_state(page, args, state, context):
         return action
 
     if code == 203:
-        result = finish_line_event(page)
-        if result.get("ok"):
-            action.update({"acted": True, "method": result.get("method") or "code203 eventFinish()"})
+        escape_code203 = escape_code203_state(page, state)
+        if escape_code203.get("ok"):
+            action.update({"acted": True, "method": escape_code203.get("method") or "escape-code203"})
             return action
 
     click_stage(page, 480, 500)
