@@ -226,6 +226,15 @@ def is_main_state_like(state):
     return bool(state and state.get("storyId") == 15 and state.get("pos") == 648 and state.get("code") == 204)
 
 
+def same_state_action_limit(args, state):
+    limit = args.max_same_state_actions
+    if state and state.get("code") == 204:
+        buttons = ((state.get("showEvent") or {}).get("buttons") or [])
+        if buttons:
+            limit = max(limit, len(buttons) + 2)
+    return limit
+
+
 def drive_state(page, args, state, context):
     if not state:
         page.wait_for_timeout(args.idle_wait_ms)
@@ -456,7 +465,7 @@ def run_autoplay(page, httpd, base_url, args):
             if args.screenshot_every and step and step % args.screenshot_every == 0:
                 safe_screenshot(page, args.out / f"step_{step:04d}.png")
 
-            if same_key_actions > args.max_same_state_actions:
+            if same_key_actions > same_state_action_limit(args, state):
                 final_status = "blocked"
                 final_error = f"state {key} did not change after {same_key_actions} actions"
                 break
