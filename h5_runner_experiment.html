@@ -770,6 +770,126 @@
         };
         Main.prototype.__runnerPatched = true;
       }
+      var installTitleEntryPatch = function () {
+        if (!hasQueryFlag('autoStartTitle') && !hasQueryFlag('patchTitleClick')) return;
+        if (window.__runnerTitleEntryPatchInstalled) return;
+        window.__runnerTitleEntryPatchInstalled = true;
+        var hasCurrentLine = function () {
+          try {
+            var gd = window.GloableData && GloableData.getInstance ? GloableData.getInstance() : null;
+            return !!(gd && gd.currentLine);
+          } catch (currentLineError) {
+            return false;
+          }
+        };
+        var startTitleStory = function (label) {
+          var gd = GloableData.getInstance();
+          var system = gd && gd.gameMainData && gd.gameMainData.System;
+          if (!gd || !system || !gd.iMain || typeof gd.iMain.jumpStoryCallBack !== 'function') {
+            throw new Error('title story runtime is not ready');
+          }
+          window.__runnerTitleStoryStarted = true;
+          logLine(label + ' storyId=' + system.StartStoryId);
+          try {
+            if (window.UIManager && UIManager.getInstance && window.view && view.TitleUIMediator) {
+              UIManager.getInstance().closeView(view.TitleUIMediator.NAME, false);
+            }
+          } catch (closeTitleError) {
+            logLine(label + ' close title error ' + (closeTitleError && closeTitleError.message || closeTitleError));
+          }
+          if (gd.dGameSystem && gd.dGameSystem.varsEx && typeof gd.dGameSystem.varsEx.loadExData === 'function') {
+            gd.dGameSystem.varsEx.loadExData(!!gd.isFreeLimit);
+          }
+          gd.iMain.jumpStoryCallBack(system.StartStoryId);
+        };
+        var scheduleAutoStart = function (reason) {
+          if (!hasQueryFlag('autoStartTitle') || window.__runnerTitleAutoStartScheduled || hasCurrentLine()) return;
+          window.__runnerTitleAutoStartScheduled = true;
+          var attempts = 0;
+          var tryStart = function () {
+            attempts += 1;
+            try {
+              if (hasCurrentLine()) return;
+              window.__runnerTitleStoryStarted = false;
+              startTitleStory('AUTO TITLE START ' + reason);
+            } catch (autoError) {
+              if (attempts === 1 || attempts % 10 === 0) {
+                logLine('AUTO TITLE START WAIT ' + reason + ' attempt=' + attempts + ' ' + (autoError && autoError.message || autoError));
+              }
+            } finally {
+              setTimeout(function () {
+                if (hasCurrentLine()) return;
+                window.__runnerTitleStoryStarted = false;
+                if (attempts < 80) {
+                  setTimeout(tryStart, 500);
+                } else {
+                  window.__runnerTitleAutoStartScheduled = false;
+                  logLine('AUTO TITLE START GAVE UP ' + reason);
+                }
+              }, 500);
+            }
+          };
+          setTimeout(tryStart, 200);
+        };
+        var patchTitleClick = function () {
+          if (!hasQueryFlag('patchTitleClick') || window.__runnerTitleClickPatched) return;
+          window.__runnerTitleClickPatched = true;
+          var started = false;
+          var handler = function (domEvent) {
+            if (hasCurrentLine()) return;
+            if (started && window.__runnerTitleStoryStarted) return;
+            started = true;
+            try {
+              if (domEvent && domEvent.preventDefault) domEvent.preventDefault();
+              if (domEvent && domEvent.stopPropagation) domEvent.stopPropagation();
+              window.__runnerTitleStoryStarted = false;
+              startTitleStory('PATCH TITLE CLICK START');
+              setTimeout(function () {
+                if (!hasCurrentLine()) {
+                  started = false;
+                  window.__runnerTitleStoryStarted = false;
+                }
+              }, 700);
+            } catch (clickError) {
+              started = false;
+              logLine('PATCH TITLE CLICK ERROR ' + (clickError && clickError.stack || clickError));
+            }
+          };
+          ['click', 'pointerup', 'mouseup', 'touchend'].forEach(function (eventName) {
+            document.addEventListener(eventName, handler, true);
+          });
+          logLine('patchTitleClick native listeners installed');
+        };
+        var runEntryKick = function (reason) {
+          patchTitleClick();
+          scheduleAutoStart(reason);
+        };
+        if (window.Main && Main.prototype && !Main.prototype.__runnerTitleEntryMethodsWrapped) {
+          ['loadFontComplete', 'startGame', 'enterGame', 'checkAuto'].forEach(function (methodName) {
+            if (typeof Main.prototype[methodName] !== 'function') return;
+            var originalMethod = Main.prototype[methodName];
+            Main.prototype[methodName] = function () {
+              var result = originalMethod.apply(this, arguments);
+              setTimeout(function () { runEntryKick('Main.' + methodName); }, 100);
+              return result;
+            };
+          });
+          Main.prototype.__runnerTitleEntryMethodsWrapped = true;
+        }
+        if (window.EventCenter && EventCenter.dispatchEvent && !window.__runnerTitleEntryEventWrapped) {
+          var originalDispatchEventForTitleEntry = EventCenter.dispatchEvent;
+          EventCenter.dispatchEvent = function (event) {
+            var dispatchResult = originalDispatchEventForTitleEntry.apply(this, arguments);
+            if (event && event.type === GameEventConstant.LOAD_UI_RESOURCE_COMPLETE && event.parameter === UIResouecrLoad.TITLEUI_TYPE) {
+              setTimeout(function () { runEntryKick('title-ui-resource'); }, 100);
+            }
+            return dispatchResult;
+          };
+          window.__runnerTitleEntryEventWrapped = true;
+        }
+        runEntryKick('install');
+      };
+      installTitleEntryPatch();
       if (hasQueryFlag('traceRuntime')) {
         var wrapRuntimeMethod = function (owner, ownerName, methodName) {
           if (!owner || typeof owner[methodName] !== 'function' || owner[methodName].__runnerRuntimeMethodWrapped) return;
@@ -885,11 +1005,22 @@
               attempts += 1;
               try {
                 var gd = window.GloableData && GloableData.getInstance ? GloableData.getInstance() : null;
-                if (window.__runnerTitleStoryStarted || (gd && gd.currentLine)) return;
+                if (gd && gd.currentLine) return;
+                if (window.__runnerTitleStoryStarted) window.__runnerTitleStoryStarted = false;
                 startTitleStory('AUTO TITLE START');
               } catch (autoError) {
                 logLine('AUTO TITLE START ERROR ' + (autoError && autoError.stack || autoError));
-                if (attempts < 30) setTimeout(tryStart, 500);
+              } finally {
+                setTimeout(function () {
+                  try {
+                    var latestGd = window.GloableData && GloableData.getInstance ? GloableData.getInstance() : null;
+                    if (latestGd && latestGd.currentLine) return;
+                    window.__runnerTitleStoryStarted = false;
+                    if (attempts < 60) setTimeout(tryStart, 500);
+                  } catch (retryError) {
+                    if (attempts < 60) setTimeout(tryStart, 500);
+                  }
+                }, 500);
               }
             };
             setTimeout(tryStart, 800);
@@ -899,16 +1030,29 @@
             window.__runnerTitleClickPatched = true;
             var started = false;
             var handler = function (domEvent) {
-              if (started || window.__runnerTitleStoryStarted) return;
               try {
                 var gd = window.GloableData && GloableData.getInstance ? GloableData.getInstance() : null;
                 if (gd && gd.currentLine) return;
               } catch (titleClickStateError) {}
+              if (started && window.__runnerTitleStoryStarted) return;
               started = true;
               try {
                 if (domEvent && domEvent.preventDefault) domEvent.preventDefault();
                 if (domEvent && domEvent.stopPropagation) domEvent.stopPropagation();
+                window.__runnerTitleStoryStarted = false;
                 startTitleStory('PATCH TITLE CLICK START');
+                setTimeout(function () {
+                  try {
+                    var gdAfterClick = window.GloableData && GloableData.getInstance ? GloableData.getInstance() : null;
+                    if (!(gdAfterClick && gdAfterClick.currentLine)) {
+                      started = false;
+                      window.__runnerTitleStoryStarted = false;
+                    }
+                  } catch (clickRetryError) {
+                    started = false;
+                    window.__runnerTitleStoryStarted = false;
+                  }
+                }, 700);
               } catch (clickError) {
                 started = false;
                 logLine('PATCH TITLE CLICK ERROR ' + (clickError && clickError.stack || clickError));
