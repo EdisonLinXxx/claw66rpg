@@ -273,9 +273,11 @@ def choice_count_for_state(state):
     buttons = show_event.get("buttons") or []
     if buttons:
         return len(buttons)
-    argv = state.get("argv") or []
     links = state.get("currentLinks") or []
-    return max(len(argv), len(links), 1)
+    if links:
+        return len(links)
+    argv = state.get("argv") or []
+    return max(len(argv), 1)
 
 
 def choose_index(args, state, context):
