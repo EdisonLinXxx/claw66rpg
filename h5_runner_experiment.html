@@ -890,6 +890,56 @@
         runEntryKick('install');
       };
       installTitleEntryPatch();
+      var installBrokenAudioEventRecovery = function () {
+        if (!hasQueryFlag('autoStartTitle') && !hasQueryFlag('patchTitleClick')) return;
+        if (window.__runnerBrokenAudioEventRecoveryInstalled) return;
+        window.__runnerBrokenAudioEventRecoveryInstalled = true;
+        var isAudioEvent = function (event) {
+          if (!event) return false;
+          var code = event.Code !== undefined ? event.Code : event.code;
+          var firstArg = String(event.Argv && event.Argv[0] || event.argv && event.argv[0] || '');
+          return code === 501 || /^BGM\/|^SE\/|^Voice\/|^Audio\//i.test(firstArg);
+        };
+        var finishBrokenAudioEvent = function (reason) {
+          setTimeout(function () {
+            try {
+              var gd = window.GloableData && GloableData.getInstance ? GloableData.getInstance() : null;
+              var line = gd && gd.currentLine;
+              if (!line || typeof line.eventFinish !== 'function') return;
+              var eventAtPos = line.story && line.story.events && line.pos !== undefined ? line.story.events[line.pos] : null;
+              var event = isAudioEvent(eventAtPos) ? eventAtPos : (isAudioEvent(line.currentEvent) ? line.currentEvent : null);
+              if (!event) return;
+              var key = String(line.storyId) + ':' + String(line.pos) + ':' + String(event.Code !== undefined ? event.Code : event.code);
+              window.__runnerBrokenAudioEventFinished = window.__runnerBrokenAudioEventFinished || {};
+              if (window.__runnerBrokenAudioEventFinished[key]) return;
+              window.__runnerBrokenAudioEventFinished[key] = true;
+              logLine('RECOVER BROKEN AUDIO EVENT ' + reason + ' ' + JSON.stringify({
+                storyId: line.storyId,
+                pos: line.pos,
+                code: event.Code !== undefined ? event.Code : event.code,
+                argv0: event.Argv && event.Argv[0] || event.argv && event.argv[0] || ''
+              }));
+              line.eventFinish();
+            } catch (recoverAudioError) {
+              logLine('RECOVER BROKEN AUDIO EVENT ERROR ' + (recoverAudioError && (recoverAudioError.stack || recoverAudioError.message) || recoverAudioError));
+            }
+          }, 200);
+        };
+        window.addEventListener('error', function (event) {
+          var message = String(event && (event.message || event.error && event.error.message) || '');
+          if (message.indexOf("reading 'play'") !== -1 || message.indexOf('reading "play"') !== -1 || message.indexOf('.play is not a function') !== -1) {
+            finishBrokenAudioEvent('window-error');
+          }
+        }, true);
+        var probeCount = 0;
+        var probeTimer = setInterval(function () {
+          probeCount += 1;
+          finishBrokenAudioEvent('probe');
+          if (probeCount >= 40) clearInterval(probeTimer);
+        }, 500);
+        logLine('broken audio event recovery installed');
+      };
+      installBrokenAudioEventRecovery();
       if (hasQueryFlag('traceRuntime')) {
         var wrapRuntimeMethod = function (owner, ownerName, methodName) {
           if (!owner || typeof owner[methodName] !== 'function' || owner[methodName].__runnerRuntimeMethodWrapped) return;
