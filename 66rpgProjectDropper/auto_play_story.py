@@ -130,6 +130,48 @@ def finish_code214(page):
     )
 
 
+def escape_known_state(page, state):
+    if not state or not (state.get("storyId") == 156 and state.get("pos") == 267 and state.get("code") == 204):
+        return {"ok": False, "method": "", "reason": "no known escape"}
+    return page.evaluate(
+        """
+        () => {
+          const gd = window.GloableData && GloableData.getInstance ? GloableData.getInstance() : null;
+          const line = gd && gd.currentLine;
+          if (!line || line.storyId !== 156 || line.pos !== 267) {
+            return { ok: false, method: '', reason: 'not at gacha menu' };
+          }
+          try {
+            if (window.view && view.SCustomUI && view.SCustomUI.getInstance) view.SCustomUI.getInstance().hideUI();
+          } catch (hideError) {}
+          if (window.UIManager && UIManager.getInstance) {
+            try {
+              UIManager.getInstance().isSCUIShow = false;
+              if (UIManager.getInstance().gameSystemUILayer && UIManager.getInstance().gameSystemUILayer.setMenuVisible) {
+                UIManager.getInstance().gameSystemUILayer.setMenuVisible(true);
+              }
+            } catch (uiError) {}
+          }
+          if (gd) gd.CUIFromIndex = -1;
+          line.isPause = false;
+          line.eventRunFinish = true;
+          if (line.currentShowEvent) line.currentShowEvent.isSuiFinish = true;
+          if (line.currentEvent) line.currentEvent = null;
+          const jumpToMainPanel = () => {
+            line.isPause = false;
+            line.jumpToIndex(291);
+            if (typeof line.eventFinish === 'function') line.eventFinish();
+          };
+          if (typeof line.jumpStoryCallBack === 'function' && typeof line.jumpToIndex === 'function') {
+            line.jumpStoryCallBack(41, jumpToMainPanel);
+            return { ok: true, method: 'escape-gacha:jump-41-291' };
+          }
+          return { ok: false, method: '', reason: 'missing jump methods' };
+        }
+        """
+    )
+
+
 def choice_count_for_state(state):
     show_event = state.get("showEvent") or {}
     buttons = show_event.get("buttons") or []
@@ -200,6 +242,10 @@ def drive_state(page, args, state, context):
         "choiceReason": "",
         "stateKey": key,
     }
+    escape = escape_known_state(page, state)
+    if escape.get("ok"):
+        action.update({"acted": True, "method": escape.get("method") or "escape-known-state"})
+        return action
 
     if code in (101, 1010, 204):
         if state.get("storyId") == 1 and state.get("pos") in (1316, 2075):
