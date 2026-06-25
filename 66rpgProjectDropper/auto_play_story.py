@@ -172,27 +172,36 @@ def escape_known_state(page, state):
 
 
 def escape_repeat_text_state(page, state):
-    if not state or not (state.get("storyId") == 15 and state.get("pos") == 104 and state.get("code") == 100):
+    repeat_targets = {
+        (15, 104): (648, "sickness"),
+        (55, 121): (93, "kitchen-success"),
+    }
+    if not state or state.get("code") != 100:
         return {"ok": False, "method": "", "reason": "no repeat text escape"}
+    target = repeat_targets.get((state.get("storyId"), state.get("pos")))
+    if not target:
+        return {"ok": False, "method": "", "reason": "no repeat text escape"}
+    target_pos, label = target
     return page.evaluate(
         """
-        () => {
+        ({ targetPos, label }) => {
           const gd = window.GloableData && GloableData.getInstance ? GloableData.getInstance() : null;
           const line = gd && gd.currentLine;
-          if (!line || line.storyId !== 15 || line.pos !== 104) {
-            return { ok: false, method: '', reason: 'not at sickness prompt' };
+          if (!line) {
+            return { ok: false, method: '', reason: 'no current line' };
           }
           line.isPause = false;
           line.eventRunFinish = true;
           if (line.currentShowEvent) line.currentShowEvent.isSuiFinish = true;
           if (line.currentEvent) line.currentEvent = null;
           if (typeof line.jumpToIndex === 'function') {
-            line.jumpToIndex(648);
-            return { ok: true, method: 'escape-sickness:jump-index-648' };
+            line.jumpToIndex(targetPos);
+            return { ok: true, method: `escape-${label}:jump-index-${targetPos}` };
           }
           return { ok: false, method: '', reason: 'missing jumpToIndex' };
         }
-        """
+        """,
+        {"targetPos": target_pos, "label": label},
     )
 
 
@@ -389,7 +398,7 @@ def drive_state(page, args, state, context):
         return action
 
     if code == 100:
-        if key == "15:104:100" and drive_visit:
+        if key in ("15:104:100", "55:121:100") and drive_visit:
             escape_text = escape_repeat_text_state(page, state)
             if escape_text.get("ok"):
                 action.update({"acted": True, "method": escape_text.get("method") or "escape-repeat-text"})
