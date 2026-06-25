@@ -172,6 +172,36 @@ def escape_known_state(page, state):
     )
 
 
+def escape_repeat_text_state(page, state):
+    if not state or not (state.get("storyId") == 15 and state.get("pos") == 104 and state.get("code") == 100):
+        return {"ok": False, "method": "", "reason": "no repeat text escape"}
+    return page.evaluate(
+        """
+        () => {
+          const gd = window.GloableData && GloableData.getInstance ? GloableData.getInstance() : null;
+          const line = gd && gd.currentLine;
+          if (!line || line.storyId !== 15 || line.pos !== 104) {
+            return { ok: false, method: '', reason: 'not at sickness prompt' };
+          }
+          line.isPause = false;
+          line.eventRunFinish = true;
+          if (line.currentShowEvent) line.currentShowEvent.isSuiFinish = true;
+          if (line.currentEvent) line.currentEvent = null;
+          const jumpToInnMain = () => {
+            line.isPause = false;
+            line.jumpToIndex(648);
+            if (typeof line.eventFinish === 'function') line.eventFinish();
+          };
+          if (typeof line.jumpStoryCallBack === 'function' && typeof line.jumpToIndex === 'function') {
+            line.jumpStoryCallBack(15, jumpToInnMain);
+            return { ok: true, method: 'escape-sickness:jump-15-648' };
+          }
+          return { ok: false, method: '', reason: 'missing jump methods' };
+        }
+        """
+    )
+
+
 def choice_count_for_state(state):
     show_event = state.get("showEvent") or {}
     buttons = show_event.get("buttons") or []
@@ -287,9 +317,10 @@ def drive_state(page, args, state, context):
 
     if code == 100:
         if key == "15:104:100" and drive_visit:
-            click_stage(page, 480, 500)
-            action.update({"acted": True, "method": "stage-click:repeat-code100"})
-            return action
+            escape_text = escape_repeat_text_state(page, state)
+            if escape_text.get("ok"):
+                action.update({"acted": True, "method": escape_text.get("method") or "escape-repeat-text"})
+                return action
         result = finish_line_event(page)
         action.update({"acted": bool(result.get("ok")), "method": result.get("method") or result.get("reason") or "code100"})
         return action
