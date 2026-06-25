@@ -23,7 +23,10 @@ if hasattr(sys.stderr, "reconfigure"):
 def read_json(path):
     if not path.exists():
         return None
-    return json.loads(path.read_text(encoding="utf-8"))
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        return None
 
 
 def write_json(path, payload):
@@ -63,6 +66,7 @@ def run_autoplay_policy(args, policy, index):
     policy_out.mkdir(parents=True, exist_ok=True)
     log_path = policy_out / "autoplay.log"
     summary_path = policy_out / "story_autoplay_summary.json"
+    checkpoint_path = policy_out / "story_autoplay_checkpoint.json"
     port = args.start_port + index * args.port_step
     command = [
         args.python,
@@ -110,14 +114,21 @@ def run_autoplay_policy(args, policy, index):
 
     duration = round(time.time() - started, 3)
     summary = read_json(summary_path)
+    summary_source = "summary"
+    if not summary:
+        summary = read_json(checkpoint_path)
+        summary_source = "checkpoint" if summary else "missing"
     missing = (summary or {}).get("missingMd5s") or []
     autoplay_status = (summary or {}).get("status")
+    if summary_source == "checkpoint" and timed_out and autoplay_status == "running":
+        autoplay_status = "timeout_checkpoint"
     ok = returncode == 0 and not timed_out and autoplay_status in OK_AUTOPLAY_STATUSES and not missing
     result = {
         "policy": policy,
         "ok": ok,
         "returnCode": returncode,
         "timedOut": timed_out,
+        "summarySource": summary_source,
         "durationSeconds": duration,
         "autoplayStatus": autoplay_status,
         "error": (summary or {}).get("error"),
@@ -127,6 +138,7 @@ def run_autoplay_policy(args, policy, index):
         "missingMd5s": missing,
         "out": str(policy_out),
         "summary": str(summary_path),
+        "checkpoint": str(checkpoint_path),
         "log": str(log_path),
     }
     print(
@@ -234,6 +246,7 @@ def markdown_report(summary):
     )
     for run in summary["runs"]:
         lines.append(f"- {run['policy']} summary: `{run['summary']}`")
+        lines.append(f"- {run['policy']} checkpoint: `{run['checkpoint']}`")
         lines.append(f"- {run['policy']} log: `{run['log']}`")
 
     return "\n".join(lines) + "\n"

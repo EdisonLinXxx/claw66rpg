@@ -219,7 +219,9 @@ def drive_state(page, args, state, context):
 
 
 def write_json(path, payload):
-    path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    temp_path = path.with_name(f"{path.name}.tmp")
+    temp_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    temp_path.replace(path)
 
 
 def safe_screenshot(page, path):
@@ -228,6 +230,26 @@ def safe_screenshot(page, path):
         return {"path": str(path), "error": None}
     except Exception as error:
         return {"path": str(path), "error": str(error)}
+
+
+def build_autoplay_summary(args, run_id, status, error, started, trace_count, unique_states, last_state, local_404, mirror_report, trace_path, final_screenshot, url):
+    return {
+        "generatedAt": datetime.now(timezone.utc).isoformat(),
+        "runId": run_id,
+        "status": status,
+        "error": error,
+        "durationSeconds": round(time.time() - started, 3),
+        "traceCount": trace_count,
+        "uniqueStateCount": len(unique_states),
+        "uniqueStates": unique_states,
+        "lastState": summarize_state(last_state) if last_state else None,
+        "local404": local_404,
+        "missingMd5s": extract_missing_md5s(local_404),
+        "mirrorReport": mirror_report,
+        "trace": str(trace_path),
+        "finalScreenshot": final_screenshot,
+        "url": url,
+    }
 
 
 def build_context(args):
@@ -269,6 +291,7 @@ def run_autoplay(page, httpd, base_url, args):
     url = build_runner_url(base_url, args.runner, run_id, "full", 0)
     context = build_context(args)
     trace_path = args.out / "story_autoplay_trace.jsonl"
+    checkpoint_path = args.out / "story_autoplay_checkpoint.json"
     start_404 = len(httpd.not_found)
     started = time.time()
     deadline = started + args.duration_seconds
@@ -331,6 +354,25 @@ def run_autoplay(page, httpd, base_url, args):
             trace.write(json.dumps(entry, ensure_ascii=False) + "\n")
             trace.flush()
             trace_count += 1
+            if args.checkpoint_every and trace_count % args.checkpoint_every == 0:
+                write_json(
+                    checkpoint_path,
+                    build_autoplay_summary(
+                        args,
+                        run_id,
+                        "running",
+                        None,
+                        started,
+                        trace_count,
+                        unique_states,
+                        last_state,
+                        httpd.not_found[start_404:],
+                        None,
+                        trace_path,
+                        None,
+                        url,
+                    ),
+                )
 
             print(
                 f"[step {step:04d}] {key} action={action.get('method')} "
@@ -358,24 +400,23 @@ def run_autoplay(page, httpd, base_url, args):
     local_404 = httpd.not_found[start_404:]
     missing_md5s = extract_missing_md5s(local_404)
     mirror_report = mirror_missing(args.root, args.game, args.version, missing_md5s) if args.mirror_missing else None
-    summary = {
-        "generatedAt": datetime.now(timezone.utc).isoformat(),
-        "runId": run_id,
-        "status": final_status,
-        "error": final_error,
-        "durationSeconds": round(time.time() - started, 3),
-        "traceCount": trace_count,
-        "uniqueStateCount": len(unique_states),
-        "uniqueStates": unique_states,
-        "lastState": summarize_state(last_state) if last_state else None,
-        "local404": local_404,
-        "missingMd5s": missing_md5s,
-        "mirrorReport": mirror_report,
-        "trace": str(trace_path),
-        "finalScreenshot": final_screenshot,
-        "url": url,
-    }
+    summary = build_autoplay_summary(
+        args,
+        run_id,
+        final_status,
+        final_error,
+        started,
+        trace_count,
+        unique_states,
+        last_state,
+        local_404,
+        mirror_report,
+        trace_path,
+        final_screenshot,
+        url,
+    )
     write_json(args.out / "story_autoplay_summary.json", summary)
+    write_json(checkpoint_path, summary)
     return summary
 
 
@@ -400,6 +441,7 @@ def main():
     parser.add_argument("--button-center-x", type=float, default=50)
     parser.add_argument("--button-center-y", type=float, default=40)
     parser.add_argument("--screenshot-every", type=int, default=0)
+    parser.add_argument("--checkpoint-every", type=int, default=1, help="write a recoverable JSON checkpoint every N trace entries; 0 disables")
     parser.add_argument("--game", default=DEFAULT_GAME, help="game URL, gindex, or guid for --mirror-missing")
     parser.add_argument("--version", default=DEFAULT_VERSION, help="game version for --mirror-missing")
     parser.add_argument("--mirror-missing", action="store_true", help="mirror all missing MD5s after autoplay")
