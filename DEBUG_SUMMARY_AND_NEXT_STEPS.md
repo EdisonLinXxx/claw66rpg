@@ -581,6 +581,44 @@ MVP reason:
 
 - long-form games need reliable continue play.
 
+2026-06-26 follow-up result:
+
+- Focused main-screen save/load pass now succeeds with:
+  - `C:\tmp\claw_save_load_main_v5\save_load_summary.json`
+  - `C:\tmp\claw_save_load_main_v5\save_load_trace.jsonl`
+  - `C:\tmp\claw_save_load_main_v5\saved_page.png`
+  - `C:\tmp\claw_save_load_main_v5\restored_page.png`
+- Validation starts from the inn main screen via debug jump:
+  - saved state: `storyId=15`, `pos=648`, `Code=204`
+  - advanced state after clicking main button `1` / order: `storyId=15`, `pos=657`, `Code=101`
+  - restored state: `storyId=15`, `pos=648`, `Code=204`
+  - continued state after restore: `storyId=15`, `pos=657`, `Code=101`
+- `restoredMatchesSaved=true`; restore match confirms same story, near saved position, and rollback from the advanced state.
+- No local resource 404s remained:
+  - `local404=[]`
+  - `missingMd5s=[]`
+- The official runtime `gd.snap(slot)` path blocks on this route while collecting the full screen snapshot. The MVP-bounded replacement is now `runner-local-save-v1`, stored under:
+  - `runnerLocalSave:0a235c54f16c431ab5736c92997edb47:v364:slot:0`
+- `runner-local-save-v1` stores the minimal state needed for continue play:
+  - guid/version/slot
+  - story id/name
+  - story position
+  - current event code
+  - current branch links
+  - visible event-button count
+- Restore uses the existing runtime story hooks (`jumpStoryCallBack` + `jumpToIndex`). For `Code=204` main-screen menu states it intentionally avoids calling `eventFinish()` after restore; calling it immediately re-enters the branch-selection conflict path around `storyId=15,pos=649`.
+- New resources mirrored during this pass:
+  - `13d21fe85e4a4854f9a98ca7bde57142`
+  - `7eb2c1576726eb3e3babf58202a0dc70`
+  - `cf07aec6e8b3502d6aa4924a5c2db753`
+  - `db09cf0848632ba2671897f840a88525`
+
+Current conclusion for Priority 4:
+
+- Main-screen save/load is validated for MVP continue-play purposes.
+- This is not a full clone of the official 66RPG archive format; it is a bounded local replacement around the minimum state required by the current runner.
+- A future production save system should persist this payload through the site account/game library backend instead of raw browser-only `localStorage`.
+
 ### Priority 5: Platform Replacement Boundary
 
 Identify the minimal host/platform APIs required for MVP:
@@ -678,6 +716,6 @@ Current feasibility assessment:
 - Main-screen button label/branch alignment: validated after `7baf809`.
 - Main-screen real-click coverage: validated for all 12 inn main buttons.
 - Three-strategy merged coverage after inn-main fix: validated with no missing MD5s.
-- Save/load replacement: partially validated, needs main-screen pass.
+- Save/load replacement: validated from the inn main screen with `runner-local-save-v1`; official `gd.snap` remains a platform/runtime boundary.
 - Platform feature replacement: bounded and should be minimal.
 - Multi-game scalability: not verified yet; next decisive MVP test after this sample stabilizes.

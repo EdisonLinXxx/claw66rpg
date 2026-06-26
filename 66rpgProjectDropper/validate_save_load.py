@@ -24,7 +24,7 @@ from validate_main_buttons import (
 
 
 DEFAULT_OUT = Path("C:/tmp/claw_save_load")
-DEFAULT_MAIN_BUTTONS = "0,1,2,3,4,5,6,7,9,10,11"
+DEFAULT_MAIN_BUTTONS = "1"
 
 
 def build_runner_url(base_url, runner, run_id, clear_storage, debug_jump_story_id=0, debug_jump_index=1):
@@ -35,7 +35,6 @@ def build_runner_url(base_url, runner, run_id, clear_storage, debug_jump_story_i
         "traceTitle": "1",
         "traceBranchChoice": "1",
         "traceNullPath": "1",
-        "traceStorage": "1",
         "quietOafEvents": "1",
         "patchTitleClick": "1",
         "patchFirstSceneLobbyButtons": "1",
@@ -63,6 +62,7 @@ def build_runner_url(base_url, runner, run_id, clear_storage, debug_jump_story_i
     if debug_jump_story_id:
         params["debugJumpStoryId"] = str(debug_jump_story_id)
         params["debugJumpIndex"] = str(debug_jump_index)
+        params["debugJumpNoEventFinish"] = "1"
     query = "&".join(f"{key}={value}" for key, value in params.items())
     return f"{base_url}/{runner}?{query}"
 
@@ -83,15 +83,7 @@ def mark_progress(args, label):
 
 def read_live_state(page, timeout_ms):
     try:
-        page.set_default_timeout(timeout_ms)
-        text = page.evaluate(
-            """
-            () => {
-              const node = document.getElementById('runner-story-state');
-              return node ? node.textContent : '';
-            }
-            """
-        )
+        text = page.locator("#runner-story-state").text_content(timeout=timeout_ms)
     except Exception:
         return None
     if not text:
@@ -102,15 +94,23 @@ def read_live_state(page, timeout_ms):
         return None
 
 
-def wait_for_state(page, args, timeout_ms):
+def wait_for_state(page, args, timeout_ms, predicate=None):
     deadline = time.time() + timeout_ms / 1000
     last_state = None
     while time.time() < deadline:
         last_state = read_live_state(page, args.evaluate_timeout_ms)
-        if last_state:
+        if last_state and (predicate is None or predicate(last_state)):
             return last_state
         page.wait_for_timeout(args.idle_wait_ms)
     return last_state
+
+
+def is_expected_debug_jump_state(args, state):
+    if not state:
+        return False
+    if args.debug_jump_story_id == 15 and args.debug_jump_index == 648:
+        return state.get("storyId") == 15 and state.get("pos") == 648 and state.get("code") == 204
+    return state.get("storyId") == args.debug_jump_story_id and state.get("pos") == args.debug_jump_index
 
 
 def wait_for_save_runtime(page, args, timeout_ms):
@@ -123,13 +123,13 @@ def wait_for_save_runtime(page, args, timeout_ms):
               const gd = window.GloableData && GloableData.getInstance ? GloableData.getInstance() : null;
               return {
                 hasGloableData: !!gd,
-                hasSnap: !!(gd && typeof gd.snap === 'function'),
-                hasRestore: !!(gd && typeof gd.restore === 'function')
+                hasRunnerLocalSave: typeof window.__runnerLocalSave === 'function',
+                hasRunnerLocalRestore: typeof window.__runnerLocalRestore === 'function'
               };
             }
             """
         )
-        if last_status.get("hasSnap") and last_status.get("hasRestore"):
+        if last_status.get("hasRunnerLocalSave") and last_status.get("hasRunnerLocalRestore"):
             return last_status
         page.wait_for_timeout(args.idle_wait_ms)
     return last_status
@@ -232,37 +232,21 @@ def save_slot_info(page, slot):
     return page.evaluate(
         """
         (slot) => {
-          const gd = window.GloableData && GloableData.getInstance ? GloableData.getInstance() : null;
-          if (!gd) return { ok: false, reason: 'no GloableData' };
-          const storageSlot = slot + 1;
-          const key = String(gd.savekey || '') + String(storageSlot);
-          const value = localStorage.getItem(key) || '';
-          return {
-            ok: true,
-            savekey: gd.savekey || '',
-            slot,
-            storageSlot,
-            key,
-            exists: value.length > 0,
-            len: value.length,
-            preview: value.slice(0, 160),
-            autoSaveIndex: gd.autoSaveIndex
-          };
+          if (typeof window.__runnerLocalSaveInfo !== 'function') return { ok: false, reason: 'runner local save unavailable' };
+          return window.__runnerLocalSaveInfo(slot);
         }
         """,
         slot,
     )
 
 
-def call_snap(page, slot):
+def call_save(page, slot):
     return page.evaluate(
         """
         (slot) => {
-          const gd = window.GloableData && GloableData.getInstance ? GloableData.getInstance() : null;
-          if (!gd || typeof gd.snap !== 'function') return { ok: false, reason: 'snap unavailable' };
+          if (typeof window.__runnerLocalSave !== 'function') return { ok: false, reason: 'runner local save unavailable' };
           try {
-            const result = gd.snap(slot);
-            return { ok: true, resultType: typeof result, result: String(result).slice(0, 200) };
+            return window.__runnerLocalSave(slot);
           } catch (error) {
             return { ok: false, error: String(error && (error.stack || error.message) || error) };
           }
@@ -276,11 +260,9 @@ def call_restore(page, slot):
     return page.evaluate(
         """
         (slot) => {
-          const gd = window.GloableData && GloableData.getInstance ? GloableData.getInstance() : null;
-          if (!gd || typeof gd.restore !== 'function') return { ok: false, reason: 'restore unavailable' };
+          if (typeof window.__runnerLocalRestore !== 'function') return { ok: false, reason: 'runner local restore unavailable' };
           try {
-            const result = gd.restore(slot);
-            return { ok: true, result };
+            return window.__runnerLocalRestore(slot);
           } catch (error) {
             return { ok: false, error: String(error && (error.stack || error.message) || error) };
           }
@@ -340,6 +322,11 @@ def settle_restored_state(page, args, context, saved_state, advanced_state, rest
     idx = 0
     while not matched.get("ok") and idx < args.restore_settle_steps:
         state = read_live_state(page, args.evaluate_timeout_ms)
+        current_match = restore_match(saved_state, advanced_state, state, args.restore_pos_tolerance)
+        if current_match.get("ok"):
+            restored_state = state
+            matched = current_match
+            break
         action = drive_state(page, args, state, context) if state else {"acted": False, "method": "wait:no-state"}
         record = {
             "label": "restore-settle",
@@ -389,8 +376,18 @@ def run_validation(browser, httpd, base_url, args):
         mark_progress(args, "initial-goto:done")
         page.wait_for_timeout(args.initial_wait_ms)
         mark_progress(args, "initial-wait:done")
-        if not wait_for_state(page, args, args.state_timeout_ms):
+        initial_state = wait_for_state(page, args, args.state_timeout_ms)
+        if not initial_state:
             raise RuntimeError("initial run did not expose story state")
+        if args.debug_jump_story_id:
+            ready_state = wait_for_state(
+                page,
+                args,
+                args.state_timeout_ms,
+                lambda state: is_expected_debug_jump_state(args, state),
+            )
+            if not is_expected_debug_jump_state(args, ready_state):
+                raise RuntimeError(f"initial run did not reach requested save state: last_state={summarize_state(ready_state)}")
         mark_progress(args, "initial-state:seen")
 
         play_context = build_context(args)
@@ -401,14 +398,14 @@ def run_validation(browser, httpd, base_url, args):
             raise RuntimeError("could not read save-point state")
 
         before_storage = storage_summary(page)
-        mark_progress(args, "snap:start")
-        snap_result = call_snap(page, args.slot)
+        mark_progress(args, "save:start")
+        save_result = call_save(page, args.slot)
         page.wait_for_timeout(args.save_wait_ms)
         save_info = save_slot_info(page, args.slot)
         after_storage = storage_summary(page)
-        mark_progress(args, "snap:done")
-        if not snap_result.get("ok"):
-            raise RuntimeError(f"snap failed: {snap_result}")
+        mark_progress(args, "save:done")
+        if not save_result.get("ok"):
+            raise RuntimeError(f"save failed: {save_result}")
         if not save_info.get("exists"):
             raise RuntimeError(f"save slot was not written: {save_info}")
 
@@ -437,7 +434,7 @@ def run_validation(browser, httpd, base_url, args):
 
         restore_before_state = read_live_state(page2, args.evaluate_timeout_ms)
         restore_runtime = wait_for_save_runtime(page2, args, args.state_timeout_ms)
-        if not (restore_runtime and restore_runtime.get("hasRestore")):
+        if not (restore_runtime and restore_runtime.get("hasRunnerLocalRestore")):
             raise RuntimeError(f"restore run did not expose save runtime: {restore_runtime}")
         restore_slot_before = save_slot_info(page2, args.slot)
         if not restore_slot_before.get("exists"):
@@ -492,7 +489,8 @@ def run_validation(browser, httpd, base_url, args):
         "continuedState": summarize_state(continued_state) if continued_state else None,
         "restoredMatchesSaved": restored_matches.get("ok"),
         "restoreMatch": restored_matches,
-        "snapResult": snap_result,
+        "saveMethod": "runner-local-save-v1",
+        "saveResult": save_result,
         "restoreResult": restore_result,
         "saveInfo": save_info,
         "restoreRuntime": restore_runtime,
@@ -517,12 +515,12 @@ def main():
     parser.add_argument("--runner", default="h5_runner_experiment.html", help="runner HTML file")
     parser.add_argument("--out", default=str(DEFAULT_OUT), help="report output directory")
     parser.add_argument("--port", type=int, default=8765, help="preferred local HTTP port")
-    parser.add_argument("--slot", type=int, default=0, help="zero-based save slot passed to snap/restore")
-    parser.add_argument("--save-after-steps", type=int, default=24)
-    parser.add_argument("--advance-steps", type=int, default=8)
-    parser.add_argument("--continue-steps", type=int, default=5)
-    parser.add_argument("--debug-jump-story-id", type=int, default=44, help="story id to jump to before save/load validation; 0 disables")
-    parser.add_argument("--debug-jump-index", type=int, default=5)
+    parser.add_argument("--slot", type=int, default=0, help="zero-based runner local save slot")
+    parser.add_argument("--save-after-steps", type=int, default=0)
+    parser.add_argument("--advance-steps", type=int, default=1)
+    parser.add_argument("--continue-steps", type=int, default=1)
+    parser.add_argument("--debug-jump-story-id", type=int, default=15, help="story id to jump to before save/load validation; 0 disables")
+    parser.add_argument("--debug-jump-index", type=int, default=648)
     parser.add_argument("--restore-pos-tolerance", type=int, default=8)
     parser.add_argument("--restore-settle-steps", type=int, default=8)
     parser.add_argument("--choice-policy", choices=("round-robin", "first", "last"), default="round-robin")

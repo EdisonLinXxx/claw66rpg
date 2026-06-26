@@ -14,16 +14,16 @@ param(
     [string]$Out = $(if ($IsWindows -or $env:OS -eq "Windows_NT") { "C:\tmp\claw_save_load" } else { "/tmp/claw_save_load" }),
     [int]$Port = 8765,
     [int]$Slot = 0,
-    [int]$SaveAfterSteps = 24,
-    [int]$AdvanceSteps = 8,
-    [int]$ContinueSteps = 5,
-    [int]$DebugJumpStoryId = 44,
-    [int]$DebugJumpIndex = 5,
+    [int]$SaveAfterSteps = 0,
+    [int]$AdvanceSteps = 1,
+    [int]$ContinueSteps = 1,
+    [int]$DebugJumpStoryId = 15,
+    [int]$DebugJumpIndex = 648,
     [int]$RestoreSettleSteps = 8,
     [int]$MaxNoStateSteps = 60,
     [ValidateSet("round-robin", "first", "last")]
     [string]$ChoicePolicy = "round-robin",
-    [string]$MainButtons = "0,1,2,3,4,5,6,7,9,10,11",
+    [string]$MainButtons = "1",
     [switch]$Headed,
     [switch]$MirrorMissing
 )

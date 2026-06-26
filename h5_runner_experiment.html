@@ -422,6 +422,104 @@
         logLine('traceStorage patch failed ' + (traceStorageError && (traceStorageError.stack || traceStorageError.message) || traceStorageError));
       }
     }
+    if (!window.__runnerLocalSaveInstalled) {
+      window.__runnerLocalSaveInstalled = true;
+      window.__runnerLocalSaveKey = function (slot) {
+        return 'runnerLocalSave:' + guid + ':v' + ver + ':slot:' + String(slot || 0);
+      };
+      window.__runnerLocalSaveInfo = function (slot) {
+        var key = window.__runnerLocalSaveKey(slot);
+        var value = localStorage.getItem(key) || '';
+        var parsed = null;
+        try {
+          parsed = value ? JSON.parse(value) : null;
+        } catch (parseError) {}
+        return {
+          ok: true,
+          key: key,
+          slot: slot || 0,
+          exists: value.length > 0,
+          len: value.length,
+          preview: value.slice(0, 160),
+          data: parsed
+        };
+      };
+      window.__runnerLocalSave = function (slot) {
+        var gd = window.GloableData && GloableData.getInstance ? GloableData.getInstance() : null;
+        var line = gd && (gd.currentLine || gd.iMain) || null;
+        if (!gd || !line) return { ok: false, reason: 'runtime not ready' };
+        var story = line.story || null;
+        var event = line.currentEvent || (story && story.events && story.events[line.pos]) || null;
+        var showEvent = line.currentShowEvent || null;
+        var key = window.__runnerLocalSaveKey(slot);
+        var payload = {
+          format: 'runner-local-save-v1',
+          savedAt: (new Date()).toISOString(),
+          guid: guid,
+          version: ver,
+          slot: slot || 0,
+          storyId: line.storyId,
+          storyName: line.storyName || story && story.Name || '',
+          pos: line.pos,
+          code: event && event.Code,
+          currentLinks: event && event.links ? Array.prototype.slice.call(event.links) : (line.currentLinks ? Array.prototype.slice.call(line.currentLinks) : []),
+          showEventButtonsLength: showEvent && showEvent.buttons ? showEvent.buttons.length : 0,
+          note: 'lightweight runner save; restores story position through jumpStoryCallBack/jumpToIndex'
+        };
+        localStorage.setItem(key, JSON.stringify(payload));
+        logLine('RUNNER LOCAL SAVE ' + JSON.stringify({
+          key: key,
+          storyId: payload.storyId,
+          pos: payload.pos,
+          code: payload.code
+        }));
+        return { ok: true, key: key, len: (localStorage.getItem(key) || '').length, data: payload };
+      };
+      window.__runnerLocalRestore = function (slot) {
+        var info = window.__runnerLocalSaveInfo(slot);
+        if (!info.exists || !info.data) return { ok: false, reason: 'save slot missing', info: info };
+        var data = info.data;
+        var gd = window.GloableData && GloableData.getInstance ? GloableData.getInstance() : null;
+        var targetLine = gd && (gd.iMain || gd.currentLine) || null;
+        if (!gd || !targetLine || typeof targetLine.jumpStoryCallBack !== 'function' || typeof targetLine.jumpToIndex !== 'function') {
+          return { ok: false, reason: 'runtime restore hooks unavailable', info: info };
+        }
+        try {
+          if (window.view && view.SCustomUI && view.SCustomUI.getInstance) view.SCustomUI.getInstance().hideUI();
+        } catch (hideScuiError) {}
+        try {
+          if (window.UIManager && UIManager.getInstance) {
+            UIManager.getInstance().isSCUIShow = false;
+            if (UIManager.getInstance().gameSystemUILayer && UIManager.getInstance().gameSystemUILayer.setMenuVisible) {
+              UIManager.getInstance().gameSystemUILayer.setMenuVisible(true);
+            }
+            if (window.view && view.TitleUIMediator) UIManager.getInstance().closeView(view.TitleUIMediator.NAME, false);
+          }
+        } catch (uiRestoreError) {}
+        if (gd) gd.CUIFromIndex = -1;
+        targetLine.isPause = false;
+        targetLine.eventRunFinish = true;
+        if (targetLine.currentShowEvent) targetLine.currentShowEvent.isSuiFinish = true;
+        if (targetLine.currentEvent) targetLine.currentEvent = null;
+        logLine('RUNNER LOCAL RESTORE ' + JSON.stringify({
+          key: info.key,
+          storyId: data.storyId,
+          pos: data.pos,
+          code: data.code
+        }));
+        targetLine.jumpStoryCallBack(data.storyId, function () {
+          try {
+            targetLine.isPause = false;
+            targetLine.jumpToIndex(data.pos);
+            if (data.code !== 204 && typeof targetLine.eventFinish === 'function') targetLine.eventFinish();
+          } catch (jumpError) {
+            logLine('RUNNER LOCAL RESTORE JUMP ERROR ' + (jumpError && (jumpError.stack || jumpError.message) || jumpError));
+          }
+        });
+        return { ok: true, key: info.key, data: data };
+      };
+      logLine('runner local save helpers installed');
+    }
     logLine('starting game init');
     try {
       if (hasQueryFlag('traceReads') && window.GameByte && !GameByte.prototype.__runnerTracePatched) {
@@ -2350,7 +2448,7 @@
                   }
                   targetLine.isPause = false;
                   targetLine.jumpToIndex(jumpIndex);
-                  targetLine.eventFinish();
+                  if (!hasQueryFlag('debugJumpNoEventFinish')) targetLine.eventFinish();
                   if (gd && originalSnap) {
                     setTimeout(function () {
                       gd.snap = originalSnap;
