@@ -21,33 +21,33 @@ DEFAULT_OUT = Path("C:/tmp/claw_verify")
 MD5_RE = re.compile(r"/shareres/[0-9a-fA-F]{2}/([0-9a-fA-F]{32})")
 
 BUTTON_SLUGS = {
-    0: "order",
-    1: "overview",
-    2: "backyard",
-    3: "manage",
-    4: "banquet",
-    5: "upgrade",
-    6: "sell",
-    7: "outing",
-    8: "affection",
-    9: "staff",
-    10: "appearance",
-    11: "sidequest",
+    0: "kitchen",
+    1: "order",
+    2: "overview",
+    3: "backyard",
+    4: "manage",
+    5: "room",
+    6: "upgrade",
+    7: "sell",
+    8: "staff",
+    9: "appearance",
+    10: "outing",
+    11: "branch",
 }
-EXPECTED_UNCHANGED_BUTTONS = {8}
+EXPECTED_UNCHANGED_BUTTONS = set()
 BUTTON_FALLBACKS = {
-    0: {"idx": 0, "index": 297, "name": "order", "x": 800, "y": 100},
-    1: {"idx": 1, "index": 298, "name": "overview", "x": 30, "y": 210},
-    2: {"idx": 2, "index": 299, "name": "backyard", "x": 30, "y": 100},
-    3: {"idx": 3, "index": 300, "name": "manage", "x": 800, "y": 320},
-    4: {"idx": 4, "index": 301, "name": "banquet", "x": 30, "y": 430},
-    5: {"idx": 5, "index": 303, "name": "upgrade", "x": 800, "y": 210},
-    6: {"idx": 6, "index": 304, "name": "sell", "x": 680, "y": 380},
-    7: {"idx": 7, "index": 305, "name": "outing", "x": 30, "y": 320},
-    8: {"idx": 8, "index": 308, "name": "affection", "x": 680, "y": 150},
-    9: {"idx": 9, "index": 307, "name": "staff", "x": 680, "y": 265},
-    10: {"idx": 10, "index": 306, "name": "appearance", "x": 800, "y": 430},
-    11: {"idx": 11, "index": 450, "name": "sidequest", "x": 140, "y": 150},
+    0: {"idx": 0, "index": 296, "name": "kitchen", "x": 800, "y": 100},
+    1: {"idx": 1, "index": 297, "name": "order", "x": 30, "y": 210},
+    2: {"idx": 2, "index": 298, "name": "overview", "x": 30, "y": 100},
+    3: {"idx": 3, "index": 299, "name": "backyard", "x": 800, "y": 320},
+    4: {"idx": 4, "index": 300, "name": "manage", "x": 30, "y": 430},
+    5: {"idx": 5, "index": 302, "name": "room", "x": 800, "y": 210},
+    6: {"idx": 6, "index": 303, "name": "upgrade", "x": 680, "y": 380},
+    7: {"idx": 7, "index": 304, "name": "sell", "x": 30, "y": 320},
+    8: {"idx": 8, "index": 307, "name": "staff", "x": 680, "y": 150},
+    9: {"idx": 9, "index": 306, "name": "appearance", "x": 680, "y": 265},
+    10: {"idx": 10, "index": 305, "name": "outing", "x": 800, "y": 430},
+    11: {"idx": 11, "index": 449, "name": "branch", "x": 140, "y": 150},
 }
 
 

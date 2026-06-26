@@ -55,6 +55,7 @@
       if (value !== null) return value === '1';
       var playableDefaultFlags = {
         patchFirstSceneLobbyButtons: true,
+        patchInnMainButtons: true,
         quietOafEvents: true,
         stubPropShop: true,
         stubInitialVitals: true,
@@ -688,7 +689,7 @@
         org_data.DSystem = NewDSystem;
         logLine('new DSystem parser patch enabled');
       }
-      if ((hasQueryFlag('patchFirstSceneLobbyButtons') || hasQueryFlag('traceBranchChoice')) && window.org_event && org_event.ButtonDifEvent && !org_event.ButtonDifEvent.__runnerBranchWrapped) {
+      if ((hasQueryFlag('patchFirstSceneLobbyButtons') || hasQueryFlag('patchInnMainButtons') || hasQueryFlag('traceBranchChoice')) && window.org_event && org_event.ButtonDifEvent && !org_event.ButtonDifEvent.__runnerBranchWrapped) {
         var OriginalButtonDifEvent = org_event.ButtonDifEvent;
         var patchLobbyEventArgv = function (event, line, label) {
           if (!hasQueryFlag('patchFirstSceneLobbyButtons')) return;
@@ -704,8 +705,33 @@
             logLine('PATCH FIRST SCENE LOBBY BUTTONS EVENT ERROR ' + (patchLobbyEventError && (patchLobbyEventError.stack || patchLobbyEventError.message) || patchLobbyEventError));
           }
         };
+        var patchInnMainEventArgv = function (event, line, label) {
+          if (!hasQueryFlag('patchInnMainButtons')) return;
+          try {
+            if (!event || event.Code !== 204 || !line || line.storyId !== 15 || line.pos !== 648) return;
+            var oldArgv = Array.prototype.slice.call(event.Argv || []);
+            event.Argv = [
+              '296,800,100,',
+              '297,30,210,',
+              '298,30,100,',
+              '299,800,320,',
+              '300,30,430,',
+              '302,800,210,',
+              '303,680,380,',
+              '304,30,320,',
+              '307,680,150,',
+              '306,680,265,',
+              '305,800,430,',
+              '449,140,150,5389,1,0,143,0,数值：[5390：主线剧情1] ≥ 143'
+            ];
+            logLine('PATCH INN MAIN BUTTONS ' + label + ' ' + JSON.stringify({ oldArgv: oldArgv, newArgv: event.Argv, links: event.links }));
+          } catch (patchInnMainEventError) {
+            logLine('PATCH INN MAIN BUTTONS EVENT ERROR ' + (patchInnMainEventError && (patchInnMainEventError.stack || patchInnMainEventError.message) || patchInnMainEventError));
+          }
+        };
         var WrappedButtonDifEvent = function (event, line) {
           patchLobbyEventArgv(event, line, 'before-construct');
+          patchInnMainEventArgv(event, line, 'before-construct');
           if (hasQueryFlag('patchFirstSceneLobbyButtons')) {
             try {
               if (event && event.Code === 204 && line && line.storyId === 1 && line.pos === 47) {
@@ -2070,8 +2096,31 @@
             }
           };
           var patchFirstSceneLobbyButtonsNow = function (line) {
-            if (!hasQueryFlag('patchFirstSceneLobbyButtons')) return;
+            if (!hasQueryFlag('patchFirstSceneLobbyButtons') && !hasQueryFlag('patchInnMainButtons')) return;
             try {
+              if (hasQueryFlag('patchInnMainButtons') && line && line.storyId === 15 && line.pos === 648) {
+                var innMainEvent = line.story && line.story.events && line.story.events[line.pos] || null;
+                if (innMainEvent && innMainEvent.Code === 204) {
+                  var oldInnMainArgv = Array.prototype.slice.call(innMainEvent.Argv || []);
+                  innMainEvent.Argv = [
+                    '296,800,100,',
+                    '297,30,210,',
+                    '298,30,100,',
+                    '299,800,320,',
+                    '300,30,430,',
+                    '302,800,210,',
+                    '303,680,380,',
+                    '304,30,320,',
+                    '307,680,150,',
+                    '306,680,265,',
+                    '305,800,430,',
+                    '449,140,150,5389,1,0,143,0,数值：[5390：主线剧情1] ≥ 143'
+                  ];
+                  if (line.currentEvent === innMainEvent || !line.currentEvent || line.currentEvent.Code === 204) line.currentEvent = innMainEvent;
+                  logLine('PATCH INN MAIN BUTTONS FORCE ' + JSON.stringify({ oldArgv: oldInnMainArgv, newArgv: innMainEvent.Argv, links: innMainEvent.links }));
+                }
+                return;
+              }
               if (line && line.storyId === 1 && line.pos === 47) {
                 var avatarEvent = line.story && line.story.events && line.story.events[line.pos] || null;
                 if (avatarEvent && avatarEvent.Code === 204) {
