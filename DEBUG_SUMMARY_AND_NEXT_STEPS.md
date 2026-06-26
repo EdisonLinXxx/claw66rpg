@@ -241,6 +241,18 @@ Latest validation result:
   - `[]`
 - Recurring page warnings:
   - audio play interruption warnings, currently non-blocking.
+- 2026-06-26 UI readability follow-up:
+  - User screenshots showed branch-choice and custom UI text rendering as repeated unreadable/black bitmap glyphs.
+  - Root cause: the sample package's bitmap-font path is not compatible with the old public H5 player in this runner; `StringUtil.getAnalysisText` was producing per-character bitmap sprites that all resolved to the same unusable glyph resource.
+  - Added runner flag/default `patchReadableText=1`.
+  - The patch disables `fontBitmapData.isUserBitMap` and replaces `StringUtil.getAnalysisText` with a native `OText` fallback that keeps the runtime choice/text layout but renders real characters with contrast stroke.
+  - `patchReadableText` is enabled by default when `autoStartTitle=1`, so the normal playable URL gets the fix without another query parameter.
+  - Verified order-branch readability:
+    - `C:\tmp\claw_ui_fix_verify\order_readable_text.png`
+    - `C:\tmp\claw_ui_fix_verify\order_readable_text_summary.json`
+  - Regression pass:
+    - `C:\tmp\claw_ui_fix_main_order\main_buttons_summary.json`
+    - result: button `1` / order `status=ok`, `local404Count=0`, `missingMd5s=[]`
 
 ## Mirrored Resource Status
 
@@ -717,5 +729,6 @@ Current feasibility assessment:
 - Main-screen real-click coverage: validated for all 12 inn main buttons.
 - Three-strategy merged coverage after inn-main fix: validated with no missing MD5s.
 - Save/load replacement: validated from the inn main screen with `runner-local-save-v1`; official `gd.snap` remains a platform/runtime boundary.
+- Readable runtime text: runner-side native text fallback now replaces the broken bitmap-font path for branch choices and custom UI text.
 - Platform feature replacement: bounded and should be minimal.
 - Multi-game scalability: not verified yet; next decisive MVP test after this sample stabilizes.
