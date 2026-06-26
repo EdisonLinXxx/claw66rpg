@@ -16,7 +16,7 @@ param(
     [int]$TimeoutSeconds = 0,
     [string]$Out = $(if ($IsWindows -or $env:OS -eq "Windows_NT") { "C:\tmp\claw_story_coverage" } else { "/tmp/claw_story_coverage" }),
     [string]$Policies = "round-robin,first,last",
-    [string]$MainButtons = "0,1,2,3,4,5,6,7,9,10,11",
+    [string]$MainButtons = "0,1,2,3,4,5,6,7,8,9,10,11",
     [int]$ChoiceLoopEscapeAfter = 4,
     [int]$StartPort = 8895,
     [int]$PortStep = 10,

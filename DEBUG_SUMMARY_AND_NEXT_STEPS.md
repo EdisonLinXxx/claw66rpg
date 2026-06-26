@@ -427,6 +427,35 @@ Acceptance for this priority:
 - no new real local resource 404 remains unresolved
 - no blocker console error is introduced
 
+2026-06-26 follow-up result:
+
+- Added page event/request failure capture and per-button `targetLink` output to `66rpgProjectDropper/validate_main_buttons.py`.
+- Fixed `debugJumpMain` visual desync by closing the title view before the debug jump.
+- Verified real-click main-button coverage with:
+  - `C:\tmp\claw_verify_main_debug_jump_click_v3\main_buttons_summary.json`
+- All 12 visible inn main buttons reported `status=ok`.
+- Button/link mapping verified:
+  - `厨房 -> 650`
+  - `订单 -> 657`
+  - `概况 -> 665`
+  - `后院 -> 675`
+  - `经营 -> 677`
+  - `客房 -> 767`
+  - `升级 -> 774`
+  - `售卖 -> 1088`
+  - `员工 -> 1090`
+  - `外观 -> 1110`
+  - `外出 -> 1112`
+  - `分线 -> 1114`
+- Latest main-button local 404s: `[]`
+- Latest main-button missing MD5s: `[]`
+- Cross-check: full-route real click for `订单` passed with no local 404:
+  - `C:\tmp\claw_verify_main_full_click_order\main_buttons_summary.json`
+- Known report noise remains non-blocking:
+  - public platform request failures such as `Login.js` 403/CORS/report URL failures
+  - occasional audio/play interruption page errors
+  - screenshot timeouts on some animated branch transitions
+
 ### Priority 2: Resume Final Three-Strategy Merged Collection
 
 After Priority 1 passes, resume the final merged story collection. Use the existing collector with the three policies already configured:
@@ -443,6 +472,39 @@ Confirm in the merged report:
 - the final report clearly states whether all three strategies are ok
 
 If the collector still skips button `8` from the previous wrong `好感` assumption, include it again in `MainButtons` after confirming `员工` is stable.
+
+2026-06-26 follow-up result:
+
+- `MainButtons` defaults were updated to include button `8`/`员工`:
+  - `scripts/collect-story-coverage.ps1`
+  - `66rpgProjectDropper/collect_story_coverage.py`
+  - `66rpgProjectDropper/auto_play_story.py`
+- Initial merged run found `round-robin` blocked at newbie chest state:
+  - `storyId=1`, `pos=2101`, `Code=204`
+  - no missing MD5s
+  - cause: autoplay clicked while a cover/visual layer could still obscure the real button hit path
+- `auto_play_story.py` now prefers `showEvent.finish(choice)` for `storyId=1,pos=2101`.
+- Re-test `round-robin` alone passed:
+  - `C:\tmp\claw_story_coverage_round_robin_after_chest_fix\story_coverage_summary.json`
+  - status: `ok`
+  - trace: `50`
+  - unique states: `47`
+  - missing MD5s: `[]`
+- Final merged three-policy coverage passed:
+  - `C:\tmp\claw_story_coverage_final_after_innmain_v3\story_coverage_summary.json`
+  - `C:\tmp\claw_story_coverage_final_after_innmain_v3\story_coverage_report.md`
+  - overall status: `ok`
+  - `round-robin`: `duration_reached`, ok, trace `49`, unique states `43`, missing `0`
+  - `first`: `duration_reached`, ok, trace `48`, unique states `46`, missing `0`
+  - `last`: `duration_reached`, ok, trace `50`, unique states `46`, missing `0`
+  - merged trace entries: `147`
+  - merged unique story states: `68`
+  - merged missing MD5s: `[]`
+
+Current next priority:
+
+- Priority 3: formalize/reduce ad hoc validation harness behavior.
+- Priority 4: focused save/load validation from inn main screen.
 
 ### Historical Note: Pre-`7baf809` Inn Main Button Plan
 
@@ -614,7 +676,8 @@ Current feasibility assessment:
 - Opening story and tutorial flow: feasible.
 - Inn main hub entry: feasible.
 - Main-screen button label/branch alignment: validated after `7baf809`.
-- Main-screen real-click coverage: next priority.
+- Main-screen real-click coverage: validated for all 12 inn main buttons.
+- Three-strategy merged coverage after inn-main fix: validated with no missing MD5s.
 - Save/load replacement: partially validated, needs main-screen pass.
 - Platform feature replacement: bounded and should be minimal.
 - Multi-game scalability: not verified yet; next decisive MVP test after this sample stabilizes.

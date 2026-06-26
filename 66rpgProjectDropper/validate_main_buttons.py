@@ -331,6 +331,63 @@ def summarize_state(state):
     }
 
 
+def attach_page_event_recording(page):
+    events = {
+        "console": [],
+        "pageErrors": [],
+        "requestFailures": [],
+    }
+
+    def trim(value, limit=1000):
+        text = str(value or "")
+        return text if len(text) <= limit else text[:limit] + "...<truncated>"
+
+    def on_console(message):
+        try:
+            message_type = message.type
+            if message_type not in ("error", "warning"):
+                return
+            events["console"].append(
+                {
+                    "time": time.time(),
+                    "type": message_type,
+                    "text": trim(message.text),
+                    "location": message.location,
+                }
+            )
+        except Exception as error:
+            events["console"].append({"time": time.time(), "type": "recorder-error", "text": trim(error)})
+
+    def on_page_error(error):
+        events["pageErrors"].append({"time": time.time(), "message": trim(error)})
+
+    def on_request_failed(request):
+        try:
+            failure = request.failure
+            events["requestFailures"].append(
+                {
+                    "time": time.time(),
+                    "method": request.method,
+                    "url": request.url,
+                    "resourceType": request.resource_type,
+                    "failure": failure.get("errorText") if isinstance(failure, dict) else str(failure),
+                }
+            )
+        except Exception as error:
+            events["requestFailures"].append({"time": time.time(), "error": trim(error)})
+
+    page.on("console", on_console)
+    page.on("pageerror", on_page_error)
+    page.on("requestfailed", on_request_failed)
+    setattr(page, "_main_button_events", events)
+    return events
+
+
+def target_link_for(main_state, idx):
+    links = (main_state or {}).get("currentLinks") or []
+    return links[idx] if len(links) > idx else None
+
+
 def safe_screenshot(page, path, timeout_ms):
     try:
         page.screenshot(path=str(path), full_page=False, timeout=timeout_ms)
@@ -410,6 +467,7 @@ def validate_button_full_route(page, base_url, args, idx, run_id):
 def validate_button(page, httpd, base_url, args, idx):
     run_id = f"validate_main_button_{idx:02d}_{int(time.time() * 1000)}"
     start_404 = len(httpd.not_found)
+    page_events = attach_page_event_recording(page)
 
     if args.route_mode == "debug-jump":
         main_state, button, click_point, result_state = validate_button_debug_jump(page, httpd, base_url, args, idx, run_id)
@@ -441,6 +499,7 @@ def validate_button(page, httpd, base_url, args, idx):
         "routeMode": args.route_mode,
         "buttonIndex": idx,
         "button": button,
+        "targetLink": target_link_for(main_state, idx),
         "clickPoint": click_point,
         "mainState": main_state,
         "resultState": result_state,
@@ -448,6 +507,7 @@ def validate_button(page, httpd, base_url, args, idx):
         "status": status,
         "local404": local_404,
         "missingMd5s": missing_md5s,
+        "pageEvents": page_events,
         "screenshot": str(screenshot_path),
     }
     screenshot = safe_screenshot(page, screenshot_path, args.screenshot_timeout_ms)
@@ -461,10 +521,37 @@ def validate_button(page, httpd, base_url, args, idx):
         "report": str(report_path),
         "screenshot": screenshot,
         "status": status,
+        "targetLink": report["targetLink"],
         "result": summarize_state(stable_state),
         "local404Count": len(local_404),
         "missingMd5s": missing_md5s,
+        "pageErrorCount": len(page_events["pageErrors"]),
+        "requestFailureCount": len(page_events["requestFailures"]),
+        "consoleIssueCount": len(page_events["console"]),
     }
+
+
+def write_error_report(page, httpd, args, idx, attempt, error):
+    report_name = f"main_button_{idx:02d}_error_attempt_{attempt}"
+    screenshot_path = args.out / f"{report_name}.png"
+    report_path = args.out / f"{report_name}.json"
+    local_404 = list(httpd.not_found)
+    page_events = getattr(page, "_main_button_events", None) if page else None
+    report = {
+        "generatedAt": datetime.now(timezone.utc).isoformat(),
+        "routeMode": args.route_mode,
+        "buttonIndex": idx,
+        "attempt": attempt,
+        "status": "error",
+        "error": str(error),
+        "currentState": summarize_state(read_state(page)) if page else None,
+        "local404": local_404,
+        "missingMd5s": extract_missing_md5s(local_404),
+        "pageEvents": page_events,
+        "screenshot": safe_screenshot(page, screenshot_path, args.screenshot_timeout_ms) if page else None,
+    }
+    report_path.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
+    return str(report_path)
 
 
 def mirror_missing(root, game, version, md5s):
@@ -552,6 +639,7 @@ def main():
                 max_attempts = max(args.button_retries, 0) + 1
                 for attempt in range(max_attempts):
                     context = None
+                    page = None
                     try:
                         context = browser.new_context(viewport={"width": 1280, "height": 720})
                         page = context.new_page()
@@ -575,8 +663,11 @@ def main():
                         break
                     except Exception as error:
                         mark_progress(args, f"button:{idx}:attempt:{attempt}:error:{error}")
+                        error_report = None
+                        with contextlib.suppress(Exception):
+                            error_report = write_error_report(page, httpd, args, idx, attempt, error)
                         if attempt + 1 >= max_attempts:
-                            errors.append({"buttonIndex": idx, "error": str(error)})
+                            errors.append({"buttonIndex": idx, "error": str(error), "report": error_report})
                             print(f"[error] button {idx:02d}: {error}", file=sys.stderr, flush=True)
                         else:
                             print(

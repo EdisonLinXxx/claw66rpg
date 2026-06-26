@@ -2330,6 +2330,13 @@
               if (!targetLine || typeof targetLine.jumpStoryCallBack !== 'function' || typeof targetLine.jumpToIndex !== 'function' || typeof targetLine.eventFinish !== 'function') return;
               window.__runnerDebugJumpStoryDone[key] = true;
               logLine('DEBUG JUMP STORY ' + JSON.stringify({ storyId: storyId, jumpIndex: jumpIndex }));
+              try {
+                if (window.UIManager && UIManager.getInstance && window.view && view.TitleUIMediator) {
+                  UIManager.getInstance().closeView(view.TitleUIMediator.NAME, false);
+                }
+              } catch (closeTitleForJumpError) {
+                logLine('DEBUG JUMP CLOSE TITLE ERROR ' + (closeTitleForJumpError && (closeTitleForJumpError.stack || closeTitleForJumpError.message) || closeTitleForJumpError));
+              }
               targetLine.jumpStoryCallBack(storyId, function () {
                 var gd = null;
                 var originalSnap = null;

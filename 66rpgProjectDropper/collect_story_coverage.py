@@ -10,7 +10,7 @@ from pathlib import Path
 
 DEFAULT_OUT = Path("C:/tmp/claw_story_coverage")
 DEFAULT_POLICIES = "round-robin,first,last"
-DEFAULT_MAIN_BUTTONS = "0,1,2,3,4,5,6,7,9,10,11"
+DEFAULT_MAIN_BUTTONS = "0,1,2,3,4,5,6,7,8,9,10,11"
 OK_AUTOPLAY_STATUSES = {"duration_reached", "step_limit_reached"}
 
 

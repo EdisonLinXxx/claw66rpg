@@ -19,11 +19,14 @@ from validate_main_buttons import (
 
 
 DEFAULT_OUT = Path("C:/tmp/claw_autoplay")
-DEFAULT_MAIN_BUTTONS = "0,1,2,3,4,5,6,7,9,10,11"
+DEFAULT_MAIN_BUTTONS = "0,1,2,3,4,5,6,7,8,9,10,11"
 KNOWN_SHOW_EVENT_CHOICES = {
     (1, 7): [0],
     (1, 231): [3],
     (1, 1328): [0, 2],
+}
+PREFER_FINISH_STATES = {
+    (1, 2101),
 }
 
 
@@ -375,6 +378,10 @@ def drive_state(page, args, state, context):
             return action
         choice_index, reason = choose_index(args, state, context)
         action.update({"choiceIndex": choice_index, "choiceReason": reason})
+        if (state.get("storyId"), state.get("pos")) in PREFER_FINISH_STATES:
+            if finish_show_event(page, choice_index):
+                action.update({"acted": True, "method": f"showEvent.finish({choice_index})"})
+                return action
         buttons = ((state.get("showEvent") or {}).get("buttons") or [])
         if buttons and choice_index < len(buttons):
             button = buttons[choice_index]
