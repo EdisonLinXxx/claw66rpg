@@ -1,6 +1,8 @@
 # 66RPG Game Grab/Run Technical Debug Summary
 
-更新时间：2026-06-23
+Last updated: 2026-06-26
+
+Previous baseline: 2026-06-23
 
 ## Scope
 
@@ -157,6 +159,8 @@ The local runner can currently:
 - click the `经营` tutorial entry and advance to the follow-up `继续了解 / 都了解了` choice
 - skip the tutorial and enter the inn main screen at `storyId=15`, `pos=648`, `Code=204`
 - display the inn main screen background and visible main buttons
+- patch inn main-screen button labels so each visible button matches its actual branch target:
+  - `厨房 / 订单 / 概况 / 后院 / 经营 / 客房 / 升级 / 售卖 / 员工 / 外观 / 外出 / 分线`
 
 Current technical conclusion: this is no longer limited to early title/first-scene validation. The sample game can now reach the main gameplay hub with no local resource miss in the latest validated path.
 
@@ -214,6 +218,23 @@ Latest validation result:
 - Runtime main-screen buttons found: `12`
   - same 11 visible buttons above
   - `支线开启`, condition-gated by `主线剧情1 >= 143`
+- 2026-06-26 update:
+  - commit `5103e6b` aligned the first-scene lobby links with the engine `jumList` order.
+  - commit `7baf809` fixed the inn main-screen button-label mismatch.
+  - Before `7baf809`, inn main-screen labels were one branch off, for example `概况` opened the order menu and `后院` opened the overview menu.
+  - After `7baf809`, runtime assertion verified all 12 visible inn main buttons match their branch labels:
+    - `厨房 -> 650`
+    - `订单 -> 657`
+    - `概况 -> 665`
+    - `后院 -> 675`
+    - `经营 -> 677`
+    - `客房 -> 767`
+    - `升级 -> 774`
+    - `售卖 -> 1088`
+    - `员工 -> 1090`
+    - `外观 -> 1110`
+    - `外出 -> 1112`
+    - `分线 -> 1114`
 - Latest main-screen local HTTP errors:
   - `[]`
 - Latest request failures:
@@ -348,7 +369,82 @@ Expected path for manual checking:
 
 ## Next Debug Direction
 
-### Priority 1: Validate Inn Main Screen Buttons
+### Priority 1: Re-test Inn Main Screen Buttons After `7baf809`
+
+The immediate next step is a short manual plus automated regression pass for the inn main-screen buttons. Use the current playable URL:
+
+```text
+http://127.0.0.1:8899/h5_runner_experiment.html?localRes=1&patchNewDSystem=1&patchTitleClick=1&autoStartTitle=1&hideDebug=1&_cb=innmain7baf809
+```
+
+Expected inn main-screen visible buttons:
+
+- `厨房`
+- `订单`
+- `概况`
+- `后院`
+- `经营`
+- `客房`
+- `升级`
+- `售卖`
+- `员工`
+- `外观`
+- `外出`
+- `分线`
+
+Do this next:
+
+1. Reload the playable URL with a fresh `_cb` value.
+2. Enter the inn main screen through `继续经营`.
+3. Confirm the button labels show the expected 12-button list above.
+4. Click each button once from a clean main-screen state and record:
+   - button name/index
+   - target link
+   - resulting `storyId`
+   - resulting `pos`
+   - resulting `Code`
+   - visible UI state
+   - local `/shareres/<md5>` 404s
+   - page errors
+   - screenshot path
+5. If a button opens content that still does not match its label, inspect the target branch label around `storyId=15` before changing links.
+6. If new resource 404s appear:
+   - resolve md5 in `api/oapi_map.php`
+   - mirror with `prepare_runner_mirror.py`
+   - force-add only the needed `shareres/<prefix>/<md5>` files
+   - commit and push
+   - rerun the same button path
+
+Known harness issue:
+
+- `scripts/validate-main-buttons.ps1 -RouteMode debug-jump` previously hung during the first button click stage.
+- Before trusting the full validation report, fix or bypass that click wait by using a short per-button timeout and always writing a partial JSON report.
+
+Acceptance for this priority:
+
+- all 12 button labels match branch labels
+- all 12 buttons visibly leave or intentionally update the main screen
+- no new real local resource 404 remains unresolved
+- no blocker console error is introduced
+
+### Priority 2: Resume Final Three-Strategy Merged Collection
+
+After Priority 1 passes, resume the final merged story collection. Use the existing collector with the three policies already configured:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\collect-story-coverage.ps1 -Policies "round-robin,first,last" -Out C:\tmp\claw_story_coverage_final_after_innmain -DurationSeconds 120 -MaxSteps 120
+```
+
+Confirm in the merged report:
+
+- `round-robin`, `first`, and `last` all produce usable summaries
+- no unresolved `missingMd5s`
+- the merged report includes inn main-screen branches after the `7baf809` label fix
+- the final report clearly states whether all three strategies are ok
+
+If the collector still skips button `8` from the previous wrong `好感` assumption, include it again in `MainButtons` after confirming `员工` is stable.
+
+### Historical Note: Pre-`7baf809` Inn Main Button Plan
 
 Current highest-value next step is no longer title/first-scene probing. Start from `storyId=15 pos=648` and validate each visible main-screen entry:
 
@@ -384,9 +480,9 @@ For each button:
    - commit and push
    - rerun the same button path
 
-### Priority 2: Formalize Auto Validation Scripts
+### Priority 3: Formalize Auto Validation Scripts
 
-The current scripts are useful but ad hoc. Next step should create a reusable validation harness:
+The current scripts are useful but ad hoc. After the manual main-button pass, update the reusable validation harness:
 
 - reusable browser launch
 - stage-to-screen coordinate conversion
@@ -405,7 +501,7 @@ Goal:
 
 - each imported game should produce a comparable validation report.
 
-### Priority 3: Save/Load Validation From Main Screen
+### Priority 4: Save/Load Validation From Main Screen
 
 Earlier auto-save persistence was proven through `localStorage` reads/writes, but manual save/load behavior still needs a focused validation pass.
 
@@ -423,7 +519,7 @@ MVP reason:
 
 - long-form games need reliable continue play.
 
-### Priority 4: Platform Replacement Boundary
+### Priority 5: Platform Replacement Boundary
 
 Identify the minimal host/platform APIs required for MVP:
 
@@ -435,7 +531,7 @@ Identify the minimal host/platform APIs required for MVP:
 
 Do not attempt to fully clone 66RPG platform behavior. Stub or replace only what blocks local play.
 
-### Priority 5: Multi-Game Import Feasibility
+### Priority 6: Multi-Game Import Feasibility
 
 After this sample game's main hub is stable, test at least two additional games from different categories:
 
@@ -517,7 +613,8 @@ Current feasibility assessment:
 - Patched H5 runtime execution: feasible.
 - Opening story and tutorial flow: feasible.
 - Inn main hub entry: feasible.
-- Main-screen button coverage: partially validated, next priority.
+- Main-screen button label/branch alignment: validated after `7baf809`.
+- Main-screen real-click coverage: next priority.
 - Save/load replacement: partially validated, needs main-screen pass.
 - Platform feature replacement: bounded and should be minimal.
 - Multi-game scalability: not verified yet; next decisive MVP test after this sample stabilizes.
