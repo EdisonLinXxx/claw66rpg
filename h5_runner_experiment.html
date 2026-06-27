@@ -1151,106 +1151,47 @@
         logLine('broken audio event recovery installed');
       };
       installBrokenAudioEventRecovery();
-      var installReadableTextFallback = function () {
+      var installBitmapFontCompatibilityPatch = function () {
         if (!hasQueryFlag('patchReadableText')) return;
-        if (!window.StringUtil || !window.OSprite || !window.OText || !window.GloableData || !GloableData.getInstance) return;
-        var applyFontRuntimeFallback = function (reason) {
+        if (!window.GloableData || !GloableData.getInstance) return;
+        var applyBitmapFontCompatibility = function (reason) {
           try {
             var gd = GloableData.getInstance();
             if (!gd) return null;
             var system = gd.gameMainData && gd.gameMainData.System || {};
             if (gd.fontBitmapData) gd.fontBitmapData.isUserBitMap = false;
-            gd.sysFontDifY = 0;
-            var baseSize = Math.round(system.FontSize || gd.sysFontSize || 20);
-            gd.sysFontSize = Math.max(15, Math.min(20, baseSize));
             if (!window.__runnerReadableTextFallbackLogged) {
               window.__runnerReadableTextFallbackLogged = true;
-              logLine('readable text fallback enabled ' + JSON.stringify({
+              logLine('bitmap font path disabled ' + JSON.stringify({
                 reason: reason,
-                sysFontSize: gd.sysFontSize,
+                fontName: system.FontName,
+                fontSize: system.FontSize,
                 bitmapDisabled: !!gd.fontBitmapData
               }));
             }
             return { gd: gd, system: system };
-          } catch (applyFontFallbackError) {
-            logLine('READABLE TEXT FALLBACK APPLY ERROR ' + (applyFontFallbackError && (applyFontFallbackError.stack || applyFontFallbackError.message) || applyFontFallbackError));
+          } catch (bitmapFontCompatibilityError) {
+            logLine('BITMAP FONT COMPATIBILITY ERROR ' + (bitmapFontCompatibilityError && (bitmapFontCompatibilityError.stack || bitmapFontCompatibilityError.message) || bitmapFontCompatibilityError));
             return null;
           }
         };
-        if (!StringUtil.__runnerReadableTextWrapped) {
-          StringUtil.__runnerOriginalGetAnalysisText = StringUtil.getAnalysisText;
-          StringUtil.getAnalysisText = function (value, color) {
-            var runtime = applyFontRuntimeFallback('getAnalysisText');
-            if (!runtime || !runtime.gd) return StringUtil.__runnerOriginalGetAnalysisText.apply(this, arguments);
-            try {
-              var text = value === null || value === undefined ? '' : String(value);
-              var result = { texts: [], configs: [], message: '' };
-              var count = 0;
-              var pushConfig = function (newline) {
-                var config = window.utils && utils.FontConfig ? new utils.FontConfig() : {};
-                config.textNum = count;
-                config.waitFrame = 0;
-                config.newline = !!newline;
-                config.isWaitPlayer = false;
-                config.drawSpeed = 0;
-                config.skipMessage = false;
-                result.configs.push(config);
-                count = 0;
-              };
-              var system = runtime.system || {};
-              var textColor = color || (system.FontUiColor && system.FontUiColor.getColorToUint && system.FontUiColor.getColorToUint()) || '#ffffff';
-              var fontSize = runtime.gd.sysFontSize || 18;
-              for (var index = 0; index < text.length; index++) {
-                var ch = text.charAt(index);
-                var code = ch.charCodeAt(0);
-                if (ch === '\n' || code === 200) {
-                  pushConfig(true);
-                  continue;
-                }
-                if (code >= 201 && code <= 207) continue;
-                var sprite = new OSprite();
-                var letter = new OText();
-                letter.text = ch;
-                letter.font = system.FontName || 'Microsoft YaHei';
-                letter.fontSize = fontSize;
-                letter.color = textColor;
-                letter.stroke = 0;
-                letter.bold = false;
-                letter.height = Math.ceil(fontSize * 1.35);
-                letter.width = /[\x00-\x7f]/.test(ch) ? Math.ceil(fontSize * 0.65) : Math.ceil(fontSize * 1.05);
-                sprite.width = letter.width;
-                sprite.height = letter.height;
-                sprite.addChild(letter);
-                result.texts.push(sprite);
-                result.message += ch;
-                count += 1;
-              }
-              if (count > 0 || result.configs.length === 0) pushConfig(false);
-              return result;
-            } catch (readableTextError) {
-              logLine('READABLE TEXT FALLBACK ERROR ' + (readableTextError && (readableTextError.stack || readableTextError.message) || readableTextError));
-              return StringUtil.__runnerOriginalGetAnalysisText.apply(this, arguments);
-            }
-          };
-          StringUtil.__runnerReadableTextWrapped = true;
-        }
-        if (window.Main && Main.prototype && Main.prototype.loadFontComplete && !Main.prototype.loadFontComplete.__runnerReadableTextWrapped) {
-          var originalLoadFontCompleteForReadableText = Main.prototype.loadFontComplete;
+        if (window.Main && Main.prototype && Main.prototype.loadFontComplete && !Main.prototype.loadFontComplete.__runnerBitmapFontCompatibilityWrapped) {
+          var originalLoadFontCompleteForBitmapFont = Main.prototype.loadFontComplete;
           Main.prototype.loadFontComplete = function () {
-            applyFontRuntimeFallback('Main.loadFontComplete');
-            return originalLoadFontCompleteForReadableText.apply(this, arguments);
+            applyBitmapFontCompatibility('Main.loadFontComplete');
+            return originalLoadFontCompleteForBitmapFont.apply(this, arguments);
           };
-          Main.prototype.loadFontComplete.__runnerReadableTextWrapped = true;
+          Main.prototype.loadFontComplete.__runnerBitmapFontCompatibilityWrapped = true;
         }
-        var readableTextProbeCount = 0;
-        var readableTextProbe = setInterval(function () {
-          readableTextProbeCount += 1;
-          applyFontRuntimeFallback('probe');
-          if (readableTextProbeCount >= 40) clearInterval(readableTextProbe);
+        var bitmapFontProbeCount = 0;
+        var bitmapFontProbe = setInterval(function () {
+          bitmapFontProbeCount += 1;
+          applyBitmapFontCompatibility('probe');
+          if (bitmapFontProbeCount >= 40) clearInterval(bitmapFontProbe);
         }, 500);
-        applyFontRuntimeFallback('install');
+        applyBitmapFontCompatibility('install');
       };
-      installReadableTextFallback();
+      installBitmapFontCompatibilityPatch();
       var installOfficialChoiceUiPatch = function () {
         if (!hasQueryFlag('patchOfficialChoiceUi')) return false;
         if (!window.textChoice || !textChoice.TextDifUI || !textChoice.TextDifUI.prototype) return false;
