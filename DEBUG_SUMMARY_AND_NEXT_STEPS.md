@@ -246,8 +246,8 @@ Latest validation result:
   - Root cause: the sample package's bitmap-font path is not compatible with the old public H5 player in this runner; `StringUtil.getAnalysisText` was producing per-character bitmap sprites that all resolved to the same unusable glyph resource.
   - Added runner flag/default `patchReadableText=1`.
   - Superseded on 2026-06-27: the temporary `StringUtil.getAnalysisText` replacement made engine control codes visible and changed text styling. Do not reintroduce that wrapper.
-  - Current `patchReadableText` only disables the incompatible `fontBitmapData.isUserBitMap` path. It does not set font family, font size, bold, stroke, or replace the engine parser.
-  - `patchReadableText` is enabled by default when `autoStartTitle=1`, so the normal playable URL gets the fix without another query parameter.
+  - Current `patchReadableText` is a manual fallback only: when explicitly enabled it disables the incompatible `fontBitmapData.isUserBitMap` path, but it does not set font family, font size, bold, stroke, or replace the engine parser.
+  - Superseded on 2026-06-27: `patchReadableText` is no longer enabled by default because it changes the official bitmap-font path.
   - Verified order-branch readability:
     - `C:\tmp\claw_ui_fix_verify\order_readable_text.png`
     - `C:\tmp\claw_ui_fix_verify\order_readable_text_summary.json`
@@ -730,7 +730,7 @@ Current feasibility assessment:
 - Main-screen real-click coverage: validated for all 12 inn main buttons.
 - Three-strategy merged coverage after inn-main fix: validated with no missing MD5s.
 - Save/load replacement: validated from the inn main screen with `runner-local-save-v1`; official `gd.snap` remains a platform/runtime boundary.
-- Readable runtime text: runner disables the incompatible bitmap-font path while leaving the engine text parser and styling path intact.
+- Readable runtime text: default play keeps the official bitmap-font path; `patchReadableText=1` is only a manual fallback.
 - Platform feature replacement: bounded and should be minimal.
 - Multi-game scalability: not verified yet; next decisive MVP test after this sample stabilizes.
 
@@ -787,7 +787,6 @@ Default play mode auto-enables the required runtime flags unless a flag is expli
 - `autoCreateCharacterConfirm`
 - `autoNameChoice`
 - `autoInnNameChoice`
-- `patchReadableText`
 - `patchOfficialChoiceUi`
 
 Verification:
@@ -809,8 +808,8 @@ Fix:
 
 - Removed the runner wrapper around `StringUtil.getAnalysisText`.
 - Removed runner-side `OText` creation and all forced font styling (`font`, `fontSize`, `bold`, `stroke`, `sysFontSize`, `sysFontDifY`).
-- Kept only the bounded bitmap compatibility switch: `gd.fontBitmapData.isUserBitMap = false`.
-- Default playable URLs still enable `patchReadableText`, but that flag no longer changes the parser or text style.
+- Kept the bounded bitmap compatibility switch (`gd.fontBitmapData.isUserBitMap = false`) only behind explicit `patchReadableText=1`.
+- Default playable URLs no longer enable `patchReadableText`, so normal play keeps the official bitmap-font path.
 
 Verification:
 
@@ -819,12 +818,39 @@ Verification:
   - `fontBitmapData.isUserBitMap` is false.
 - Full-route first story text smoke: `C:\tmp\claw_font_story_text_verify\summary.json`
   - no visible `\c[...]` text was found in runtime text nodes.
-- Default short-link smoke: `C:\tmp\claw_default_short_link_font_restore_v4\summary.json`, status `ok`
-  - `/h5_runner_experiment.html` enables the default compatibility path without the long query string.
-  - `choiceIndex=19`, `StringUtil.__runnerReadableTextWrapped=false`, `fontBitmapData.isUserBitMap=false`.
+- Default short-link smoke after default font restore: `C:\tmp\claw_default_font_restore_smoke\summary.json`, status `ok`
+  - `/h5_runner_experiment.html` still enables the default playable path without the long query string.
+  - `choiceIndex=19`, `StringUtil.__runnerReadableTextWrapped=false`, `fontBitmapData.isUserBitMap=true`.
 - Main save/load regression: `C:\tmp\claw_save_load_final_font_restore_v2\save_load_summary.json`, status `ok`
 - Main order button regression: `C:\tmp\claw_main_buttons_final_font_restore\main_buttons_summary.json`, status `ok`
 - Official choice UI regression: `C:\tmp\claw_choice_ui_after_font_restore\summary.json`
   - `choiceIndex=19`
   - three choice buttons at `x=174`, width `612`, height `53`
   - `StringUtil.__runnerReadableTextWrapped` is false.
+
+## 2026-06-27 Default Font Restore
+
+User reported that the main UI still felt visually wrong after the parser restore.
+
+Finding:
+
+- The remaining visual mismatch came from default `patchReadableText`: even without wrapping `StringUtil.getAnalysisText`, it still disabled `fontBitmapData.isUserBitMap`, so normal play used native/browser text instead of the official bitmap-font path.
+- Runtime comparison showed the order menu remains readable with the official bitmap path:
+  - `C:\tmp\claw_order_bitmap_original\summary.json`
+  - `fontBitmapData.isUserBitMap=true`
+  - `choiceIndex=19`
+  - visible order choices are `每日订单 / 酒宴订单 / 返回`
+
+Fix:
+
+- Removed `patchReadableText` from default short-link and `autoStartTitle=1` playable defaults.
+- Kept `patchReadableText=1` available as an explicit manual fallback only.
+
+Verification:
+
+- Default short-link smoke: `C:\tmp\claw_default_font_restore_smoke\summary.json`, status `ok`
+  - `fontBitmapData.isUserBitMap=true`
+  - `choiceIndex=19`
+  - `StringUtil.__runnerReadableTextWrapped=false`
+- Main order button regression: `C:\tmp\claw_main_button_after_default_font_restore\main_buttons_summary.json`, status `ok`
+- Save/load regression: `C:\tmp\claw_save_load_after_default_font_restore\save_load_summary.json`, status `ok`
