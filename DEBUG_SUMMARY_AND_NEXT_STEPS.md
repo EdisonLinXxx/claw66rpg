@@ -758,3 +758,41 @@ Verification:
 Note:
 
 - The `debugJumpMain` path still skips some preceding visual setup, so its background/portrait can differ from the official full-route screenshots. Use it for branch/button mechanics; use full-route/manual play for final visual comparison.
+
+## 2026-06-27 Default Play Link Compatibility
+
+The runner now supports short playable URLs without carrying the long query string.
+
+Default playable entries:
+
+- `http://127.0.0.1:8765/h5_runner_experiment.html`
+- `http://127.0.0.1:8765/h5_runner_experiment.html?runId=play`
+- `http://127.0.0.1:8765/h5_runner_experiment.html?play=1`
+
+Default play mode auto-enables the required runtime flags unless a flag is explicitly set in the URL:
+
+- `localRes`
+- `patchNewDSystem`
+- `patchTitleClick`
+- `patchFirstSceneLobbyButtons`
+- `patchInnMainButtons`
+- `autoStartTitle`
+- `hideDebug`
+- `quietOafEvents`
+- `stubPropShop`
+- `stubCode214Name`
+- `stubCode214Birthday`
+- `stubInitialVitals`
+- `autoCreateCharacterConfirm`
+- `autoNameChoice`
+- `autoInnNameChoice`
+- `patchReadableText`
+- `patchOfficialChoiceUi`
+
+Verification:
+
+- Default URL smoke: `C:\tmp\claw_default_play_line_verify\summary.json`
+  - plain `/h5_runner_experiment.html`: required flags true, `ChoiceButtonIndex=19`, entered `storyId=1,pos=7,code=204`
+  - `/h5_runner_experiment.html?runId=play`: same result
+  - explicit override check: `patchNewDSystem=0` remains false when specified
+- Save/load regression after default mode change: `C:\tmp\claw_save_load_after_default_play\save_load_summary.json`, status `ok`

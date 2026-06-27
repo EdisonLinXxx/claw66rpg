@@ -53,6 +53,27 @@
       var params = new URLSearchParams(window.location.search);
       var value = params.get(name);
       if (value !== null) return value === '1';
+      var isDefaultPlayMode = window.location.search === '' || params.get('runId') === 'play' || params.get('play') === '1';
+      var defaultPlayFlags = {
+        localRes: true,
+        patchNewDSystem: true,
+        patchTitleClick: true,
+        patchFirstSceneLobbyButtons: true,
+        patchInnMainButtons: true,
+        autoStartTitle: true,
+        hideDebug: true,
+        quietOafEvents: true,
+        stubPropShop: true,
+        stubCode214Name: true,
+        stubCode214Birthday: true,
+        stubInitialVitals: true,
+        autoCreateCharacterConfirm: true,
+        autoNameChoice: true,
+        autoInnNameChoice: true,
+        patchReadableText: true,
+        patchOfficialChoiceUi: true
+      };
+      if (isDefaultPlayMode && defaultPlayFlags[name]) return true;
       var playableDefaultFlags = {
         patchFirstSceneLobbyButtons: true,
         patchInnMainButtons: true,
