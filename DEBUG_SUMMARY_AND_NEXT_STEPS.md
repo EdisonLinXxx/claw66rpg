@@ -732,3 +732,29 @@ Current feasibility assessment:
 - Readable runtime text: runner-side native text fallback now replaces the broken bitmap-font path for branch choices and custom UI text.
 - Platform feature replacement: bounded and should be minimal.
 - Multi-game scalability: not verified yet; next decisive MVP test after this sample stabilizes.
+
+## 2026-06-27 Official Choice UI Follow-up
+
+User supplied official UI references showing that branch choices should use wide translucent horizontal bars and thin text, not the previous bold/stroked fallback.
+
+Changes:
+
+- Added default runner flag `patchOfficialChoiceUi=1` for playable runs.
+- Corrected `System.MessageBox.ChoiceButtonIndex` from the parsed bad value `20` (`商城_一键领取2.png`, 54x57 diamond) to official button index `19` (`选择框1/2.png`, 612x53 horizontal bar).
+- Patched `textChoice.TextDifUI` so `showDifUI/update/updateEx/updateEx2` refresh the cached choice skin from the current event resources. The engine cached the old skin during `TextDifUI.init`, so changing `ChoiceButtonIndex` alone was insufficient.
+- Adjusted `patchReadableText` to keep native fallback text thin: `bold=false`, `stroke=0`.
+
+Verification:
+
+- Runtime choice UI: `C:\tmp\claw_choice_ui_verify_runtime2\summary.json`
+  - order branch at `storyId=15,pos=657,code=101`
+  - `choiceIndex=19`
+  - three visible choice buttons at `x=174`, width `612`, height `53`
+  - text glyphs report `bold=false`, `stroke=0`
+- Canvas visual: `C:\tmp\claw_choice_ui_canvas\order_canvas.png`
+- Save/load regression: `C:\tmp\claw_save_load_after_choice_ui_v2\save_load_summary.json`, status `ok`
+- Main button regression for order/overview: `C:\tmp\claw_main_buttons_after_choice_ui_v2\main_buttons_summary.json`, status `ok`, no local 404
+
+Note:
+
+- The `debugJumpMain` path still skips some preceding visual setup, so its background/portrait can differ from the official full-route screenshots. Use it for branch/button mechanics; use full-route/manual play for final visual comparison.

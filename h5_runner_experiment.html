@@ -60,6 +60,7 @@
         stubPropShop: true,
         stubInitialVitals: true,
         patchReadableText: true,
+        patchOfficialChoiceUi: true,
         traceRuntime: true,
         traceStoryState: true
       };
@@ -647,6 +648,56 @@
         org_data.DButton = PaddedDButton;
         logLine('button padding patch enabled');
       }
+      var normalizeOfficialChoiceButtonIndex = function (system, reason) {
+        if (!hasQueryFlag('patchOfficialChoiceUi')) return false;
+        try {
+          if (!system && window.GloableData && GloableData.getInstance) {
+            var gd = GloableData.getInstance();
+            system = gd && gd.gameMainData && gd.gameMainData.System;
+          }
+          if (!system || !system.MessageBox || !system.Buttons) return false;
+          var officialChoiceIndex = 19;
+          var currentIndex = system.MessageBox.ChoiceButtonIndex;
+          var officialButton = system.Buttons[officialChoiceIndex];
+          var currentButton = system.Buttons[currentIndex];
+          var officialImage = officialButton && officialButton.image1 && officialButton.image1.name || '';
+          var currentImage = currentButton && currentButton.image1 && currentButton.image1.name || '';
+          if (officialImage.indexOf('选择框') === -1 || currentIndex === officialChoiceIndex) return false;
+          system.MessageBox.ChoiceButtonIndex = officialChoiceIndex;
+          logLine('PATCH OFFICIAL CHOICE BUTTON ' + JSON.stringify({
+            reason: reason,
+            from: currentIndex,
+            to: officialChoiceIndex,
+            fromImage: currentImage,
+            toImage: officialImage
+          }));
+          return true;
+        } catch (officialChoiceError) {
+          logLine('PATCH OFFICIAL CHOICE BUTTON ERROR ' + (officialChoiceError && (officialChoiceError.stack || officialChoiceError.message) || officialChoiceError));
+          return false;
+        }
+      };
+      var refreshOfficialTextDifSkin = function (textDif, eventData, reason) {
+        if (!hasQueryFlag('patchOfficialChoiceUi') || !textDif || !window.GloableData || !GloableData.getInstance) return;
+        try {
+          var gd = GloableData.getInstance();
+          var system = gd && gd.gameMainData && gd.gameMainData.System;
+          normalizeOfficialChoiceButtonIndex(system, reason);
+          if (!system || !system.MessageBox || !gd.getBtnUrlByIndex) return;
+          if (eventData && eventData.isDiyeve) return;
+          var urls = gd.getBtnUrlByIndex(system.MessageBox.ChoiceButtonIndex) || [];
+          if (!urls[0] && eventData && eventData.btnResource) urls = eventData.btnResource;
+          if (!urls || !urls[0]) return;
+          textDif.image_1_url = urls[0];
+          textDif.image_2_ur = urls[1] || urls[0];
+          if (eventData && eventData.btnResource) {
+            eventData.btnResource[0] = urls[0];
+            eventData.btnResource[1] = urls[1] || urls[0];
+          }
+        } catch (textDifSkinError) {
+          logLine('PATCH OFFICIAL TEXTDIF SKIN ERROR ' + (textDifSkinError && (textDifSkinError.stack || textDifSkinError.message) || textDifSkinError));
+        }
+      };
       if (hasQueryFlag('patchNewDSystem') && window.org_data && org_data.DSystem && !org_data.DSystem.__runnerNewPatched) {
         var parseEventList = function (stream) {
           var count = stream.getInt32();
@@ -767,6 +818,7 @@
           for (var index = 0; index < buttonCount; index++) {
             this.Buttons[index] = new org_data.DButton(stream);
           }
+          normalizeOfficialChoiceButtonIndex(this, 'DSystem');
           logLine('new DSystem buttons oldCount=' + oldButtonCount + ' parsed=' + buttonCount + ' pos=' + stream.pos);
           this.UIInitSave = stream.getInt32() !== 0;
           this.Cuis = null;
@@ -1081,25 +1133,6 @@
       var installReadableTextFallback = function () {
         if (!hasQueryFlag('patchReadableText')) return;
         if (!window.StringUtil || !window.OSprite || !window.OText || !window.GloableData || !GloableData.getInstance) return;
-        var parseColor = function (value) {
-          if (typeof value === 'number') return value;
-          if (typeof value !== 'string') return null;
-          var hex = value.charAt(0) === '#' ? value.slice(1) : value;
-          if (hex.length === 3) {
-            hex = hex.charAt(0) + hex.charAt(0) + hex.charAt(1) + hex.charAt(1) + hex.charAt(2) + hex.charAt(2);
-          }
-          if (!/^[0-9a-fA-F]{6}$/.test(hex)) return null;
-          return parseInt(hex, 16);
-        };
-        var contrastStrokeFor = function (value) {
-          var parsed = parseColor(value);
-          if (parsed === null || !isFinite(parsed)) return '#fff4d6';
-          var red = (parsed >> 16) & 255;
-          var green = (parsed >> 8) & 255;
-          var blue = parsed & 255;
-          var brightness = (red * 299 + green * 587 + blue * 114) / 1000;
-          return brightness < 150 ? '#fff4d6' : '#4b1f18';
-        };
         var applyFontRuntimeFallback = function (reason) {
           try {
             var gd = GloableData.getInstance();
@@ -1160,9 +1193,8 @@
                 letter.font = system.FontName || 'Microsoft YaHei';
                 letter.fontSize = fontSize;
                 letter.color = textColor;
-                letter.stroke = 2;
-                letter.strokeColor = contrastStrokeFor(textColor);
-                letter.bold = true;
+                letter.stroke = 0;
+                letter.bold = false;
                 letter.height = Math.ceil(fontSize * 1.35);
                 letter.width = /[\x00-\x7f]/.test(ch) ? Math.ceil(fontSize * 0.65) : Math.ceil(fontSize * 1.05);
                 sprite.width = letter.width;
@@ -1198,6 +1230,47 @@
         applyFontRuntimeFallback('install');
       };
       installReadableTextFallback();
+      var installOfficialChoiceUiPatch = function () {
+        if (!hasQueryFlag('patchOfficialChoiceUi')) return false;
+        if (!window.textChoice || !textChoice.TextDifUI || !textChoice.TextDifUI.prototype) return false;
+        var proto = textChoice.TextDifUI.prototype;
+        if (proto.__runnerOfficialChoiceUiPatched) return true;
+        if (typeof proto.init === 'function') {
+          var originalTextDifInit = proto.init;
+          proto.init = function () {
+            var result = originalTextDifInit.apply(this, arguments);
+            refreshOfficialTextDifSkin(this, null, 'TextDifUI.init');
+            return result;
+          };
+        }
+        if (typeof proto.showDifUI === 'function') {
+          var originalShowDifUI = proto.showDifUI;
+          proto.showDifUI = function (eventData) {
+            refreshOfficialTextDifSkin(this, eventData, 'TextDifUI.showDifUI');
+            return originalShowDifUI.apply(this, arguments);
+          };
+        }
+        var wrapTextDifUpdateMethod = function (methodName) {
+          if (typeof proto[methodName] !== 'function') return;
+          var originalMethod = proto[methodName];
+          proto[methodName] = function () {
+            refreshOfficialTextDifSkin(this, this.eventData, 'TextDifUI.' + methodName);
+            return originalMethod.apply(this, arguments);
+          };
+        };
+        ['update', 'updateEx', 'updateEx2'].forEach(wrapTextDifUpdateMethod);
+        proto.__runnerOfficialChoiceUiPatched = true;
+        normalizeOfficialChoiceButtonIndex(null, 'TextDifUI.patch');
+        logLine('official choice UI patch enabled');
+        return true;
+      };
+      if (!installOfficialChoiceUiPatch()) {
+        var officialChoiceUiProbeCount = 0;
+        var officialChoiceUiProbe = setInterval(function () {
+          officialChoiceUiProbeCount += 1;
+          if (installOfficialChoiceUiPatch() || officialChoiceUiProbeCount >= 40) clearInterval(officialChoiceUiProbe);
+        }, 500);
+      }
       if (hasQueryFlag('traceRuntime')) {
         var wrapRuntimeMethod = function (owner, ownerName, methodName) {
           if (!owner || typeof owner[methodName] !== 'function' || owner[methodName].__runnerRuntimeMethodWrapped) return;
