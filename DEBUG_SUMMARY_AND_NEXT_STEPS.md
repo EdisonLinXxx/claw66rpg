@@ -854,3 +854,27 @@ Verification:
   - `StringUtil.__runnerReadableTextWrapped=false`
 - Main order button regression: `C:\tmp\claw_main_button_after_default_font_restore\main_buttons_summary.json`, status `ok`
 - Save/load regression: `C:\tmp\claw_save_load_after_default_font_restore\save_load_summary.json`, status `ok`
+
+## 2026-06-28 Main Branch Button Visibility
+
+User compared the main inn screen with official screenshots and found an extra `分线` entry in the initial state.
+
+Finding:
+
+- The runner-side inn main button patch always injected button `449` even though the original argv carried the condition `var 5389 >= 143` (`[5390：主线剧情1] >= 143`).
+- Because `event.links/currentLinks` still included the extra branch target, the initial main screen had 12 visible buttons instead of the official 11.
+
+Fix:
+
+- Centralized the inn main button argv/link list in `h5_runner_experiment.html`.
+- Button `449` and link `1114` are now included only when `dGameSystem.vars[5389] >= 143`.
+- The initial/default main screen now keeps 11 buttons and aligned links: `650,657,665,675,677,767,774,1088,1090,1110,1112`.
+- `validate_main_buttons.py` now defaults to the initial 11 visible buttons; explicit `--buttons 11` remains available for branch-state testing.
+
+Verification:
+
+- In-app default short-link screenshot: `C:\tmp\claw_main_branch_visibility_iab\default_main.png`
+- Main button regression: `C:\tmp\claw_main_buttons_after_branch_visibility\main_buttons_summary.json`, all 11 selected buttons `ok`, `404=0`
+  - First report confirms button indexes `296,297,298,299,300,302,303,304,307,306,305`
+  - `449` is absent in the initial main screen
+- Save/load regression: `C:\tmp\claw_save_load_after_branch_visibility\save_load_summary.json`, status `ok`, saved/restored main screen has `buttonsLength=11`

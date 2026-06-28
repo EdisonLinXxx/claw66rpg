@@ -83,7 +83,7 @@ class RecordingHandler(SimpleHTTPRequestHandler):
 
 def parse_button_selector(value):
     if not value:
-        return list(range(12))
+        return list(range(11))
     selected = []
     for item in re.split(r"[\s,]+", value.strip()):
         if not item:
