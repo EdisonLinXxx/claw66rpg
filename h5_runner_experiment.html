@@ -2687,7 +2687,8 @@
               if (!event || event.Code !== 214) return false;
               var index = parseInt(event.Argv && event.Argv[0], 10);
               var nameFields = String(event.Argv && event.Argv[3] || '');
-              var isNameEvent = index === 10014 || index === 10007 || (nameFields.indexOf('姓,') !== -1 && nameFields.indexOf('名,') !== -1);
+              var isEarlyNameFlow = line && line.storyId === 1;
+              var isNameEvent = index === 10014 || index === 10007 || (isEarlyNameFlow && index >= 10000 && nameFields.indexOf('姓,') !== -1 && nameFields.indexOf('名,') !== -1);
               if (!isNameEvent) return false;
               var stubKey = String(line && line.pos || 'unknown') + ':' + index;
               window.__runnerCode214NameStubbedKeys = window.__runnerCode214NameStubbedKeys || {};
@@ -2973,7 +2974,8 @@
                 var beforeEvent = beforeEventAtPos && beforeEventAtPos.Code === 214 ? beforeEventAtPos : this && this.currentEvent || beforeEventAtPos;
                 var beforeNameIndex = beforeEvent && beforeEvent.Code === 214 ? parseInt(beforeEvent.Argv && beforeEvent.Argv[0], 10) : NaN;
                 var beforeNameFields = beforeEvent && beforeEvent.Code === 214 ? String(beforeEvent.Argv && beforeEvent.Argv[3] || '') : '';
-                var beforeIsNameEvent = beforeNameIndex === 10014 || beforeNameIndex === 10007 || (beforeNameFields.indexOf('姓,') !== -1 && beforeNameFields.indexOf('名,') !== -1);
+                var beforeIsEarlyNameFlow = this && this.storyId === 1;
+                var beforeIsNameEvent = beforeNameIndex === 10014 || beforeNameIndex === 10007 || (beforeIsEarlyNameFlow && beforeNameIndex >= 10000 && beforeNameFields.indexOf('姓,') !== -1 && beforeNameFields.indexOf('名,') !== -1);
                 if (beforeEvent && beforeEvent.Code === 214 && beforeIsNameEvent) {
                   var stubbedName = maybeStubCode214Name(this);
                   if (!stubbedName) return originalMethod.apply(this, arguments);
