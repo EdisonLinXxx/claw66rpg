@@ -552,10 +552,40 @@
         var system = gd && gd.gameMainData && gd.gameMainData.System || null;
         var saveData = system && system.SaveData || null;
         if (!gd || !saveData || typeof window.__runnerLocalSaveInfo !== 'function') return null;
+        try {
+          gd.isCloud = false;
+          if (typeof gd.loadShot === 'function') gd.loadShot(true);
+          else if (typeof gd.saveDataInit === 'function') gd.saveDataInit();
+        } catch (officialLoadShotError) {
+          logLine('RUNNER SAVE FILE OFFICIAL LOADSHOT ERROR ' + (officialLoadShotError && (officialLoadShotError.stack || officialLoadShotError.message) || officialLoadShotError));
+        }
         var max = parseInt(saveData.max, 10);
         if (!isFinite(max) || max <= 0) max = 99;
+        var officialList = gd.saveFileData && gd.saveFileData.length ? gd.saveFileData.slice(0) : [];
         var list = new Array(max);
+        var makeEmpty = function (slot) {
+          return { index: slot, picurl: '', name: '', date: 0, isfree: 0 };
+        };
+        var normalizeOfficialItem = function (slot, item, data) {
+          var header = data && data.Header || {};
+          var date = item && item.date;
+          if (!date || date < 0) date = header.SaveTime ? parseInt(header.SaveTime, 10) : 0;
+          if (!isFinite(date)) date = 0;
+          return {
+            index: slot,
+            picurl: item && item.picurl || data && data.picurl || data && data.Thumbnail && (data.Thumbnail.cloudImageUrl || data.Thumbnail.base64) || '',
+            name: item && item.name || header.StoryName || '',
+            date: date,
+            isfree: item && item.isfree || header.IsFreeLimit || 0
+          };
+        };
         for (var slot = 0; slot < max; slot++) {
+          var officialInfo = window.__runnerOfficialSaveInfo ? window.__runnerOfficialSaveInfo(slot) : null;
+          var officialItem = officialList[slot] || null;
+          if ((officialInfo && officialInfo.exists) || (officialItem && (officialItem.name || officialItem.picurl || officialItem.date > 0))) {
+            list[slot] = normalizeOfficialItem(slot, officialItem, officialInfo && officialInfo.data);
+            continue;
+          }
           var info = window.__runnerLocalSaveInfo(slot);
           if (info && info.exists && info.data) {
             var timestamp = Date.parse(info.data.savedAt || '');
@@ -568,11 +598,82 @@
               isfree: 0
             };
           } else {
-            list[slot] = { index: slot, picurl: '', name: '', date: 0, isfree: 0 };
+            list[slot] = makeEmpty(slot);
           }
         }
         gd.saveFileData = list;
         return list;
+      };
+      window.__runnerApplySaveFileDataToView = function (saveView, synced) {
+        if (!saveView) return false;
+        var list = synced || (window.__runnerSyncSaveFileData && window.__runnerSyncSaveFileData());
+        if (!list) return false;
+        saveView.listData = list;
+        if (saveView.itemList) {
+          saveView.itemList.array = list;
+          if (typeof saveView.itemList.refresh === 'function') saveView.itemList.refresh();
+        }
+        return true;
+      };
+      window.__runnerOfficialSaveKey = function (slot) {
+        var gd = window.GloableData && GloableData.getInstance ? GloableData.getInstance() : null;
+        var slotIndex = parseInt(slot, 10);
+        if (!gd || !gd.savekey || !isFinite(slotIndex) || slotIndex < 0) return '';
+        return gd.savekey + String(slotIndex + 1);
+      };
+      window.__runnerOfficialSaveInfo = function (slot) {
+        var key = window.__runnerOfficialSaveKey ? window.__runnerOfficialSaveKey(slot) : '';
+        var value = '';
+        var parsed = null;
+        try {
+          value = key ? localStorage.getItem(key) || '' : '';
+          parsed = value ? JSON.parse(value) : null;
+        } catch (officialInfoError) {}
+        return {
+          ok: true,
+          key: key,
+          slot: slot || 0,
+          exists: value.length > 0,
+          len: value.length,
+          preview: value.slice(0, 160),
+          data: parsed
+        };
+      };
+      window.__runnerOfficialSave = function (slot, cell, mediator) {
+        var gd = window.GloableData && GloableData.getInstance ? GloableData.getInstance() : null;
+        var slotIndex = parseInt(slot, 10);
+        if (!gd || !isFinite(slotIndex) || slotIndex < 0) return { ok: false, reason: 'runtime not ready' };
+        if (typeof gd.snap !== 'function' || typeof gd.getSaveSpriteData !== 'function') return { ok: false, reason: 'official save hooks unavailable' };
+        try {
+          gd.isCloud = false;
+          if (typeof gd.saveDataInit === 'function') gd.saveDataInit();
+          gd.snap(slotIndex, true);
+          gd.getSaveSpriteData(slotIndex, cell || null, mediator || null, true);
+          var info = window.__runnerOfficialSaveInfo(slotIndex);
+          logLine('RUNNER OFFICIAL SAVE SLOT ' + JSON.stringify({ slot: slotIndex, ok: !!(info && info.exists), key: info && info.key || '', len: info && info.len || 0 }));
+          return info && info.exists ? { ok: true, key: info.key, len: info.len, data: info.data } : { ok: false, reason: 'official save missing after snap', info: info };
+        } catch (officialSaveError) {
+          return { ok: false, reason: 'official save error', error: String(officialSaveError && (officialSaveError.stack || officialSaveError.message) || officialSaveError) };
+        }
+      };
+      window.__runnerOfficialRestore = function (slot) {
+        var gd = window.GloableData && GloableData.getInstance ? GloableData.getInstance() : null;
+        var slotIndex = parseInt(slot, 10);
+        if (!gd || !isFinite(slotIndex) || slotIndex < 0) return { ok: false, reason: 'runtime not ready' };
+        if (typeof gd.restore !== 'function') return { ok: false, reason: 'official restore hook unavailable' };
+        var info = window.__runnerOfficialSaveInfo ? window.__runnerOfficialSaveInfo(slotIndex) : null;
+        if (!info || !info.exists) return { ok: false, reason: 'official save slot missing', info: info };
+        try {
+          gd.isCloud = false;
+          if (window.view && view.SCustomUI && view.SCustomUI.getInstance) view.SCustomUI.getInstance().hideUI();
+        } catch (hideScuiBeforeOfficialRestoreError) {}
+        try {
+          var result = gd.restore(slotIndex, true);
+          logLine('RUNNER OFFICIAL RESTORE SLOT ' + JSON.stringify({ slot: slotIndex, key: info.key, result: result === false ? false : true }));
+          return result === false ? { ok: false, reason: 'official restore returned false', info: info } : { ok: true, key: info.key, data: info.data };
+        } catch (officialRestoreError) {
+          return { ok: false, reason: 'official restore error', error: String(officialRestoreError && (officialRestoreError.stack || officialRestoreError.message) || officialRestoreError), info: info };
+        }
       };
       window.__runnerOpenSaveFileView = function (isSave, label) {
         try {
@@ -585,6 +686,18 @@
               new view.SaveFileUI(false, !!isSave, window.GloableStaticData ? GloableStaticData.VIEW_INDEX_MENU : -1),
               view.SaveFileUIMediator.NAME
             );
+            try {
+              var saveFileView = UIManager.getInstance().getViewByName(view.SaveFileUIMediator.NAME);
+              if (window.__runnerApplySaveFileDataToView) window.__runnerApplySaveFileDataToView(saveFileView);
+              setTimeout(function () {
+                try {
+                  var delayedSaveFileView = UIManager.getInstance().getViewByName(view.SaveFileUIMediator.NAME);
+                  if (window.__runnerApplySaveFileDataToView) window.__runnerApplySaveFileDataToView(delayedSaveFileView);
+                } catch (delayedApplySaveFileDataError) {}
+              }, 0);
+            } catch (applyOpenSaveFileDataError) {
+              logLine('RUNNER OPEN SAVE FILE VIEW DATA ERROR ' + (applyOpenSaveFileDataError && (applyOpenSaveFileDataError.stack || applyOpenSaveFileDataError.message) || applyOpenSaveFileDataError));
+            }
           }
           logLine('RUNNER OPEN SAVE FILE VIEW ' + JSON.stringify({ label: label || '', isSave: !!isSave }));
           return true;
@@ -641,12 +754,7 @@
               saveUIProto.init = function () {
                 var result = originalInit.apply(this, arguments);
                 try {
-                  var synced = window.__runnerSyncSaveFileData && window.__runnerSyncSaveFileData();
-                  if (synced && this.itemList) {
-                    this.listData = synced;
-                    this.itemList.array = synced;
-                    if (typeof this.itemList.refresh === 'function') this.itemList.refresh();
-                  }
+                  if (window.__runnerApplySaveFileDataToView) window.__runnerApplySaveFileDataToView(this);
                 } catch (syncInitError) {
                   logLine('RUNNER SAVE UI INIT SYNC ERROR ' + (syncInitError && (syncInitError.stack || syncInitError.message) || syncInitError));
                 }
@@ -658,12 +766,7 @@
               saveUIProto.refreshUI = function () {
                 var result = originalRefreshUI.apply(this, arguments);
                 try {
-                  var synced = window.__runnerSyncSaveFileData && window.__runnerSyncSaveFileData();
-                  if (synced && this.itemList) {
-                    this.listData = synced;
-                    this.itemList.array = synced;
-                    if (typeof this.itemList.refresh === 'function') this.itemList.refresh();
-                  }
+                  if (window.__runnerApplySaveFileDataToView) window.__runnerApplySaveFileDataToView(this);
                 } catch (syncRefreshError) {
                   logLine('RUNNER SAVE UI REFRESH SYNC ERROR ' + (syncRefreshError && (syncRefreshError.stack || syncRefreshError.message) || syncRefreshError));
                 }
@@ -722,33 +825,41 @@
             mediatorProto.onSelect = function (slot) {
               var slotIndex = parseInt(slot && slot.parameter !== undefined ? slot.parameter : slot, 10);
               if (!isFinite(slotIndex) || slotIndex < 0) return originalOnSelect.apply(this, arguments);
-              if (this.view && this.view.isSave && typeof window.__runnerLocalSave === 'function') {
-                var saveResult = window.__runnerLocalSave(slotIndex);
-                logLine('RUNNER SAVE UI SAVE SLOT ' + JSON.stringify({ slot: slotIndex, ok: !!(saveResult && saveResult.ok), reason: saveResult && saveResult.reason || '' }));
-                if (saveResult && saveResult.ok) {
+              if (this.view && this.view.isSave) {
+                var itemCell = null;
+                try {
+                  itemCell = this.view.itemList && typeof this.view.itemList.getCell === 'function' ? this.view.itemList.getCell(slotIndex) : null;
+                } catch (getSaveCellError) {}
+                var officialSaveResult = window.__runnerOfficialSave ? window.__runnerOfficialSave(slotIndex, itemCell, this) : null;
+                var localSaveResult = window.__runnerLocalSave ? window.__runnerLocalSave(slotIndex) : null;
+                logLine('RUNNER SAVE UI SAVE SLOT ' + JSON.stringify({
+                  slot: slotIndex,
+                  officialOk: !!(officialSaveResult && officialSaveResult.ok),
+                  localOk: !!(localSaveResult && localSaveResult.ok),
+                  officialReason: officialSaveResult && officialSaveResult.reason || '',
+                  localReason: localSaveResult && localSaveResult.reason || ''
+                }));
+                if ((officialSaveResult && officialSaveResult.ok) || (localSaveResult && localSaveResult.ok)) {
                   try {
-                    var synced = window.__runnerSyncSaveFileData && window.__runnerSyncSaveFileData();
-                    if (this.view && this.view.itemList && synced) {
-                      this.view.listData = synced;
-                      this.view.itemList.array = synced;
-                      if (typeof this.view.itemList.refresh === 'function') this.view.itemList.refresh();
-                    }
+                    if (window.__runnerApplySaveFileDataToView) window.__runnerApplySaveFileDataToView(this.view);
                   } catch (saveRefreshError) {
                     logLine('RUNNER SAVE UI SAVE REFRESH ERROR ' + (saveRefreshError && (saveRefreshError.stack || saveRefreshError.message) || saveRefreshError));
                   }
                   return;
                 }
               }
-              if (this.view && !this.view.isSave && typeof window.__runnerLocalRestore === 'function') {
-                var info = window.__runnerLocalSaveInfo ? window.__runnerLocalSaveInfo(slotIndex) : null;
-                if (!info || !info.exists) {
+              if (this.view && !this.view.isSave) {
+                var officialInfo = window.__runnerOfficialSaveInfo ? window.__runnerOfficialSaveInfo(slotIndex) : null;
+                var localInfo = window.__runnerLocalSaveInfo ? window.__runnerLocalSaveInfo(slotIndex) : null;
+                if ((!officialInfo || !officialInfo.exists) && (!localInfo || !localInfo.exists)) {
                   logLine('RUNNER SAVE UI LOAD EMPTY SLOT ' + slotIndex);
                   return;
                 }
                 try {
                   if (window.UIManager && UIManager.getInstance) UIManager.getInstance().closeView(this.name, false);
                 } catch (closeBeforeRestoreError) {}
-                var restoreResult = window.__runnerLocalRestore(slotIndex);
+                var restoreResult = officialInfo && officialInfo.exists && window.__runnerOfficialRestore ? window.__runnerOfficialRestore(slotIndex) : null;
+                if (!restoreResult || !restoreResult.ok) restoreResult = window.__runnerLocalRestore ? window.__runnerLocalRestore(slotIndex) : restoreResult;
                 logLine('RUNNER SAVE UI LOAD SLOT ' + JSON.stringify({ slot: slotIndex, ok: !!(restoreResult && restoreResult.ok), reason: restoreResult && restoreResult.reason || '' }));
                 return;
               }
