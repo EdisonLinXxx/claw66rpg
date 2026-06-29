@@ -71,6 +71,7 @@
         autoNameChoice: true,
         autoInnNameChoice: true,
         patchOfficialChoiceUi: true,
+        patchSaveFileUI: true,
         traceRuntime: true,
         traceStoryState: true
       };
@@ -82,6 +83,7 @@
         stubPropShop: true,
         stubInitialVitals: true,
         patchOfficialChoiceUi: true,
+        patchSaveFileUI: true,
         traceRuntime: true,
         traceStoryState: true
       };
@@ -542,6 +544,239 @@
         return { ok: true, key: info.key, data: data };
       };
       logLine('runner local save helpers installed');
+    }
+    if (hasQueryFlag('patchSaveFileUI') && !window.__runnerSaveFileUIPatchStarted) {
+      window.__runnerSaveFileUIPatchStarted = true;
+      window.__runnerSyncSaveFileData = function () {
+        var gd = window.GloableData && GloableData.getInstance ? GloableData.getInstance() : null;
+        var system = gd && gd.gameMainData && gd.gameMainData.System || null;
+        var saveData = system && system.SaveData || null;
+        if (!gd || !saveData || typeof window.__runnerLocalSaveInfo !== 'function') return null;
+        var max = parseInt(saveData.max, 10);
+        if (!isFinite(max) || max <= 0) max = 99;
+        var list = new Array(max);
+        for (var slot = 0; slot < max; slot++) {
+          var info = window.__runnerLocalSaveInfo(slot);
+          if (info && info.exists && info.data) {
+            var timestamp = Date.parse(info.data.savedAt || '');
+            if (!isFinite(timestamp)) timestamp = Date.now ? Date.now() : new Date().getTime();
+            list[slot] = {
+              index: slot,
+              picurl: '',
+              name: info.data.storyName || ('slot ' + (slot + 1)),
+              date: timestamp,
+              isfree: 0
+            };
+          } else {
+            list[slot] = { index: slot, picurl: '', name: '', date: 0, isfree: 0 };
+          }
+        }
+        gd.saveFileData = list;
+        return list;
+      };
+      window.__runnerOpenSaveFileView = function (isSave, label) {
+        try {
+          var gd = window.GloableData && GloableData.getInstance ? GloableData.getInstance() : null;
+          if (gd) gd.isCloud = false;
+          if (window.view && view.SCustomUI && view.SCustomUI.getInstance) view.SCustomUI.getInstance().hideUI();
+          if (window.UIManager && UIManager.getInstance) {
+            UIManager.getInstance().isSCUIShow = false;
+            UIManager.getInstance().showView(
+              new view.SaveFileUI(false, !!isSave, window.GloableStaticData ? GloableStaticData.VIEW_INDEX_MENU : -1),
+              view.SaveFileUIMediator.NAME
+            );
+          }
+          logLine('RUNNER OPEN SAVE FILE VIEW ' + JSON.stringify({ label: label || '', isSave: !!isSave }));
+          return true;
+        } catch (openSaveFileViewError) {
+          logLine('RUNNER OPEN SAVE FILE VIEW ERROR ' + (openSaveFileViewError && (openSaveFileViewError.stack || openSaveFileViewError.message) || openSaveFileViewError));
+          return false;
+        }
+      };
+      var installSaveFileMenuBridge = function () {
+        try {
+          if (!window.EventCenter || !EventCenter.dispatchEvent || !window.GameEventConstant || !window.view || !view.SCustomUI) return false;
+          if (EventCenter.dispatchEvent.__runnerSaveFileMenuBridgePatched) return true;
+          var originalDispatchEventForSaveFileMenu = EventCenter.dispatchEvent;
+          var getButtonCode214Index = function (button) {
+            var events = button && button.tag && button.tag.event || [];
+            for (var eventIndex = 0; eventIndex < events.length; eventIndex++) {
+              var item = events[eventIndex];
+              if (item && item.Code === 214) return parseInt(item.Argv && item.Argv[0], 10);
+            }
+            return NaN;
+          };
+          EventCenter.dispatchEvent = function (event) {
+            try {
+              if (event && event.type === GameEventConstant.CLICK_SCUI_BUTTON) {
+                var scui = view.SCustomUI && view.SCustomUI.getInstance ? view.SCustomUI.getInstance() : null;
+                var code214Index = getButtonCode214Index(event.parameter);
+                if (scui && scui.FIndex === 0 && code214Index === 10006) {
+                  if (window.__runnerOpenSaveFileView(true, 'menu-storage')) return;
+                }
+                if (scui && scui.FIndex === 0 && code214Index === 10002) {
+                  if (window.__runnerOpenSaveFileView(false, 'menu-read')) return;
+                }
+              }
+            } catch (menuBridgeError) {
+              logLine('RUNNER SAVE FILE MENU BRIDGE ERROR ' + (menuBridgeError && (menuBridgeError.stack || menuBridgeError.message) || menuBridgeError));
+            }
+            return originalDispatchEventForSaveFileMenu.apply(this, arguments);
+          };
+          EventCenter.dispatchEvent.__runnerSaveFileMenuBridgePatched = true;
+          logLine('runner save file menu bridge enabled');
+          return true;
+        } catch (installMenuBridgeError) {
+          logLine('RUNNER SAVE FILE MENU BRIDGE INSTALL ERROR ' + (installMenuBridgeError && (installMenuBridgeError.stack || installMenuBridgeError.message) || installMenuBridgeError));
+          return false;
+        }
+      };
+      var installSaveFileUIPatch = function () {
+        try {
+          if (!window.view || !view.SaveFileUI || !view.SaveFileUIMediator) return false;
+          var saveUIProto = view.SaveFileUI.prototype;
+          if (saveUIProto && !saveUIProto.__runnerLocalSaveBridgePatched) {
+            var originalInit = saveUIProto.init;
+            if (typeof originalInit === 'function') {
+              saveUIProto.init = function () {
+                var result = originalInit.apply(this, arguments);
+                try {
+                  var synced = window.__runnerSyncSaveFileData && window.__runnerSyncSaveFileData();
+                  if (synced && this.itemList) {
+                    this.listData = synced;
+                    this.itemList.array = synced;
+                    if (typeof this.itemList.refresh === 'function') this.itemList.refresh();
+                  }
+                } catch (syncInitError) {
+                  logLine('RUNNER SAVE UI INIT SYNC ERROR ' + (syncInitError && (syncInitError.stack || syncInitError.message) || syncInitError));
+                }
+                return result;
+              };
+            }
+            if (typeof saveUIProto.refreshUI === 'function') {
+              var originalRefreshUI = saveUIProto.refreshUI;
+              saveUIProto.refreshUI = function () {
+                var result = originalRefreshUI.apply(this, arguments);
+                try {
+                  var synced = window.__runnerSyncSaveFileData && window.__runnerSyncSaveFileData();
+                  if (synced && this.itemList) {
+                    this.listData = synced;
+                    this.itemList.array = synced;
+                    if (typeof this.itemList.refresh === 'function') this.itemList.refresh();
+                  }
+                } catch (syncRefreshError) {
+                  logLine('RUNNER SAVE UI REFRESH SYNC ERROR ' + (syncRefreshError && (syncRefreshError.stack || syncRefreshError.message) || syncRefreshError));
+                }
+                return result;
+              };
+            }
+            if (typeof saveUIProto.drawCloudBtn === 'function') {
+              var originalDrawCloudBtn = saveUIProto.drawCloudBtn;
+              saveUIProto.drawCloudBtn = function () {
+                try {
+                  var gd = window.GloableData && GloableData.getInstance ? GloableData.getInstance() : null;
+                  if (gd) {
+                    gd.isCloud = false;
+                    gd.isOpenSaveFileUI = true;
+                  }
+                  if (window.utils && utils.addCookie && window.GloableStaticData) {
+                    utils.addCookie(this.saveSelectkey, GloableStaticData.SELECT_SAVE_TYPE_LOCAL);
+                    utils.addCookie(this.saveGuidekey, '1');
+                    utils.addCookie(this.firstOpenKey, '1');
+                  }
+                  try {
+                    localStorage.setItem(this.saveGuidekey, '1');
+                    localStorage.setItem(this.firstOpenKey, '1');
+                  } catch (localGuideStorageError) {}
+                } catch (beforeDrawCloudError) {}
+                var result = originalDrawCloudBtn.apply(this, arguments);
+                try {
+                  var latestGd = window.GloableData && GloableData.getInstance ? GloableData.getInstance() : null;
+                  if (latestGd) latestGd.isCloud = false;
+                  if (typeof this.changeState === 'function') this.changeState(0);
+                  if (window.UIManager && UIManager.getInstance && window.view && view.SaveFileGuideMediator) {
+                    UIManager.getInstance().closeView(view.SaveFileGuideMediator.NAME, false);
+                  }
+                } catch (afterDrawCloudError) {
+                  logLine('RUNNER SAVE UI LOCAL TAB ERROR ' + (afterDrawCloudError && (afterDrawCloudError.stack || afterDrawCloudError.message) || afterDrawCloudError));
+                }
+                return result;
+              };
+            }
+            if (typeof saveUIProto.clickCloud === 'function') {
+              saveUIProto.clickCloud = function () {
+                try {
+                  var gd = window.GloableData && GloableData.getInstance ? GloableData.getInstance() : null;
+                  if (gd) gd.isCloud = false;
+                  if (typeof this.clickLocal === 'function') return this.clickLocal();
+                } catch (cloudError) {
+                  logLine('RUNNER SAVE UI CLOUD FALLBACK ERROR ' + (cloudError && (cloudError.stack || cloudError.message) || cloudError));
+                }
+              };
+            }
+            saveUIProto.__runnerLocalSaveBridgePatched = true;
+          }
+          var mediatorProto = view.SaveFileUIMediator.prototype;
+          if (mediatorProto && !mediatorProto.__runnerLocalSaveBridgePatched && typeof mediatorProto.onSelect === 'function') {
+            var originalOnSelect = mediatorProto.onSelect;
+            mediatorProto.onSelect = function (slot) {
+              var slotIndex = parseInt(slot && slot.parameter !== undefined ? slot.parameter : slot, 10);
+              if (!isFinite(slotIndex) || slotIndex < 0) return originalOnSelect.apply(this, arguments);
+              if (this.view && this.view.isSave && typeof window.__runnerLocalSave === 'function') {
+                var saveResult = window.__runnerLocalSave(slotIndex);
+                logLine('RUNNER SAVE UI SAVE SLOT ' + JSON.stringify({ slot: slotIndex, ok: !!(saveResult && saveResult.ok), reason: saveResult && saveResult.reason || '' }));
+                if (saveResult && saveResult.ok) {
+                  try {
+                    var synced = window.__runnerSyncSaveFileData && window.__runnerSyncSaveFileData();
+                    if (this.view && this.view.itemList && synced) {
+                      this.view.listData = synced;
+                      this.view.itemList.array = synced;
+                      if (typeof this.view.itemList.refresh === 'function') this.view.itemList.refresh();
+                    }
+                  } catch (saveRefreshError) {
+                    logLine('RUNNER SAVE UI SAVE REFRESH ERROR ' + (saveRefreshError && (saveRefreshError.stack || saveRefreshError.message) || saveRefreshError));
+                  }
+                  return;
+                }
+              }
+              if (this.view && !this.view.isSave && typeof window.__runnerLocalRestore === 'function') {
+                var info = window.__runnerLocalSaveInfo ? window.__runnerLocalSaveInfo(slotIndex) : null;
+                if (!info || !info.exists) {
+                  logLine('RUNNER SAVE UI LOAD EMPTY SLOT ' + slotIndex);
+                  return;
+                }
+                try {
+                  if (window.UIManager && UIManager.getInstance) UIManager.getInstance().closeView(this.name, false);
+                } catch (closeBeforeRestoreError) {}
+                var restoreResult = window.__runnerLocalRestore(slotIndex);
+                logLine('RUNNER SAVE UI LOAD SLOT ' + JSON.stringify({ slot: slotIndex, ok: !!(restoreResult && restoreResult.ok), reason: restoreResult && restoreResult.reason || '' }));
+                return;
+              }
+              return originalOnSelect.apply(this, arguments);
+            };
+            mediatorProto.__runnerLocalSaveBridgePatched = true;
+          }
+          logLine('runner save file UI bridge enabled');
+          return true;
+        } catch (patchSaveFileUIError) {
+          logLine('RUNNER SAVE FILE UI PATCH ERROR ' + (patchSaveFileUIError && (patchSaveFileUIError.stack || patchSaveFileUIError.message) || patchSaveFileUIError));
+          return false;
+        }
+      };
+      if (!installSaveFileUIPatch()) {
+        var saveFileUIPatchProbeCount = 0;
+        var saveFileUIPatchProbe = setInterval(function () {
+          saveFileUIPatchProbeCount += 1;
+          if (installSaveFileUIPatch() || saveFileUIPatchProbeCount >= 80) clearInterval(saveFileUIPatchProbe);
+        }, 500);
+      }
+      if (!installSaveFileMenuBridge()) {
+        var saveFileMenuBridgeProbeCount = 0;
+        var saveFileMenuBridgeProbe = setInterval(function () {
+          saveFileMenuBridgeProbeCount += 1;
+          if (installSaveFileMenuBridge() || saveFileMenuBridgeProbeCount >= 80) clearInterval(saveFileMenuBridgeProbe);
+        }, 500);
+      }
     }
     logLine('starting game init');
     try {
