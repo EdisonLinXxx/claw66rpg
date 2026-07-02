@@ -558,38 +558,14 @@
         if (!gd || !saveData || typeof window.__runnerLocalSaveInfo !== 'function') return null;
         try {
           gd.isCloud = false;
-          if (typeof gd.loadShot === 'function') gd.loadShot(true);
-          else if (typeof gd.saveDataInit === 'function') gd.saveDataInit();
-        } catch (officialLoadShotError) {
-          logLine('RUNNER SAVE FILE OFFICIAL LOADSHOT ERROR ' + (officialLoadShotError && (officialLoadShotError.stack || officialLoadShotError.message) || officialLoadShotError));
-        }
+        } catch (localSaveModeError) {}
         var max = parseInt(saveData.max, 10);
         if (!isFinite(max) || max <= 0) max = 99;
-        var officialList = gd.saveFileData && gd.saveFileData.length ? gd.saveFileData.slice(0) : [];
         var list = new Array(max);
         var makeEmpty = function (slot) {
           return { index: slot, picurl: '', name: '', date: 0, isfree: 0 };
         };
-        var normalizeOfficialItem = function (slot, item, data) {
-          var header = data && data.Header || {};
-          var date = item && item.date;
-          if (!date || date < 0) date = header.SaveTime ? parseInt(header.SaveTime, 10) : 0;
-          if (!isFinite(date)) date = 0;
-          return {
-            index: slot,
-            picurl: item && item.picurl || data && data.picurl || data && data.Thumbnail && (data.Thumbnail.cloudImageUrl || data.Thumbnail.base64) || '',
-            name: item && item.name || header.StoryName || '',
-            date: date,
-            isfree: item && item.isfree || header.IsFreeLimit || 0
-          };
-        };
         for (var slot = 0; slot < max; slot++) {
-          var officialInfo = window.__runnerOfficialSaveInfo ? window.__runnerOfficialSaveInfo(slot) : null;
-          var officialItem = officialList[slot] || null;
-          if ((officialInfo && officialInfo.exists) || (officialItem && (officialItem.name || officialItem.picurl || officialItem.date > 0))) {
-            list[slot] = normalizeOfficialItem(slot, officialItem, officialInfo && officialInfo.data);
-            continue;
-          }
           var info = window.__runnerLocalSaveInfo(slot);
           if (info && info.exists && info.data) {
             var timestamp = Date.parse(info.data.savedAt || '');
@@ -620,64 +596,26 @@
         return true;
       };
       window.__runnerOfficialSaveKey = function (slot) {
-        var gd = window.GloableData && GloableData.getInstance ? GloableData.getInstance() : null;
-        var slotIndex = parseInt(slot, 10);
-        if (!gd || !gd.savekey || !isFinite(slotIndex) || slotIndex < 0) return '';
-        return gd.savekey + String(slotIndex + 1);
+        return '';
       };
       window.__runnerOfficialSaveInfo = function (slot) {
-        var key = window.__runnerOfficialSaveKey ? window.__runnerOfficialSaveKey(slot) : '';
-        var value = '';
-        var parsed = null;
-        try {
-          value = key ? localStorage.getItem(key) || '' : '';
-          parsed = value ? JSON.parse(value) : null;
-        } catch (officialInfoError) {}
         return {
           ok: true,
-          key: key,
+          key: '',
           slot: slot || 0,
-          exists: value.length > 0,
-          len: value.length,
-          preview: value.slice(0, 160),
-          data: parsed
+          exists: false,
+          len: 0,
+          preview: '',
+          data: null,
+          disabled: true,
+          reason: 'official save disabled; runner uses local save only'
         };
       };
       window.__runnerOfficialSave = function (slot, cell, mediator) {
-        var gd = window.GloableData && GloableData.getInstance ? GloableData.getInstance() : null;
-        var slotIndex = parseInt(slot, 10);
-        if (!gd || !isFinite(slotIndex) || slotIndex < 0) return { ok: false, reason: 'runtime not ready' };
-        if (typeof gd.snap !== 'function' || typeof gd.getSaveSpriteData !== 'function') return { ok: false, reason: 'official save hooks unavailable' };
-        try {
-          gd.isCloud = false;
-          if (typeof gd.saveDataInit === 'function') gd.saveDataInit();
-          gd.snap(slotIndex, true);
-          gd.getSaveSpriteData(slotIndex, cell || null, mediator || null, true);
-          var info = window.__runnerOfficialSaveInfo(slotIndex);
-          logLine('RUNNER OFFICIAL SAVE SLOT ' + JSON.stringify({ slot: slotIndex, ok: !!(info && info.exists), key: info && info.key || '', len: info && info.len || 0 }));
-          return info && info.exists ? { ok: true, key: info.key, len: info.len, data: info.data } : { ok: false, reason: 'official save missing after snap', info: info };
-        } catch (officialSaveError) {
-          return { ok: false, reason: 'official save error', error: String(officialSaveError && (officialSaveError.stack || officialSaveError.message) || officialSaveError) };
-        }
+        return { ok: false, disabled: true, reason: 'official save disabled; runner uses local save only' };
       };
       window.__runnerOfficialRestore = function (slot) {
-        var gd = window.GloableData && GloableData.getInstance ? GloableData.getInstance() : null;
-        var slotIndex = parseInt(slot, 10);
-        if (!gd || !isFinite(slotIndex) || slotIndex < 0) return { ok: false, reason: 'runtime not ready' };
-        if (typeof gd.restore !== 'function') return { ok: false, reason: 'official restore hook unavailable' };
-        var info = window.__runnerOfficialSaveInfo ? window.__runnerOfficialSaveInfo(slotIndex) : null;
-        if (!info || !info.exists) return { ok: false, reason: 'official save slot missing', info: info };
-        try {
-          gd.isCloud = false;
-          if (window.view && view.SCustomUI && view.SCustomUI.getInstance) view.SCustomUI.getInstance().hideUI();
-        } catch (hideScuiBeforeOfficialRestoreError) {}
-        try {
-          var result = gd.restore(slotIndex, true);
-          logLine('RUNNER OFFICIAL RESTORE SLOT ' + JSON.stringify({ slot: slotIndex, key: info.key, result: result === false ? false : true }));
-          return result === false ? { ok: false, reason: 'official restore returned false', info: info } : { ok: true, key: info.key, data: info.data };
-        } catch (officialRestoreError) {
-          return { ok: false, reason: 'official restore error', error: String(officialRestoreError && (officialRestoreError.stack || officialRestoreError.message) || officialRestoreError), info: info };
-        }
+        return { ok: false, disabled: true, reason: 'official restore disabled; runner uses local save only' };
       };
       window.__runnerOpenSaveFileView = function (isSave, label) {
         try {
@@ -686,6 +624,9 @@
           if (window.view && view.SCustomUI && view.SCustomUI.getInstance) view.SCustomUI.getInstance().hideUI();
           if (window.UIManager && UIManager.getInstance) {
             UIManager.getInstance().isSCUIShow = false;
+            try {
+              if (window.view && view.SaveFileUIMediator) UIManager.getInstance().closeView(view.SaveFileUIMediator.NAME, false);
+            } catch (closeExistingSaveFileViewError) {}
             UIManager.getInstance().showView(
               new view.SaveFileUI(false, !!isSave, window.GloableStaticData ? GloableStaticData.VIEW_INDEX_MENU : -1),
               view.SaveFileUIMediator.NAME
@@ -830,20 +771,13 @@
               var slotIndex = parseInt(slot && slot.parameter !== undefined ? slot.parameter : slot, 10);
               if (!isFinite(slotIndex) || slotIndex < 0) return originalOnSelect.apply(this, arguments);
               if (this.view && this.view.isSave) {
-                var itemCell = null;
-                try {
-                  itemCell = this.view.itemList && typeof this.view.itemList.getCell === 'function' ? this.view.itemList.getCell(slotIndex) : null;
-                } catch (getSaveCellError) {}
-                var officialSaveResult = window.__runnerOfficialSave ? window.__runnerOfficialSave(slotIndex, itemCell, this) : null;
                 var localSaveResult = window.__runnerLocalSave ? window.__runnerLocalSave(slotIndex) : null;
                 logLine('RUNNER SAVE UI SAVE SLOT ' + JSON.stringify({
                   slot: slotIndex,
-                  officialOk: !!(officialSaveResult && officialSaveResult.ok),
                   localOk: !!(localSaveResult && localSaveResult.ok),
-                  officialReason: officialSaveResult && officialSaveResult.reason || '',
                   localReason: localSaveResult && localSaveResult.reason || ''
                 }));
-                if ((officialSaveResult && officialSaveResult.ok) || (localSaveResult && localSaveResult.ok)) {
+                if (localSaveResult && localSaveResult.ok) {
                   try {
                     if (window.__runnerApplySaveFileDataToView) window.__runnerApplySaveFileDataToView(this.view);
                   } catch (saveRefreshError) {
@@ -853,17 +787,15 @@
                 }
               }
               if (this.view && !this.view.isSave) {
-                var officialInfo = window.__runnerOfficialSaveInfo ? window.__runnerOfficialSaveInfo(slotIndex) : null;
                 var localInfo = window.__runnerLocalSaveInfo ? window.__runnerLocalSaveInfo(slotIndex) : null;
-                if ((!officialInfo || !officialInfo.exists) && (!localInfo || !localInfo.exists)) {
+                if (!localInfo || !localInfo.exists) {
                   logLine('RUNNER SAVE UI LOAD EMPTY SLOT ' + slotIndex);
                   return;
                 }
                 try {
                   if (window.UIManager && UIManager.getInstance) UIManager.getInstance().closeView(this.name, false);
                 } catch (closeBeforeRestoreError) {}
-                var restoreResult = officialInfo && officialInfo.exists && window.__runnerOfficialRestore ? window.__runnerOfficialRestore(slotIndex) : null;
-                if (!restoreResult || !restoreResult.ok) restoreResult = window.__runnerLocalRestore ? window.__runnerLocalRestore(slotIndex) : restoreResult;
+                var restoreResult = window.__runnerLocalRestore ? window.__runnerLocalRestore(slotIndex) : null;
                 logLine('RUNNER SAVE UI LOAD SLOT ' + JSON.stringify({ slot: slotIndex, ok: !!(restoreResult && restoreResult.ok), reason: restoreResult && restoreResult.reason || '' }));
                 return;
               }

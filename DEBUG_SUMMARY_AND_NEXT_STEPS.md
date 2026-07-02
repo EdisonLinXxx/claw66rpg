@@ -1,8 +1,31 @@
 # 66RPG Game Grab/Run Technical Debug Summary
 
-Last updated: 2026-06-26
+Last updated: 2026-07-02
 
 Previous baseline: 2026-06-23
+
+## 2026-07-02 Local Save Scope
+
+Decision:
+
+- The runner save/load scope is local-only.
+- Supported save slots are `runnerLocalSave:<guid>:v<version>:slot:<n>` entries in browser `localStorage`.
+- Official/cloud save APIs are disabled in the runner save bridge and are not used for listing, saving, or restoring slots.
+- If no runner local save exists, the default playable URL starts a new play session instead of trying to recover an official/cloud save.
+
+Fix:
+
+- `h5_runner_experiment.html` now builds the save-file list only from runner local save slots.
+- Save UI slot selection writes only `runner-local-save-v1` data.
+- Load UI slot selection restores only from runner local save data.
+- Empty slots return without attempting official restore.
+- Opening save and load views now closes any existing `SaveFileUIMediator` first, preventing save-mode state from leaking into the load page.
+
+Verification:
+
+- Save/load regression: `C:\tmp\claw_save_load_local_only_final_20260702\save_load_summary.json`, status `ok`, `saveMethod=runner-local-save-v1`, restored state matches saved state.
+- Save/load UI bridge smoke: `C:\tmp\claw_save_ui_bridge_smoke_v2_20260702\summary.json`, save view `isSave=true`, load view `isSave=false`, local slot `0` restores to the saved inn state.
+- No-save default start smoke: `C:\tmp\claw_no_save_default_restart_final_20260702\summary.json`, no `runnerLocalSave:*` keys, no official save API logs, starts at `storyId=1,pos=7,code=204`.
 
 ## Scope
 
