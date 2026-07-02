@@ -491,7 +491,7 @@
           storyName: line.storyName || story && story.Name || '',
           pos: line.pos,
           code: event && event.Code,
-          currentLinks: event && event.links ? Array.prototype.slice.call(event.links) : (line.currentLinks ? Array.prototype.slice.call(line.currentLinks) : []),
+          currentLinks: line.currentLinks ? Array.prototype.slice.call(line.currentLinks) : (event && event.links ? Array.prototype.slice.call(event.links) : []),
           showEventButtonsLength: showEvent && showEvent.buttons ? showEvent.buttons.length : 0,
           note: 'lightweight runner save; restores story position through jumpStoryCallBack/jumpToIndex'
         };
@@ -2799,6 +2799,7 @@
               var params = new URLSearchParams(window.location.search);
               var autoCode1010ChoiceValue = params.get('autoCode1010Choice');
               if (autoCode1010ChoiceValue === null) return;
+              if (window.__runnerSawInnMainScreen && line && line.storyId === 15) return;
               var eventAtPos = line && line.story && line.story.events && line.story.events[line.pos] || null;
               var eventAtPosCode = eventAtPos && (eventAtPos.Code !== undefined ? eventAtPos.Code : eventAtPos.code);
               var event = eventAtPos && eventAtPosCode === 1010 ? eventAtPos : line && line.currentEvent || eventAtPos;
@@ -3127,7 +3128,9 @@
               var eventAtPos = line && line.story && line.story.events && line.story.events[line.pos] || null;
               var event = eventAtPos && eventAtPos.Code === 214 ? eventAtPos : line && line.currentEvent || eventAtPos;
               var index = parseInt(event && event.Argv && event.Argv[0], 10);
-              if (!line || line.storyId !== 15 || !event || event.Code !== 214 || index !== 126) return false;
+              var isPreMainInnClose = line && line.storyId === 15 && index === 126;
+              var isPreMainRandomOrderClose = line && line.storyId === 118 && index === 479;
+              if (!line || !event || event.Code !== 214 || (!isPreMainInnClose && !isPreMainRandomOrderClose)) return false;
               try {
                 if (window.view && view.SCustomUI && view.SCustomUI.getInstance) view.SCustomUI.getInstance().hideUI();
               } catch (hidePreMainScuiError) {}
