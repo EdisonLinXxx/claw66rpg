@@ -57,7 +57,6 @@
       var defaultPlayFlags = {
         localRes: true,
         patchNewDSystem: true,
-        patchTitleClick: true,
         patchFirstSceneLobbyButtons: true,
         patchInnMainButtons: true,
         autoStartTitle: true,
@@ -540,7 +539,7 @@
           try {
             targetLine.isPause = false;
             targetLine.jumpToIndex(data.pos);
-            if (data.code !== 204 && typeof targetLine.eventFinish === 'function') targetLine.eventFinish();
+            if (typeof targetLine.eventFinish === 'function') targetLine.eventFinish();
           } catch (jumpError) {
             logLine('RUNNER LOCAL RESTORE JUMP ERROR ' + (jumpError && (jumpError.stack || jumpError.message) || jumpError));
           }
