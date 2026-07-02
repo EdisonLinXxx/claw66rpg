@@ -31,5 +31,23 @@
 ## Code Changes In This Round
 
 - Added default auto handling for the newbie chest choice and the following single-button continue screens.
-- Extended Code214 name-form stubbing to the lower index forms used by inn/random events: `473` and `479`.
+- Extended Code214 name-form stubbing to lower index `473`; `479` is handled separately as random order UI in the validation harness.
 - Added a collect-state fallback that calls `eventFinish()` after stubbing Code214 name forms.
+
+## Follow-up Fixes
+
+- Mirrored missing room background resource `f1c5bc6ca25540e0dc9dc8fb94ef9a0d` (`graphics/background/客栈/客房/1.1.jpg`).
+- Narrowed Code214 name-form stubbing so `479` no longer closes real custom UI pages such as sell/order panels.
+- Added a pre-main-only close for `story15` Code214 index `126`; once the inn main screen is seen, secondary custom UIs are left open.
+- Updated the main-button validation harness to skip story `118` random order UI by clicking the decline/next-time option instead of treating it as a name form.
+
+Follow-up validation artifacts:
+
+- `C:\tmp\claw_main_2_5_7_9_after_random_skip_20260702`
+- `C:\tmp\claw_main_button8_after_random_skip_20260702`
+- `C:\tmp\claw_save_load_after_random_skip_20260702`
+
+Follow-up validation result:
+
+- Main buttons `2`, `5`, `7`, `8`, and `9`: `status=ok`, `local404Count=0`, `missingMd5s=[]`.
+- Save/load: `status=ok`.

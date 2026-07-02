@@ -294,6 +294,11 @@ def drive_pre_main_state(page, state):
         if finish_show_event(page, choice_index):
             return
         click_stage(page, 480, choice_y_for_index(len(argv), choice_index))
+    elif code == 214:
+        argv = state.get("argv") or []
+        if story_id == 118 and argv and str(argv[0]) == "479":
+            click_stage(page, 480, 315)
+            return
     else:
         click_stage(page, 480, 500)
 

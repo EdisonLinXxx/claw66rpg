@@ -71,6 +71,7 @@
         autoNameChoice: true,
         autoInnNameChoice: true,
         autoNewbieChestChoice: true,
+        autoPreMainCode214Close: true,
         patchOfficialChoiceUi: true,
         patchSaveFileUI: true,
         traceRuntime: true,
@@ -84,6 +85,7 @@
         stubPropShop: true,
         stubInitialVitals: true,
         autoNewbieChestChoice: true,
+        autoPreMainCode214Close: true,
         patchOfficialChoiceUi: true,
         patchSaveFileUI: true,
         traceRuntime: true,
@@ -3072,7 +3074,7 @@
               if (!event || event.Code !== 214) return false;
               var index = parseInt(event.Argv && event.Argv[0], 10);
               var nameFields = String(event.Argv && event.Argv[3] || '');
-              var isNameEvent = index === 10014 || index === 10007 || index === 473 || index === 479 || (nameFields.indexOf('姓,') !== -1 && nameFields.indexOf('名,') !== -1);
+              var isNameEvent = index === 10014 || index === 10007 || index === 473 || (index >= 10000 && nameFields.indexOf('姓,') !== -1 && nameFields.indexOf('名,') !== -1);
               if (!isNameEvent) return false;
               var stubKey = String(line && line.pos || 'unknown') + ':' + index;
               window.__runnerCode214NameStubbedKeys = window.__runnerCode214NameStubbedKeys || {};
@@ -3177,6 +3179,45 @@
             if (index === 495) window.__runnerCode214BirthdayStubbedKeys[stubKey] = true;
             window.__runnerCode214BirthdayStubbed = true;
             return finishCode214Birthday(line, 'stub');
+          };
+          var maybeMarkInnMainScreenSeen = function (line) {
+            try {
+              var eventAtPos = line && line.story && line.story.events && line.story.events[line.pos] || null;
+              var event = eventAtPos && eventAtPos.Code === 204 ? eventAtPos : line && line.currentEvent || eventAtPos;
+              if (line && line.storyId === 15 && line.pos === 648 && event && event.Code === 204) {
+                window.__runnerSawInnMainScreen = true;
+              }
+            } catch (markMainSeenError) {}
+          };
+          var maybeAutoPreMainCode214Close = function (line) {
+            if (!hasQueryFlag('autoPreMainCode214Close') || window.__runnerSawInnMainScreen) return false;
+            try {
+              var eventAtPos = line && line.story && line.story.events && line.story.events[line.pos] || null;
+              var event = eventAtPos && eventAtPos.Code === 214 ? eventAtPos : line && line.currentEvent || eventAtPos;
+              var index = parseInt(event && event.Argv && event.Argv[0], 10);
+              if (!line || line.storyId !== 15 || !event || event.Code !== 214 || index !== 126) return false;
+              try {
+                if (window.view && view.SCustomUI && view.SCustomUI.getInstance) view.SCustomUI.getInstance().hideUI();
+              } catch (hidePreMainScuiError) {}
+              if (window.UIManager && UIManager.getInstance) {
+                UIManager.getInstance().isSCUIShow = false;
+                if (UIManager.getInstance().gameSystemUILayer && UIManager.getInstance().gameSystemUILayer.setMenuVisible) {
+                  UIManager.getInstance().gameSystemUILayer.setMenuVisible(true);
+                }
+              }
+              var gd = window.GloableData && GloableData.getInstance ? GloableData.getInstance() : null;
+              if (gd) gd.CUIFromIndex = -1;
+              line.isPause = false;
+              line.eventRunFinish = true;
+              if (line.currentEvent === event) line.currentEvent = null;
+              if (line.currentShowEvent) line.currentShowEvent.isSuiFinish = true;
+              logLine('AUTO PRE-MAIN CODE214 CLOSE ' + JSON.stringify({ index: index, pos: line.pos }));
+              if (typeof line.eventFinish === 'function') line.eventFinish();
+              return true;
+            } catch (preMainCode214CloseError) {
+              logLine('AUTO PRE-MAIN CODE214 CLOSE ERROR ' + (preMainCode214CloseError && (preMainCode214CloseError.stack || preMainCode214CloseError.message) || preMainCode214CloseError));
+              return false;
+            }
           };
           var installSCUIButtonHitPatch = function () {
             if (!hasQueryFlag('patchFirstSceneLobbyButtons') || window.__runnerSCUIButtonHitPatched) return;
@@ -3358,7 +3399,7 @@
                 var beforeEvent = beforeEventAtPos && beforeEventAtPos.Code === 214 ? beforeEventAtPos : this && this.currentEvent || beforeEventAtPos;
                 var beforeNameIndex = beforeEvent && beforeEvent.Code === 214 ? parseInt(beforeEvent.Argv && beforeEvent.Argv[0], 10) : NaN;
                 var beforeNameFields = beforeEvent && beforeEvent.Code === 214 ? String(beforeEvent.Argv && beforeEvent.Argv[3] || '') : '';
-                var beforeIsNameEvent = beforeNameIndex === 10014 || beforeNameIndex === 10007 || beforeNameIndex === 473 || beforeNameIndex === 479 || (beforeNameFields.indexOf('姓,') !== -1 && beforeNameFields.indexOf('名,') !== -1);
+                var beforeIsNameEvent = beforeNameIndex === 10014 || beforeNameIndex === 10007 || beforeNameIndex === 473 || (beforeNameIndex >= 10000 && beforeNameFields.indexOf('姓,') !== -1 && beforeNameFields.indexOf('名,') !== -1);
                 if (beforeEvent && beforeEvent.Code === 214 && beforeIsNameEvent) {
                   var stubbedName = maybeStubCode214Name(this);
                   if (!stubbedName) return originalMethod.apply(this, arguments);
@@ -3439,6 +3480,8 @@
               maybeAutoNameChoice(line);
               maybeAutoInnNameChoice(line);
               maybeStubInitialVitals();
+              maybeMarkInnMainScreenSeen(line);
+              maybeAutoPreMainCode214Close(line);
               installSCUIButtonHitPatch();
               installNewbieChestHitProxy();
               probeAutoNameChoiceState(line);
