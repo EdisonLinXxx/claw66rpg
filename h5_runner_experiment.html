@@ -70,6 +70,7 @@
         autoCreateCharacterConfirm: true,
         autoNameChoice: true,
         autoInnNameChoice: true,
+        autoNewbieChestChoice: true,
         patchOfficialChoiceUi: true,
         patchSaveFileUI: true,
         traceRuntime: true,
@@ -82,6 +83,7 @@
         quietOafEvents: true,
         stubPropShop: true,
         stubInitialVitals: true,
+        autoNewbieChestChoice: true,
         patchOfficialChoiceUi: true,
         patchSaveFileUI: true,
         traceRuntime: true,
@@ -2823,6 +2825,41 @@
               logLine('AUTO FIRST SCENE CHOICE ERROR ' + (autoFirstSceneChoiceError && (autoFirstSceneChoiceError.stack || autoFirstSceneChoiceError.message) || autoFirstSceneChoiceError));
             }
           };
+          var maybeAutoNewbieChestChoice = function (line) {
+            try {
+              if (!hasQueryFlag('autoNewbieChestChoice') || window.__runnerAutoNewbieChestChoiceDone) return;
+              var event = line && (line.currentEvent || (line.story && line.story.events && line.pos !== undefined && line.story.events[line.pos])) || null;
+              if (!line || line.storyId !== 1 || line.pos !== 2101 || !event || event.Code !== 204 || !line.currentShowEvent || !line.currentShowEvent.finish) return;
+              var params = new URLSearchParams(window.location.search);
+              var choiceIndex = parseInt(params.get('autoNewbieChestChoiceIndex') || '0', 10);
+              if (!isFinite(choiceIndex) || choiceIndex < 0) choiceIndex = 0;
+              var buttonCount = line.currentShowEvent.buttons && line.currentShowEvent.buttons.length || 0;
+              if (buttonCount > 0 && choiceIndex >= buttonCount) choiceIndex = buttonCount - 1;
+              window.__runnerAutoNewbieChestChoiceDone = true;
+              logLine('AUTO NEWBIE CHEST CHOICE finish(' + choiceIndex + ')');
+              line.currentShowEvent.finish(choiceIndex);
+            } catch (autoNewbieChestChoiceError) {
+              logLine('AUTO NEWBIE CHEST CHOICE ERROR ' + (autoNewbieChestChoiceError && (autoNewbieChestChoiceError.stack || autoNewbieChestChoiceError.message) || autoNewbieChestChoiceError));
+            }
+          };
+          var maybeAutoInitialContinueButton = function (line) {
+            try {
+              if (!hasQueryFlag('autoNewbieChestChoice')) return;
+              var event = line && (line.currentEvent || (line.story && line.story.events && line.pos !== undefined && line.story.events[line.pos])) || null;
+              if (!line || line.storyId !== 1 || (line.pos !== 2126 && line.pos !== 2127) || !event || event.Code !== 204 || !line.currentShowEvent || !line.currentShowEvent.finish) return;
+              var buttons = line.currentShowEvent.buttons || [];
+              if (buttons.length !== 1) return;
+              var button = buttons[0];
+              var key = String(line.storyId) + ':' + String(line.pos);
+              window.__runnerAutoInitialContinueDone = window.__runnerAutoInitialContinueDone || {};
+              if (window.__runnerAutoInitialContinueDone[key]) return;
+              window.__runnerAutoInitialContinueDone[key] = true;
+              logLine('AUTO INITIAL CONTINUE finish(0) ' + JSON.stringify({ pos: line.pos, buttonIndex: button && button.index }));
+              line.currentShowEvent.finish(0);
+            } catch (autoInitialContinueError) {
+              logLine('AUTO INITIAL CONTINUE ERROR ' + (autoInitialContinueError && (autoInitialContinueError.stack || autoInitialContinueError.message) || autoInitialContinueError));
+            }
+          };
           var maybeAutoCode1010Choice = function (line) {
             try {
               var params = new URLSearchParams(window.location.search);
@@ -3035,7 +3072,7 @@
               if (!event || event.Code !== 214) return false;
               var index = parseInt(event.Argv && event.Argv[0], 10);
               var nameFields = String(event.Argv && event.Argv[3] || '');
-              var isNameEvent = index === 10014 || index === 10007 || (index >= 10000 && nameFields.indexOf('姓,') !== -1 && nameFields.indexOf('名,') !== -1);
+              var isNameEvent = index === 10014 || index === 10007 || index === 473 || index === 479 || (nameFields.indexOf('姓,') !== -1 && nameFields.indexOf('名,') !== -1);
               if (!isNameEvent) return false;
               var stubKey = String(line && line.pos || 'unknown') + ':' + index;
               window.__runnerCode214NameStubbedKeys = window.__runnerCode214NameStubbedKeys || {};
@@ -3321,7 +3358,7 @@
                 var beforeEvent = beforeEventAtPos && beforeEventAtPos.Code === 214 ? beforeEventAtPos : this && this.currentEvent || beforeEventAtPos;
                 var beforeNameIndex = beforeEvent && beforeEvent.Code === 214 ? parseInt(beforeEvent.Argv && beforeEvent.Argv[0], 10) : NaN;
                 var beforeNameFields = beforeEvent && beforeEvent.Code === 214 ? String(beforeEvent.Argv && beforeEvent.Argv[3] || '') : '';
-                var beforeIsNameEvent = beforeNameIndex === 10014 || beforeNameIndex === 10007 || (beforeNameIndex >= 10000 && beforeNameFields.indexOf('姓,') !== -1 && beforeNameFields.indexOf('名,') !== -1);
+                var beforeIsNameEvent = beforeNameIndex === 10014 || beforeNameIndex === 10007 || beforeNameIndex === 473 || beforeNameIndex === 479 || (beforeNameFields.indexOf('姓,') !== -1 && beforeNameFields.indexOf('名,') !== -1);
                 if (beforeEvent && beforeEvent.Code === 214 && beforeIsNameEvent) {
                   var stubbedName = maybeStubCode214Name(this);
                   if (!stubbedName) return originalMethod.apply(this, arguments);
@@ -3409,12 +3446,17 @@
               patchFirstSceneLobbyButtonsNow(line);
               maybePatchFirstSceneLobbyButtons(line);
               maybeAutoFirstSceneChoice(line);
+              maybeAutoNewbieChestChoice(line);
+              maybeAutoInitialContinueButton(line);
               maybeAutoCode1010Choice(line);
               maybeAutoCode101Choice(line);
               maybeAutoCode100Text(line);
               maybeAutoDailyRandomText(line);
               maybeAutoMainScreenButton(line);
-              maybeStubCode214Name(line);
+              if (maybeStubCode214Name(line) && line && typeof line.eventFinish === 'function') {
+                logLine('STUB CODE214 NAME eventFinish() from collectStoryState');
+                line.eventFinish();
+              }
               if (maybeStubCode214Birthday(line) && line && typeof line.eventFinish === 'function') {
                 logLine('STUB CODE214 BIRTHDAY eventFinish() from collectStoryState');
                 line.eventFinish();
