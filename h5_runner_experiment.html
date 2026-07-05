@@ -542,9 +542,14 @@
         }));
         targetLine.jumpStoryCallBack(data.storyId, function () {
           try {
-            targetLine.isPause = false;
-            targetLine.jumpToIndex(data.pos);
-            if (typeof targetLine.eventFinish === 'function') targetLine.eventFinish();
+            var latestGd = window.GloableData && GloableData.getInstance ? GloableData.getInstance() : null;
+            var restoreLine = latestGd && (latestGd.iMain || latestGd.currentLine) || targetLine;
+            restoreLine.isPause = false;
+            restoreLine.eventRunFinish = true;
+            if (restoreLine.currentShowEvent) restoreLine.currentShowEvent.isSuiFinish = true;
+            if (restoreLine.currentEvent) restoreLine.currentEvent = null;
+            restoreLine.jumpToIndex(data.pos);
+            if (typeof restoreLine.eventFinish === 'function') restoreLine.eventFinish();
           } catch (jumpError) {
             logLine('RUNNER LOCAL RESTORE JUMP ERROR ' + (jumpError && (jumpError.stack || jumpError.message) || jumpError));
           }
