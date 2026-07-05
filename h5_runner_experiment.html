@@ -1286,6 +1286,66 @@
         };
         Main.prototype.__runnerPatched = true;
       }
+      if (!window.__runnerHideTitleViewOverlay) {
+        window.__runnerHideTitleViewOverlay = function (reason) {
+          try {
+            var gd = window.GloableData && GloableData.getInstance ? GloableData.getInstance() : null;
+            var line = gd && gd.currentLine || null;
+            if (!line || line.storyId !== 1 || line.pos !== 7) return false;
+            if (!window.UIManager || !UIManager.getInstance) return false;
+            var ui = UIManager.getInstance();
+            var layer = ui && ui.gameSystemUILayer;
+            if (!layer || !layer._childs) return false;
+            var hasTitleTexture = function (node) {
+              if (!node) return false;
+              try {
+                var url = node._bitmap && node._bitmap.source && (node._bitmap.source.url || node._bitmap.source._url)
+                  || node.texture && (node.texture.url || node.texture._url)
+                  || node.skin
+                  || '';
+                url = String(url || '');
+                if (url.indexOf('/shareres/73/7343317c521796fcc02d77401212663c') !== -1) return true;
+                if (url.indexOf('res/logo/960x540.jpg') !== -1) return true;
+              } catch (textureCheckError) {}
+              if (node._childs) {
+                for (var i = 0; i < node._childs.length; i++) {
+                  if (hasTitleTexture(node._childs[i])) return true;
+                }
+              }
+              return false;
+            };
+            var removed = 0;
+            for (var childIndex = layer._childs.length - 1; childIndex >= 0; childIndex--) {
+              var child = layer._childs[childIndex];
+              if (!hasTitleTexture(child)) continue;
+              if (child && child.parent && typeof child.parent.removeChild === 'function') child.parent.removeChild(child);
+              else if (child && typeof child.removeSelf === 'function') child.removeSelf();
+              if (child) child.visible = false;
+              removed += 1;
+            }
+            if (removed) {
+              window.__runnerTitleViewOverlayHiddenOnce = true;
+              logLine('TITLE VIEW OVERLAY HIDDEN ' + JSON.stringify({ reason: reason || '', removed: removed }));
+            }
+            return removed > 0;
+          } catch (hideTitleOverlayError) {
+            logLine('TITLE VIEW OVERLAY HIDE ERROR ' + (hideTitleOverlayError && (hideTitleOverlayError.stack || hideTitleOverlayError.message) || hideTitleOverlayError));
+            return false;
+          }
+        };
+      }
+      var scheduleTitleViewOverlayHide = function (reason) {
+        if (!hasQueryFlag('autoStartTitle')) return;
+        [0, 150, 500, 1000, 1800].forEach(function (delay) {
+          setTimeout(function () {
+            try {
+              if (!window.__runnerTitleViewOverlayHiddenOnce && window.__runnerHideTitleViewOverlay) {
+                window.__runnerHideTitleViewOverlay(reason || 'scheduled');
+              }
+            } catch (titleOverlayScheduleError) {}
+          }, delay);
+        });
+      };
       var installTitleEntryPatch = function () {
         if (!hasQueryFlag('autoStartTitle') && !hasQueryFlag('patchTitleClick')) return;
         if (window.__runnerTitleEntryPatchInstalled) return;
@@ -1317,6 +1377,7 @@
             gd.dGameSystem.varsEx.loadExData(!!gd.isFreeLimit);
           }
           gd.iMain.jumpStoryCallBack(system.StartStoryId);
+          scheduleTitleViewOverlayHide(label + ' post-jump');
         };
         var scheduleAutoStart = function (reason) {
           if (!hasQueryFlag('autoStartTitle') || window.__runnerTitleAutoStartScheduled || hasCurrentLine()) return;
@@ -2949,6 +3010,71 @@
               logLine('DEBUG JUMP STORY ERROR ' + (debugJumpStoryError && (debugJumpStoryError.stack || debugJumpStoryError.message) || debugJumpStoryError));
             }
           };
+          var ensureInnMainBackground = function (line, backgroundLayer) {
+            try {
+              if (!hasQueryFlag('patchInnMainButtons') && !hasQueryFlag('debugJumpMain')) return false;
+              if (!line || line.storyId !== 15 || line.pos !== 648) return false;
+              if (!backgroundLayer) return false;
+              var innMainMd5 = '9d5e3d145ab750fa983ba9e139d75e09';
+              var innMainUrl = ((window.location.protocol === 'http:' || window.location.protocol === 'https:') && window.location.host
+                ? window.location.protocol + '//' + window.location.host + '/'
+                : 'http://127.0.0.1:8765/') + 'shareres/9d/' + innMainMd5;
+              var nodeUrl = function (node) {
+                try {
+                  return String(node && (
+                    node.skin ||
+                    node.url ||
+                    node._url ||
+                    node.__runnerInnMainBackgroundUrl ||
+                    (node.texture && (node.texture.url || node.texture._url)) ||
+                    (node._bitmap && node._bitmap.source && (node._bitmap.source.url || node._bitmap.source._url)) ||
+                    ''
+                  ) || '');
+                } catch (nodeUrlError) {
+                  return '';
+                }
+              };
+              var children = backgroundLayer._childs || [];
+              for (var childIndex = 0; childIndex < children.length; childIndex++) {
+                if (nodeUrl(children[childIndex]).indexOf(innMainMd5) !== -1) {
+                  backgroundLayer.__runnerInnMainBackgroundFixed = true;
+                  return true;
+                }
+              }
+              if (backgroundLayer.__runnerInnMainBackgroundFixed) return true;
+              if (typeof backgroundLayer.removeChildren === 'function') {
+                backgroundLayer.removeChildren();
+              } else {
+                for (var removeIndex = children.length - 1; removeIndex >= 0; removeIndex--) {
+                  var oldChild = children[removeIndex];
+                  if (oldChild && typeof oldChild.removeSelf === 'function') oldChild.removeSelf();
+                  else if (oldChild && oldChild.parent && typeof oldChild.parent.removeChild === 'function') oldChild.parent.removeChild(oldChild);
+                  if (oldChild) oldChild.visible = false;
+                }
+              }
+              var bg = null;
+              if (window.Laya && Laya.Image) {
+                bg = new Laya.Image(innMainUrl);
+              } else if (window.Laya && Laya.Sprite) {
+                bg = new Laya.Sprite();
+                if (typeof bg.loadImage === 'function') bg.loadImage(innMainUrl);
+              }
+              if (!bg) return false;
+              bg.x = 0;
+              bg.y = 0;
+              bg.width = 960;
+              bg.height = 540;
+              bg.__runnerInnMainBackgroundUrl = innMainUrl;
+              if (typeof backgroundLayer.addChildAt === 'function') backgroundLayer.addChildAt(bg, 0);
+              else if (typeof backgroundLayer.addChild === 'function') backgroundLayer.addChild(bg);
+              backgroundLayer.__runnerInnMainBackgroundFixed = true;
+              logLine('INN MAIN BACKGROUND FIXED ' + JSON.stringify({ url: innMainUrl }));
+              return true;
+            } catch (innMainBackgroundError) {
+              logLine('INN MAIN BACKGROUND FIX ERROR ' + (innMainBackgroundError && (innMainBackgroundError.stack || innMainBackgroundError.message) || innMainBackgroundError));
+              return false;
+            }
+          };
           var maybeAutoDailyRandomText = function (line) {
             try {
               if (!hasQueryFlag('autoDailyRandomText')) return;
@@ -3416,6 +3542,8 @@
               maybeStubInitialVitals();
               maybeMarkInnMainScreenSeen(line);
               maybeAutoPreMainCode214Close(line);
+              if (!window.__runnerTitleViewOverlayHiddenOnce && window.__runnerHideTitleViewOverlay) window.__runnerHideTitleViewOverlay('story-state');
+              ensureInnMainBackground(line, backgroundLayer);
               installSCUIButtonHitPatch();
               installNewbieChestHitProxy();
               probeAutoNameChoiceState(line);
