@@ -69,6 +69,12 @@ def main():
     parser.add_argument("game", help="66rpg game URL, gindex, or guid")
     parser.add_argument("--version", help="specific version; default is latest")
     parser.add_argument("--cdn-host", default="https://dlcdn1.cgyouxi.com", help="resource CDN host")
+    parser.add_argument(
+        "--map-kind",
+        choices=("h5", "legacy"),
+        default="h5",
+        help="resource map source: h5 uses official H5 Map_32.bin; legacy uses older Map.bin",
+    )
     parser.add_argument("--root", default=".", help="runner web root")
     parser.add_argument(
         "--mirror-name",
@@ -96,7 +102,10 @@ def main():
     version = str(args.version or versions[-1]["version"])
     root = Path(args.root)
 
-    map_url = f"https://wcdn1.cgyouxi.com/web/{guid}/{version}/Map.bin"
+    if args.map_kind == "h5":
+        map_url = f"{args.cdn_host.rstrip('/')}/web/{guid}/{version}/Map_32.bin"
+    else:
+        map_url = f"https://wcdn1.cgyouxi.com/web/{guid}/{version}/Map.bin"
     entries = parse_map_bin(fetch_bytes(http, map_url))
     api_path = write_api_map(entries, root)
     by_name = {entry[0].lower(): entry for entry in entries}
@@ -104,7 +113,7 @@ def main():
     log_md5s = []
     for log_path in args.mirror_log:
         text = Path(log_path).read_text(encoding="utf-8", errors="replace")
-        log_md5s.extend(re.findall(r"/shareres/[0-9a-fA-F]{2}/([0-9a-fA-F]{32})", text))
+        log_md5s.extend(re.findall(r"/shareres/[0-9a-fA-F]{2}/([0-9a-fA-F]{32}(?:\.[A-Za-z0-9]+)?)", text))
 
     mirror_names = args.mirror_name or ([] if args.mirror_md5 or log_md5s else ["data/game.bin"])
     selected = []
@@ -127,6 +136,8 @@ def main():
 
     print(f"guid: {guid}")
     print(f"version: {version}")
+    print(f"map_kind: {args.map_kind}")
+    print(f"map_url: {map_url}")
     print(f"api_map: {api_path} entries={len(entries)}")
     for mirrored in mirrored_items:
         print(

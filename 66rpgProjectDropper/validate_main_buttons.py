@@ -18,7 +18,7 @@ GAME_HEIGHT = 540
 DEFAULT_GAME = "1569947"
 DEFAULT_VERSION = "364"
 DEFAULT_OUT = Path("C:/tmp/claw_verify")
-MD5_RE = re.compile(r"/shareres/[0-9a-fA-F]{2}/([0-9a-fA-F]{32})")
+MD5_RE = re.compile(r"/shareres/[0-9a-fA-F]{2}/([0-9a-fA-F]{32}(?:\.[A-Za-z0-9]+)?)")
 
 BUTTON_SLUGS = {
     0: "kitchen",
