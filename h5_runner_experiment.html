@@ -480,6 +480,7 @@
         var event = line.currentEvent || (story && story.events && story.events[line.pos]) || null;
         var showEvent = line.currentShowEvent || null;
         var key = window.__runnerLocalSaveKey(slot);
+        var displayName = '\u5ba2\u6808';
         var payload = {
           format: 'runner-local-save-v1',
           savedAt: (new Date()).toISOString(),
@@ -488,6 +489,7 @@
           slot: slot || 0,
           storyId: line.storyId,
           storyName: line.storyName || story && story.Name || '',
+          displayName: displayName,
           pos: line.pos,
           code: event && event.Code,
           currentLinks: line.currentLinks ? Array.prototype.slice.call(line.currentLinks) : (event && event.links ? Array.prototype.slice.call(event.links) : []),
@@ -572,7 +574,7 @@
             list[slot] = {
               index: slot,
               picurl: '',
-              name: info.data.storyName || ('slot ' + (slot + 1)),
+              name: info.data.displayName || info.data.storyName || ('slot ' + (slot + 1)),
               date: timestamp,
               isfree: 0
             };
@@ -587,10 +589,23 @@
         if (!saveView) return false;
         var list = synced || (window.__runnerSyncSaveFileData && window.__runnerSyncSaveFileData());
         if (!list) return false;
-        saveView.listData = list;
+        var displayList = list;
+        if (saveView.__runnerSaveFilePaged) {
+          var pageSize = saveView.__runnerSaveFilePageSize || 6;
+          var totalPages = Math.max(1, Math.ceil(list.length / pageSize));
+          var page = parseInt(saveView.__runnerSaveFilePage || 0, 10);
+          if (!isFinite(page) || page < 0) page = 0;
+          if (page >= totalPages) page = totalPages - 1;
+          saveView.__runnerSaveFilePage = page;
+          saveView.__runnerSaveFileFullList = list;
+          displayList = list.slice(page * pageSize, page * pageSize + pageSize);
+          if (window.__runnerUpdateSaveFilePageText) window.__runnerUpdateSaveFilePageText(saveView, page, totalPages);
+        }
+        saveView.listData = displayList;
         if (saveView.itemList) {
-          saveView.itemList.array = list;
+          saveView.itemList.array = displayList;
           if (typeof saveView.itemList.refresh === 'function') saveView.itemList.refresh();
+          if (typeof saveView.itemList.scrollTo === 'function') saveView.itemList.scrollTo(0);
         }
         return true;
       };
@@ -650,6 +665,92 @@
           return false;
         }
       };
+      window.__runnerSetOText = function (target, text) {
+        if (!target) return;
+        try {
+          target.text = '';
+          if (typeof target.cleanTexts === 'function') target.cleanTexts();
+          var gd = window.GloableData && GloableData.getInstance ? GloableData.getInstance() : null;
+          var color = gd && gd.gameMainData && gd.gameMainData.System && gd.gameMainData.System.FontUiColor
+            ? gd.gameMainData.System.FontUiColor.getColorToUint()
+            : 0x663333;
+          var analysis = window.StringUtil && StringUtil.getAnalysisText ? StringUtil.getAnalysisText(String(text || ''), color) : null;
+          var x = 0;
+          var y = 0;
+          if (analysis && analysis.texts) {
+            while (analysis.texts.length > 0) {
+              var item = analysis.texts.shift();
+              item.x = x;
+              item.y = y;
+              x += item.width || 0;
+              target.addtext(item);
+            }
+          } else {
+            target.text = String(text || '');
+          }
+        } catch (setTextError) {
+          try { target.text = String(text || ''); } catch (fallbackTextError) {}
+        }
+      };
+      window.__runnerUpdateSaveFilePageText = function (saveView, page, totalPages) {
+        if (!saveView || !saveView.__runnerSaveFilePageText) return;
+        window.__runnerSetOText(saveView.__runnerSaveFilePageText, (page + 1) + ' / ' + totalPages);
+      };
+      window.__runnerSetupSaveFilePaging = function (saveView) {
+        try {
+          if (!saveView || saveView.__runnerSaveFilePagingReady) return;
+          var gd = window.GloableData && GloableData.getInstance ? GloableData.getInstance() : null;
+          var system = gd && gd.gameMainData && gd.gameMainData.System || null;
+          var saveData = system && system.SaveData || null;
+          var buttons = system && system.Buttons || [];
+          if (!saveData || !saveData.isPage || !saveData.max || saveData.max <= 6) return;
+          saveView.__runnerSaveFilePaged = true;
+          saveView.__runnerSaveFilePageSize = Math.max(1, (parseInt(saveData.column, 10) || 3) * 2);
+          saveView.__runnerSaveFilePage = 0;
+          if (window.utils && utils.getOText) {
+            saveView.__runnerSaveFilePageText = utils.getOText();
+            saveView.__runnerSaveFilePageText.x = saveData.pageNumX || 0;
+            saveView.__runnerSaveFilePageText.y = saveData.pageNumY || 0;
+            saveView.addChild(saveView.__runnerSaveFilePageText);
+          }
+          var addPageButton = function (buttonIndexData, propName, delta) {
+            if (!buttonIndexData || saveView[propName]) return;
+            var buttonData = buttons[buttonIndexData.index];
+            if (!buttonData || !window.ORGButton) return;
+            var btn = new ORGButton('Graphics/Button/' + buttonData.image1, 'Graphics/Button/' + buttonData.image2, buttonData.name || '');
+            btn.postion = { x: buttonIndexData.x || 0, y: buttonIndexData.y || 0 };
+            saveView[propName] = btn;
+            saveView.addChild(btn);
+            var handler = function (event) {
+              try {
+                if (event && event.stopPropagation) event.stopPropagation();
+                var fullList = saveView.__runnerSaveFileFullList || (window.__runnerSyncSaveFileData && window.__runnerSyncSaveFileData()) || [];
+                var pageSize = saveView.__runnerSaveFilePageSize || 6;
+                var totalPages = Math.max(1, Math.ceil(fullList.length / pageSize));
+                var current = parseInt(saveView.__runnerSaveFilePage || 0, 10);
+                if (!isFinite(current)) current = 0;
+                current += delta;
+                if (current < 0) current = 0;
+                if (current >= totalPages) current = totalPages - 1;
+                saveView.__runnerSaveFilePage = current;
+                if (window.__runnerApplySaveFileDataToView) window.__runnerApplySaveFileDataToView(saveView, fullList);
+              } catch (pageError) {
+                logLine('RUNNER SAVE FILE PAGE ERROR ' + (pageError && (pageError.stack || pageError.message) || pageError));
+              }
+            };
+            if (window.EventManager && window.OEvent) {
+              EventManager.addEventListener(btn, OEvent.CLICK, handler, saveView);
+            } else if (typeof btn.click === 'function') {
+              btn.click(saveView, handler);
+            }
+          };
+          addPageButton(saveData.previousPageButton, '__runnerSaveFilePrevBtn', -1);
+          addPageButton(saveData.nextPageButton, '__runnerSaveFileNextBtn', 1);
+          saveView.__runnerSaveFilePagingReady = true;
+        } catch (pagingError) {
+          logLine('RUNNER SAVE FILE PAGING ERROR ' + (pagingError && (pagingError.stack || pagingError.message) || pagingError));
+        }
+      };
       var installSaveFileMenuBridge = function () {
         try {
           if (!window.EventCenter || !EventCenter.dispatchEvent || !window.GameEventConstant || !window.view || !view.SCustomUI) return false;
@@ -696,8 +797,26 @@
             var originalInit = saveUIProto.init;
             if (typeof originalInit === 'function') {
               saveUIProto.init = function () {
-                var result = originalInit.apply(this, arguments);
+                normalizeSaveFileUiConfig(null, 'SaveFileUI.init');
+                var saveData = null;
+                var originalMax = null;
                 try {
+                  var gd = window.GloableData && GloableData.getInstance ? GloableData.getInstance() : null;
+                  var system = gd && gd.gameMainData && gd.gameMainData.System || null;
+                  saveData = system && system.SaveData || null;
+                  if (saveData && saveData.isPage && parseInt(saveData.max, 10) > 6) {
+                    originalMax = saveData.max;
+                    saveData.max = Math.max(1, (parseInt(saveData.column, 10) || 3) * 2);
+                  }
+                } catch (beforeInitError) {}
+                var result;
+                try {
+                  result = originalInit.apply(this, arguments);
+                } finally {
+                  if (saveData && originalMax !== null) saveData.max = originalMax;
+                }
+                try {
+                  if (window.__runnerSetupSaveFilePaging) window.__runnerSetupSaveFilePaging(this);
                   if (window.__runnerApplySaveFileDataToView) window.__runnerApplySaveFileDataToView(this);
                 } catch (syncInitError) {
                   logLine('RUNNER SAVE UI INIT SYNC ERROR ' + (syncInitError && (syncInitError.stack || syncInitError.message) || syncInitError));
@@ -708,8 +827,10 @@
             if (typeof saveUIProto.refreshUI === 'function') {
               var originalRefreshUI = saveUIProto.refreshUI;
               saveUIProto.refreshUI = function () {
+                normalizeSaveFileUiConfig(null, 'SaveFileUI.refreshUI');
                 var result = originalRefreshUI.apply(this, arguments);
                 try {
+                  if (window.__runnerSetupSaveFilePaging) window.__runnerSetupSaveFilePaging(this);
                   if (window.__runnerApplySaveFileDataToView) window.__runnerApplySaveFileDataToView(this);
                 } catch (syncRefreshError) {
                   logLine('RUNNER SAVE UI REFRESH SYNC ERROR ' + (syncRefreshError && (syncRefreshError.stack || syncRefreshError.message) || syncRefreshError));
@@ -779,6 +900,7 @@
                 if (localSaveResult && localSaveResult.ok) {
                   try {
                     if (window.__runnerApplySaveFileDataToView) window.__runnerApplySaveFileDataToView(this.view);
+                    if (window.Tips && Tips.tip) Tips.tip('保存成功', '#FFFFFF');
                   } catch (saveRefreshError) {
                     logLine('RUNNER SAVE UI SAVE REFRESH ERROR ' + (saveRefreshError && (saveRefreshError.stack || saveRefreshError.message) || saveRefreshError));
                   }
@@ -979,6 +1101,42 @@
           return false;
         }
       };
+      var normalizeSaveFileUiConfig = function (system, reason) {
+        if (!hasQueryFlag('patchSaveFileUI')) return false;
+        try {
+          if (!system && window.GloableData && GloableData.getInstance) {
+            var gd = GloableData.getInstance();
+            system = gd && gd.gameMainData && gd.gameMainData.System;
+          }
+          var saveData = system && system.SaveData;
+          var buttons = system && system.Buttons;
+          if (!saveData || !buttons) return false;
+          var changes = {};
+          if (saveData.backButton && saveData.backButton.index === 19 && buttons[18]) {
+            saveData.backButton.index = 18;
+            changes.backButton = 18;
+          }
+          if (saveData.closeButton && saveData.closeButton.index === 18 && buttons[16]) {
+            saveData.closeButton.index = 16;
+            changes.closeButton = 16;
+          }
+          if (saveData.previousPageButton && saveData.previousPageButton.index === 44 && buttons[42]) {
+            saveData.previousPageButton.index = 42;
+            changes.previousPageButton = 42;
+          }
+          if (saveData.nextPageButton && saveData.nextPageButton.index !== 43 && buttons[43]) {
+            saveData.nextPageButton.index = 43;
+            changes.nextPageButton = 43;
+          }
+          if (Object.keys(changes).length) {
+            logLine('PATCH SAVE FILE UI CONFIG ' + JSON.stringify({ reason: reason || '', changes: changes }));
+            return true;
+          }
+        } catch (saveFileConfigError) {
+          logLine('PATCH SAVE FILE UI CONFIG ERROR ' + (saveFileConfigError && (saveFileConfigError.stack || saveFileConfigError.message) || saveFileConfigError));
+        }
+        return false;
+      };
       var refreshOfficialTextDifSkin = function (textDif, eventData, reason) {
         if (!hasQueryFlag('patchOfficialChoiceUi') || !textDif || !window.GloableData || !GloableData.getInstance) return;
         try {
@@ -1156,6 +1314,7 @@
             this.Buttons[index] = new org_data.DButton(stream);
           }
           normalizeOfficialChoiceButtonIndex(this, 'DSystem');
+          normalizeSaveFileUiConfig(this, 'DSystem');
           logLine('new DSystem buttons oldCount=' + oldButtonCount + ' parsed=' + buttonCount + ' pos=' + stream.pos);
           this.UIInitSave = stream.getInt32() !== 0;
           this.Cuis = null;
