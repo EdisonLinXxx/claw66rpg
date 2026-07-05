@@ -67,7 +67,6 @@
         patchNewDSystem: true,
         patchFirstSceneLobbyButtons: true,
         patchInnMainButtons: true,
-        patchTitleClick: true,
         autoStartTitle: true,
         hideDebug: true,
         quietOafEvents: true,
@@ -89,7 +88,6 @@
       var playableDefaultFlags = {
         patchFirstSceneLobbyButtons: true,
         patchInnMainButtons: true,
-        patchTitleClick: true,
         quietOafEvents: true,
         stubPropShop: true,
         stubInitialVitals: true,
@@ -1543,6 +1541,9 @@
       if (!window.__runnerHideTitleViewOverlay) {
         window.__runnerHideTitleViewOverlay = function (reason) {
           try {
+            var gd = window.GloableData && GloableData.getInstance ? GloableData.getInstance() : null;
+            var line = gd && gd.currentLine || null;
+            if (!line || line.storyId !== 1 || line.pos !== 7) return false;
             if (!window.UIManager || !UIManager.getInstance) return false;
             var ui = UIManager.getInstance();
             var layer = ui && ui.gameSystemUILayer;
@@ -1574,7 +1575,10 @@
               if (child) child.visible = false;
               removed += 1;
             }
-            if (removed) logLine('TITLE VIEW OVERLAY HIDDEN ' + JSON.stringify({ reason: reason || '', removed: removed }));
+            if (removed) {
+              window.__runnerTitleViewOverlayHiddenOnce = true;
+              logLine('TITLE VIEW OVERLAY HIDDEN ' + JSON.stringify({ reason: reason || '', removed: removed }));
+            }
             return removed > 0;
           } catch (hideTitleOverlayError) {
             logLine('TITLE VIEW OVERLAY HIDE ERROR ' + (hideTitleOverlayError && (hideTitleOverlayError.stack || hideTitleOverlayError.message) || hideTitleOverlayError));
@@ -1582,24 +1586,18 @@
           }
         };
       }
-      if (!window.__runnerTitleOverlayHideWatchStarted) {
-        window.__runnerTitleOverlayHideWatchStarted = true;
-        var titleOverlayHideWatchCount = 0;
-        var titleOverlayHideWatch = setInterval(function () {
-          titleOverlayHideWatchCount += 1;
-          try {
-            var gd = window.GloableData && GloableData.getInstance ? GloableData.getInstance() : null;
-            if (gd && gd.currentLine && window.__runnerHideTitleViewOverlay) {
-              window.__runnerHideTitleViewOverlay('watch');
-            }
-          } catch (titleOverlayHideWatchError) {
-            if (titleOverlayHideWatchCount === 1 || titleOverlayHideWatchCount % 20 === 0) {
-              logLine('TITLE VIEW OVERLAY WATCH ERROR ' + (titleOverlayHideWatchError && (titleOverlayHideWatchError.stack || titleOverlayHideWatchError.message) || titleOverlayHideWatchError));
-            }
-          }
-          if (titleOverlayHideWatchCount >= 80) clearInterval(titleOverlayHideWatch);
-        }, 250);
-      }
+      var scheduleTitleViewOverlayHide = function (reason) {
+        if (!hasQueryFlag('autoStartTitle')) return;
+        [0, 150, 500, 1000, 1800].forEach(function (delay) {
+          setTimeout(function () {
+            try {
+              if (!window.__runnerTitleViewOverlayHiddenOnce && window.__runnerHideTitleViewOverlay) {
+                window.__runnerHideTitleViewOverlay(reason || 'scheduled');
+              }
+            } catch (titleOverlayScheduleError) {}
+          }, delay);
+        });
+      };
       var installTitleEntryPatch = function () {
         if (!hasQueryFlag('autoStartTitle') && !hasQueryFlag('patchTitleClick')) return;
         if (window.__runnerTitleEntryPatchInstalled) return;
@@ -1624,7 +1622,6 @@
             if (window.UIManager && UIManager.getInstance && window.view && view.TitleUIMediator) {
               UIManager.getInstance().closeView(view.TitleUIMediator.NAME, false);
             }
-            if (window.__runnerHideTitleViewOverlay) window.__runnerHideTitleViewOverlay(label + ' close');
           } catch (closeTitleError) {
             logLine(label + ' close title error ' + (closeTitleError && closeTitleError.message || closeTitleError));
           }
@@ -1632,9 +1629,7 @@
             gd.dGameSystem.varsEx.loadExData(!!gd.isFreeLimit);
           }
           gd.iMain.jumpStoryCallBack(system.StartStoryId);
-          setTimeout(function () {
-            if (window.__runnerHideTitleViewOverlay) window.__runnerHideTitleViewOverlay(label + ' post-jump');
-          }, 0);
+          scheduleTitleViewOverlayHide(label + ' post-jump');
         };
         var scheduleAutoStart = function (reason) {
           if (!hasQueryFlag('autoStartTitle') || window.__runnerTitleAutoStartScheduled || hasCurrentLine()) return;
@@ -1957,16 +1952,13 @@
             window.__runnerTitleStoryStarted = true;
             logLine(label + ' storyId=' + system.StartStoryId);
             UIManager.getInstance().closeView(view.TitleUIMediator.NAME, false);
-            if (window.__runnerHideTitleViewOverlay) window.__runnerHideTitleViewOverlay(label + ' close');
             if (GloableData.getInstance().isFreeLimit) {
               GloableData.getInstance().dGameSystem.varsEx.loadExData(true);
             } else {
               GloableData.getInstance().dGameSystem.varsEx.loadExData();
             }
             GloableData.getInstance().iMain.jumpStoryCallBack(system.StartStoryId);
-            setTimeout(function () {
-              if (window.__runnerHideTitleViewOverlay) window.__runnerHideTitleViewOverlay(label + ' post-jump');
-            }, 0);
+            scheduleTitleViewOverlayHide(label + ' post-jump');
           };
           var autoStartTitle = function () {
             if (!hasQueryFlag('autoStartTitle')) return;
@@ -3785,6 +3777,7 @@
               maybeStubInitialVitals();
               maybeMarkInnMainScreenSeen(line);
               maybeAutoPreMainCode214Close(line);
+              if (!window.__runnerTitleViewOverlayHiddenOnce && window.__runnerHideTitleViewOverlay) window.__runnerHideTitleViewOverlay('story-state');
               installSCUIButtonHitPatch();
               installNewbieChestHitProxy();
               installFirstSceneLobbyHitProxy();
