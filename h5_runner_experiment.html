@@ -2,9 +2,6 @@
 <html>
 <head>
   <meta charset="utf-8">
-  <meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate, max-age=0">
-  <meta http-equiv="Pragma" content="no-cache">
-  <meta http-equiv="Expires" content="0">
   <base href="https://c2.cgyouxi.com/website/hfplayer/v2/bin/">
   <title>66RPG H5 Runner Experiment</title>
   <meta name="viewport" content="width=device-width,initial-scale=1.0,minimum-scale=1.0,maximum-scale=1.0,user-scalable=no">
@@ -56,12 +53,7 @@
       var params = new URLSearchParams(window.location.search);
       var value = params.get(name);
       if (value !== null) return value === '1';
-      var isDefaultPlayMode = params.get('raw') !== '1' && (
-        window.location.search === '' ||
-        params.get('runId') === 'play' ||
-        params.get('play') === '1' ||
-        !params.has('runId')
-      );
+      var isDefaultPlayMode = window.location.search === '' || params.get('runId') === 'play' || params.get('play') === '1';
       var defaultPlayFlags = {
         localRes: true,
         patchNewDSystem: true,
@@ -488,32 +480,19 @@
         var event = line.currentEvent || (story && story.events && story.events[line.pos]) || null;
         var showEvent = line.currentShowEvent || null;
         var key = window.__runnerLocalSaveKey(slot);
-        var displayName = '\u5ba2\u6808';
-        var rawStoryId = line.storyId;
-        var rawPos = line.pos;
-        var rawCode = event && event.Code;
-        var restoreStoryId = rawStoryId;
-        var restorePos = rawPos;
-        if (rawStoryId === 15 && rawPos >= 648 && rawPos <= 1190) {
-          restorePos = 648;
-        }
         var payload = {
           format: 'runner-local-save-v1',
           savedAt: (new Date()).toISOString(),
           guid: guid,
           version: ver,
           slot: slot || 0,
-          storyId: restoreStoryId,
+          storyId: line.storyId,
           storyName: line.storyName || story && story.Name || '',
-          displayName: displayName,
-          pos: restorePos,
-          code: rawCode,
-          rawStoryId: rawStoryId,
-          rawPos: rawPos,
-          rawCode: rawCode,
+          pos: line.pos,
+          code: event && event.Code,
           currentLinks: line.currentLinks ? Array.prototype.slice.call(line.currentLinks) : (event && event.links ? Array.prototype.slice.call(event.links) : []),
           showEventButtonsLength: showEvent && showEvent.buttons ? showEvent.buttons.length : 0,
-          note: 'lightweight runner save; restores story position through a visual-safe jump anchor'
+          note: 'lightweight runner save; restores story position through jumpStoryCallBack/jumpToIndex'
         };
         localStorage.setItem(key, JSON.stringify(payload));
         logLine('RUNNER LOCAL SAVE ' + JSON.stringify({
@@ -556,37 +535,16 @@
           pos: data.pos,
           code: data.code
         }));
-        if (!hasQueryFlag('restoreInPlace')) {
-          try {
-            var restoreUrl = new URL(window.location.href);
-            restoreUrl.searchParams.delete('clearStorage');
-            restoreUrl.searchParams.set('runId', 'restore_' + String(Date.now()));
-            restoreUrl.searchParams.set('debugJumpStoryId', String(data.storyId));
-            restoreUrl.searchParams.set('debugJumpIndex', String(data.pos));
-            restoreUrl.searchParams.set('debugJumpNoEventFinish', '1');
-            setTimeout(function () {
-              window.location.replace(restoreUrl.toString());
-            }, 0);
-            return { ok: true, key: info.key, data: data, mode: 'reload' };
-          } catch (restoreUrlError) {
-            logLine('RUNNER LOCAL RESTORE RELOAD ERROR ' + (restoreUrlError && (restoreUrlError.stack || restoreUrlError.message) || restoreUrlError));
-          }
-        }
         targetLine.jumpStoryCallBack(data.storyId, function () {
           try {
-            var latestGd = window.GloableData && GloableData.getInstance ? GloableData.getInstance() : null;
-            var restoreLine = latestGd && (latestGd.iMain || latestGd.currentLine) || targetLine;
-            restoreLine.isPause = false;
-            restoreLine.eventRunFinish = true;
-            if (restoreLine.currentShowEvent) restoreLine.currentShowEvent.isSuiFinish = true;
-            if (restoreLine.currentEvent) restoreLine.currentEvent = null;
-            restoreLine.jumpToIndex(data.pos);
-            if (typeof restoreLine.eventFinish === 'function') restoreLine.eventFinish();
+            targetLine.isPause = false;
+            targetLine.jumpToIndex(data.pos);
+            if (typeof targetLine.eventFinish === 'function') targetLine.eventFinish();
           } catch (jumpError) {
             logLine('RUNNER LOCAL RESTORE JUMP ERROR ' + (jumpError && (jumpError.stack || jumpError.message) || jumpError));
           }
         });
-        return { ok: true, key: info.key, data: data, mode: 'in-place' };
+        return { ok: true, key: info.key, data: data };
       };
       logLine('runner local save helpers installed');
     }
@@ -614,7 +572,7 @@
             list[slot] = {
               index: slot,
               picurl: '',
-              name: info.data.displayName || info.data.storyName || ('slot ' + (slot + 1)),
+              name: info.data.storyName || ('slot ' + (slot + 1)),
               date: timestamp,
               isfree: 0
             };
@@ -629,23 +587,10 @@
         if (!saveView) return false;
         var list = synced || (window.__runnerSyncSaveFileData && window.__runnerSyncSaveFileData());
         if (!list) return false;
-        var displayList = list;
-        if (saveView.__runnerSaveFilePaged) {
-          var pageSize = saveView.__runnerSaveFilePageSize || 6;
-          var totalPages = Math.max(1, Math.ceil(list.length / pageSize));
-          var page = parseInt(saveView.__runnerSaveFilePage || 0, 10);
-          if (!isFinite(page) || page < 0) page = 0;
-          if (page >= totalPages) page = totalPages - 1;
-          saveView.__runnerSaveFilePage = page;
-          saveView.__runnerSaveFileFullList = list;
-          displayList = list.slice(page * pageSize, page * pageSize + pageSize);
-          if (window.__runnerUpdateSaveFilePageText) window.__runnerUpdateSaveFilePageText(saveView, page, totalPages);
-        }
-        saveView.listData = displayList;
+        saveView.listData = list;
         if (saveView.itemList) {
-          saveView.itemList.array = displayList;
+          saveView.itemList.array = list;
           if (typeof saveView.itemList.refresh === 'function') saveView.itemList.refresh();
-          if (typeof saveView.itemList.scrollTo === 'function') saveView.itemList.scrollTo(0);
         }
         return true;
       };
@@ -673,7 +618,6 @@
       };
       window.__runnerOpenSaveFileView = function (isSave, label) {
         try {
-          window.__runnerSaveFileOpenRequested = true;
           var gd = window.GloableData && GloableData.getInstance ? GloableData.getInstance() : null;
           if (gd) gd.isCloud = false;
           if (window.view && view.SCustomUI && view.SCustomUI.getInstance) view.SCustomUI.getInstance().hideUI();
@@ -693,9 +637,8 @@
                 try {
                   var delayedSaveFileView = UIManager.getInstance().getViewByName(view.SaveFileUIMediator.NAME);
                   if (window.__runnerApplySaveFileDataToView) window.__runnerApplySaveFileDataToView(delayedSaveFileView);
-                  if (window.__runnerHealOpenSaveFileView) window.__runnerHealOpenSaveFileView('open:' + (label || ''));
                 } catch (delayedApplySaveFileDataError) {}
-              }, 120);
+              }, 0);
             } catch (applyOpenSaveFileDataError) {
               logLine('RUNNER OPEN SAVE FILE VIEW DATA ERROR ' + (applyOpenSaveFileDataError && (applyOpenSaveFileDataError.stack || applyOpenSaveFileDataError.message) || applyOpenSaveFileDataError));
             }
@@ -705,92 +648,6 @@
         } catch (openSaveFileViewError) {
           logLine('RUNNER OPEN SAVE FILE VIEW ERROR ' + (openSaveFileViewError && (openSaveFileViewError.stack || openSaveFileViewError.message) || openSaveFileViewError));
           return false;
-        }
-      };
-      window.__runnerSetOText = function (target, text) {
-        if (!target) return;
-        try {
-          target.text = '';
-          if (typeof target.cleanTexts === 'function') target.cleanTexts();
-          var gd = window.GloableData && GloableData.getInstance ? GloableData.getInstance() : null;
-          var color = gd && gd.gameMainData && gd.gameMainData.System && gd.gameMainData.System.FontUiColor
-            ? gd.gameMainData.System.FontUiColor.getColorToUint()
-            : 0x663333;
-          var analysis = window.StringUtil && StringUtil.getAnalysisText ? StringUtil.getAnalysisText(String(text || ''), color) : null;
-          var x = 0;
-          var y = 0;
-          if (analysis && analysis.texts) {
-            while (analysis.texts.length > 0) {
-              var item = analysis.texts.shift();
-              item.x = x;
-              item.y = y;
-              x += item.width || 0;
-              target.addtext(item);
-            }
-          } else {
-            target.text = String(text || '');
-          }
-        } catch (setTextError) {
-          try { target.text = String(text || ''); } catch (fallbackTextError) {}
-        }
-      };
-      window.__runnerUpdateSaveFilePageText = function (saveView, page, totalPages) {
-        if (!saveView || !saveView.__runnerSaveFilePageText) return;
-        window.__runnerSetOText(saveView.__runnerSaveFilePageText, (page + 1) + ' / ' + totalPages);
-      };
-      window.__runnerSetupSaveFilePaging = function (saveView) {
-        try {
-          if (!saveView || saveView.__runnerSaveFilePagingReady) return;
-          var gd = window.GloableData && GloableData.getInstance ? GloableData.getInstance() : null;
-          var system = gd && gd.gameMainData && gd.gameMainData.System || null;
-          var saveData = system && system.SaveData || null;
-          var buttons = system && system.Buttons || [];
-          if (!saveData || !saveData.isPage || !saveData.max || saveData.max <= 6) return;
-          saveView.__runnerSaveFilePaged = true;
-          saveView.__runnerSaveFilePageSize = Math.max(1, (parseInt(saveData.column, 10) || 3) * 2);
-          saveView.__runnerSaveFilePage = 0;
-          if (window.utils && utils.getOText) {
-            saveView.__runnerSaveFilePageText = utils.getOText();
-            saveView.__runnerSaveFilePageText.x = saveData.pageNumX || 0;
-            saveView.__runnerSaveFilePageText.y = saveData.pageNumY || 0;
-            saveView.addChild(saveView.__runnerSaveFilePageText);
-          }
-          var addPageButton = function (buttonIndexData, propName, delta) {
-            if (!buttonIndexData || saveView[propName]) return;
-            var buttonData = buttons[buttonIndexData.index];
-            if (!buttonData || !window.ORGButton) return;
-            var btn = new ORGButton('Graphics/Button/' + buttonData.image1, 'Graphics/Button/' + buttonData.image2, buttonData.name || '');
-            btn.postion = { x: buttonIndexData.x || 0, y: buttonIndexData.y || 0 };
-            saveView[propName] = btn;
-            saveView.addChild(btn);
-            var handler = function (event) {
-              try {
-                if (event && event.stopPropagation) event.stopPropagation();
-                var fullList = saveView.__runnerSaveFileFullList || (window.__runnerSyncSaveFileData && window.__runnerSyncSaveFileData()) || [];
-                var pageSize = saveView.__runnerSaveFilePageSize || 6;
-                var totalPages = Math.max(1, Math.ceil(fullList.length / pageSize));
-                var current = parseInt(saveView.__runnerSaveFilePage || 0, 10);
-                if (!isFinite(current)) current = 0;
-                current += delta;
-                if (current < 0) current = 0;
-                if (current >= totalPages) current = totalPages - 1;
-                saveView.__runnerSaveFilePage = current;
-                if (window.__runnerApplySaveFileDataToView) window.__runnerApplySaveFileDataToView(saveView, fullList);
-              } catch (pageError) {
-                logLine('RUNNER SAVE FILE PAGE ERROR ' + (pageError && (pageError.stack || pageError.message) || pageError));
-              }
-            };
-            if (window.EventManager && window.OEvent) {
-              EventManager.addEventListener(btn, OEvent.CLICK, handler, saveView);
-            } else if (typeof btn.click === 'function') {
-              btn.click(saveView, handler);
-            }
-          };
-          addPageButton(saveData.previousPageButton, '__runnerSaveFilePrevBtn', -1);
-          addPageButton(saveData.nextPageButton, '__runnerSaveFileNextBtn', 1);
-          saveView.__runnerSaveFilePagingReady = true;
-        } catch (pagingError) {
-          logLine('RUNNER SAVE FILE PAGING ERROR ' + (pagingError && (pagingError.stack || pagingError.message) || pagingError));
         }
       };
       var installSaveFileMenuBridge = function () {
@@ -839,27 +696,8 @@
             var originalInit = saveUIProto.init;
             if (typeof originalInit === 'function') {
               saveUIProto.init = function () {
-                window.__runnerSaveFileOpenRequested = true;
-                normalizeSaveFileUiConfig(null, 'SaveFileUI.init');
-                var saveData = null;
-                var originalMax = null;
+                var result = originalInit.apply(this, arguments);
                 try {
-                  var gd = window.GloableData && GloableData.getInstance ? GloableData.getInstance() : null;
-                  var system = gd && gd.gameMainData && gd.gameMainData.System || null;
-                  saveData = system && system.SaveData || null;
-                  if (saveData && saveData.isPage && parseInt(saveData.max, 10) > 6) {
-                    originalMax = saveData.max;
-                    saveData.max = Math.max(1, (parseInt(saveData.column, 10) || 3) * 2);
-                  }
-                } catch (beforeInitError) {}
-                var result;
-                try {
-                  result = originalInit.apply(this, arguments);
-                } finally {
-                  if (saveData && originalMax !== null) saveData.max = originalMax;
-                }
-                try {
-                  if (window.__runnerSetupSaveFilePaging) window.__runnerSetupSaveFilePaging(this);
                   if (window.__runnerApplySaveFileDataToView) window.__runnerApplySaveFileDataToView(this);
                 } catch (syncInitError) {
                   logLine('RUNNER SAVE UI INIT SYNC ERROR ' + (syncInitError && (syncInitError.stack || syncInitError.message) || syncInitError));
@@ -870,10 +708,8 @@
             if (typeof saveUIProto.refreshUI === 'function') {
               var originalRefreshUI = saveUIProto.refreshUI;
               saveUIProto.refreshUI = function () {
-                normalizeSaveFileUiConfig(null, 'SaveFileUI.refreshUI');
                 var result = originalRefreshUI.apply(this, arguments);
                 try {
-                  if (window.__runnerSetupSaveFilePaging) window.__runnerSetupSaveFilePaging(this);
                   if (window.__runnerApplySaveFileDataToView) window.__runnerApplySaveFileDataToView(this);
                 } catch (syncRefreshError) {
                   logLine('RUNNER SAVE UI REFRESH SYNC ERROR ' + (syncRefreshError && (syncRefreshError.stack || syncRefreshError.message) || syncRefreshError));
@@ -943,7 +779,6 @@
                 if (localSaveResult && localSaveResult.ok) {
                   try {
                     if (window.__runnerApplySaveFileDataToView) window.__runnerApplySaveFileDataToView(this.view);
-                    if (window.Tips && Tips.tip) Tips.tip('保存成功', '#FFFFFF');
                   } catch (saveRefreshError) {
                     logLine('RUNNER SAVE UI SAVE REFRESH ERROR ' + (saveRefreshError && (saveRefreshError.stack || saveRefreshError.message) || saveRefreshError));
                   }
@@ -987,56 +822,6 @@
           saveFileMenuBridgeProbeCount += 1;
           if (installSaveFileMenuBridge() || saveFileMenuBridgeProbeCount >= 80) clearInterval(saveFileMenuBridgeProbe);
         }, 500);
-      }
-      if (!window.__runnerSaveFileOpenViewHealStarted) {
-        window.__runnerSaveFileOpenViewHealStarted = true;
-        window.__runnerHealOpenSaveFileView = function (reason) {
-          try {
-            if (!window.__runnerSaveFileOpenRequested) return false;
-            if (!window.UIManager || !UIManager.getInstance || !window.view || !view.SaveFileUIMediator) return false;
-            var ui = UIManager.getInstance();
-            var saveFileView = ui.getViewByName(view.SaveFileUIMediator.NAME);
-            if (!saveFileView || saveFileView.__runnerSaveFileSelfHealing) return false;
-            var gd = window.GloableData && GloableData.getInstance ? GloableData.getInstance() : null;
-            var system = gd && gd.gameMainData && gd.gameMainData.System || null;
-            var saveData = system && system.SaveData || null;
-            var cells = saveFileView.itemList && saveFileView.itemList.cells || [];
-            var brokenConfig = saveData && (
-              saveData.backButton && saveData.backButton.index !== 18 ||
-              saveData.closeButton && saveData.closeButton.index !== 16 ||
-              saveData.previousPageButton && saveData.previousPageButton.index !== 42 ||
-              saveData.nextPageButton && saveData.nextPageButton.index !== 43
-            );
-            var brokenView = !saveFileView.__runnerSaveFilePaged || !saveFileView.itemList || cells.length !== 6;
-            if (!brokenConfig && !brokenView) {
-              if (window.__runnerApplySaveFileDataToView) window.__runnerApplySaveFileDataToView(saveFileView);
-              return false;
-            }
-            if (typeof normalizeSaveFileUiConfig === 'function') normalizeSaveFileUiConfig(system, 'open-view-heal:' + (reason || ''));
-            var isSave = !!saveFileView.isSave;
-            saveFileView.__runnerSaveFileSelfHealing = true;
-            try {
-              ui.closeView(view.SaveFileUIMediator.NAME, false);
-            } catch (closeHealError) {}
-            setTimeout(function () {
-              try {
-                if (window.__runnerOpenSaveFileView) window.__runnerOpenSaveFileView(isSave, 'self-heal:' + (reason || ''));
-              } catch (openHealError) {
-                logLine('RUNNER SAVE FILE SELF HEAL OPEN ERROR ' + (openHealError && (openHealError.stack || openHealError.message) || openHealError));
-              }
-            }, 0);
-            logLine('RUNNER SAVE FILE SELF HEAL ' + JSON.stringify({
-              reason: reason || '',
-              brokenConfig: !!brokenConfig,
-              brokenView: !!brokenView,
-              cells: cells.length
-            }));
-            return true;
-          } catch (healError) {
-            logLine('RUNNER SAVE FILE SELF HEAL ERROR ' + (healError && (healError.stack || healError.message) || healError));
-            return false;
-          }
-        };
       }
     }
     logLine('starting game init');
@@ -1193,42 +978,6 @@
           logLine('PATCH OFFICIAL CHOICE BUTTON ERROR ' + (officialChoiceError && (officialChoiceError.stack || officialChoiceError.message) || officialChoiceError));
           return false;
         }
-      };
-      var normalizeSaveFileUiConfig = function (system, reason) {
-        if (!hasQueryFlag('patchSaveFileUI')) return false;
-        try {
-          if (!system && window.GloableData && GloableData.getInstance) {
-            var gd = GloableData.getInstance();
-            system = gd && gd.gameMainData && gd.gameMainData.System;
-          }
-          var saveData = system && system.SaveData;
-          var buttons = system && system.Buttons;
-          if (!saveData || !buttons) return false;
-          var changes = {};
-          if (saveData.backButton && saveData.backButton.index === 19 && buttons[18]) {
-            saveData.backButton.index = 18;
-            changes.backButton = 18;
-          }
-          if (saveData.closeButton && saveData.closeButton.index === 18 && buttons[16]) {
-            saveData.closeButton.index = 16;
-            changes.closeButton = 16;
-          }
-          if (saveData.previousPageButton && saveData.previousPageButton.index === 44 && buttons[42]) {
-            saveData.previousPageButton.index = 42;
-            changes.previousPageButton = 42;
-          }
-          if (saveData.nextPageButton && saveData.nextPageButton.index !== 43 && buttons[43]) {
-            saveData.nextPageButton.index = 43;
-            changes.nextPageButton = 43;
-          }
-          if (Object.keys(changes).length) {
-            logLine('PATCH SAVE FILE UI CONFIG ' + JSON.stringify({ reason: reason || '', changes: changes }));
-            return true;
-          }
-        } catch (saveFileConfigError) {
-          logLine('PATCH SAVE FILE UI CONFIG ERROR ' + (saveFileConfigError && (saveFileConfigError.stack || saveFileConfigError.message) || saveFileConfigError));
-        }
-        return false;
       };
       var refreshOfficialTextDifSkin = function (textDif, eventData, reason) {
         if (!hasQueryFlag('patchOfficialChoiceUi') || !textDif || !window.GloableData || !GloableData.getInstance) return;
@@ -1407,7 +1156,6 @@
             this.Buttons[index] = new org_data.DButton(stream);
           }
           normalizeOfficialChoiceButtonIndex(this, 'DSystem');
-          normalizeSaveFileUiConfig(this, 'DSystem');
           logLine('new DSystem buttons oldCount=' + oldButtonCount + ' parsed=' + buttonCount + ' pos=' + stream.pos);
           this.UIInitSave = stream.getInt32() !== 0;
           this.Cuis = null;
@@ -1538,66 +1286,6 @@
         };
         Main.prototype.__runnerPatched = true;
       }
-      if (!window.__runnerHideTitleViewOverlay) {
-        window.__runnerHideTitleViewOverlay = function (reason) {
-          try {
-            var gd = window.GloableData && GloableData.getInstance ? GloableData.getInstance() : null;
-            var line = gd && gd.currentLine || null;
-            if (!line || line.storyId !== 1 || line.pos !== 7) return false;
-            if (!window.UIManager || !UIManager.getInstance) return false;
-            var ui = UIManager.getInstance();
-            var layer = ui && ui.gameSystemUILayer;
-            if (!layer || !layer._childs) return false;
-            var hasTitleTexture = function (node) {
-              if (!node) return false;
-              try {
-                var url = node._bitmap && node._bitmap.source && (node._bitmap.source.url || node._bitmap.source._url)
-                  || node.texture && (node.texture.url || node.texture._url)
-                  || node.skin
-                  || '';
-                url = String(url || '');
-                if (url.indexOf('/shareres/73/7343317c521796fcc02d77401212663c') !== -1) return true;
-                if (url.indexOf('res/logo/960x540.jpg') !== -1) return true;
-              } catch (textureCheckError) {}
-              if (node._childs) {
-                for (var i = 0; i < node._childs.length; i++) {
-                  if (hasTitleTexture(node._childs[i])) return true;
-                }
-              }
-              return false;
-            };
-            var removed = 0;
-            for (var childIndex = layer._childs.length - 1; childIndex >= 0; childIndex--) {
-              var child = layer._childs[childIndex];
-              if (!hasTitleTexture(child)) continue;
-              if (child && child.parent && typeof child.parent.removeChild === 'function') child.parent.removeChild(child);
-              else if (child && typeof child.removeSelf === 'function') child.removeSelf();
-              if (child) child.visible = false;
-              removed += 1;
-            }
-            if (removed) {
-              window.__runnerTitleViewOverlayHiddenOnce = true;
-              logLine('TITLE VIEW OVERLAY HIDDEN ' + JSON.stringify({ reason: reason || '', removed: removed }));
-            }
-            return removed > 0;
-          } catch (hideTitleOverlayError) {
-            logLine('TITLE VIEW OVERLAY HIDE ERROR ' + (hideTitleOverlayError && (hideTitleOverlayError.stack || hideTitleOverlayError.message) || hideTitleOverlayError));
-            return false;
-          }
-        };
-      }
-      var scheduleTitleViewOverlayHide = function (reason) {
-        if (!hasQueryFlag('autoStartTitle')) return;
-        [0, 150, 500, 1000, 1800].forEach(function (delay) {
-          setTimeout(function () {
-            try {
-              if (!window.__runnerTitleViewOverlayHiddenOnce && window.__runnerHideTitleViewOverlay) {
-                window.__runnerHideTitleViewOverlay(reason || 'scheduled');
-              }
-            } catch (titleOverlayScheduleError) {}
-          }, delay);
-        });
-      };
       var installTitleEntryPatch = function () {
         if (!hasQueryFlag('autoStartTitle') && !hasQueryFlag('patchTitleClick')) return;
         if (window.__runnerTitleEntryPatchInstalled) return;
@@ -1629,7 +1317,6 @@
             gd.dGameSystem.varsEx.loadExData(!!gd.isFreeLimit);
           }
           gd.iMain.jumpStoryCallBack(system.StartStoryId);
-          scheduleTitleViewOverlayHide(label + ' post-jump');
         };
         var scheduleAutoStart = function (reason) {
           if (!hasQueryFlag('autoStartTitle') || window.__runnerTitleAutoStartScheduled || hasCurrentLine()) return;
@@ -1958,7 +1645,6 @@
               GloableData.getInstance().dGameSystem.varsEx.loadExData();
             }
             GloableData.getInstance().iMain.jumpStoryCallBack(system.StartStoryId);
-            scheduleTitleViewOverlayHide(label + ' post-jump');
           };
           var autoStartTitle = function () {
             if (!hasQueryFlag('autoStartTitle')) return;
@@ -2978,7 +2664,7 @@
                   innMainEvent.Argv = getInnMainButtonArgv();
                   innMainEvent.links = getInnMainButtonLinks();
                   line.currentLinks = innMainEvent.links.slice();
-                  line.currentEvent = innMainEvent;
+                  if (line.currentEvent === innMainEvent || !line.currentEvent || line.currentEvent.Code === 204) line.currentEvent = innMainEvent;
                   logLine('PATCH INN MAIN BUTTONS FORCE ' + JSON.stringify({ oldArgv: oldInnMainArgv, newArgv: innMainEvent.Argv, newLinks: innMainEvent.links, branchVisible: innMainEvent.Argv.length > 11 }));
                 }
                 return;
@@ -3093,7 +2779,7 @@
             try {
               if (!hasQueryFlag('autoNewbieChestChoice')) return;
               var event = line && (line.currentEvent || (line.story && line.story.events && line.pos !== undefined && line.story.events[line.pos])) || null;
-              if (!line || line.storyId !== 1 || (line.pos !== 2126 && line.pos !== 2127 && line.pos !== 2153) || !event || event.Code !== 204 || !line.currentShowEvent || !line.currentShowEvent.finish) return;
+              if (!line || line.storyId !== 1 || (line.pos !== 2126 && line.pos !== 2127) || !event || event.Code !== 204 || !line.currentShowEvent || !line.currentShowEvent.finish) return;
               var buttons = line.currentShowEvent.buttons || [];
               if (buttons.length !== 1) return;
               var button = buttons[0];
@@ -3605,53 +3291,6 @@
             });
             logLine('newbie chest hit proxy enabled');
           };
-          var installFirstSceneLobbyHitProxy = function () {
-            if (!hasQueryFlag('patchFirstSceneLobbyButtons') || window.__runnerFirstSceneLobbyHitProxyPatched) return;
-            if (!window.Laya || !Laya.stage) return;
-            window.__runnerFirstSceneLobbyHitProxyPatched = true;
-            var lobbyBoxes = [
-              { x: 470, y: 388, w: 132, h: 50 },
-              { x: 605, y: 388, w: 132, h: 50 },
-              { x: 740, y: 388, w: 132, h: 50 },
-              { x: 555, y: 100, w: 132, h: 50 },
-              { x: 655, y: 100, w: 132, h: 50 },
-              { x: 755, y: 100, w: 132, h: 50 }
-            ];
-            var insideBox = function (x, y, box) {
-              return x >= box.x && x <= box.x + box.w && y >= box.y && y <= box.y + box.h;
-            };
-            Laya.stage.on(window.OEvent && OEvent.MOUSE_DOWN || 'mousedown', null, function (event) {
-              try {
-                var gd = window.GloableData && GloableData.getInstance ? GloableData.getInstance() : null;
-                var line = gd && gd.currentLine || null;
-                if (!line || line.storyId !== 1 || line.pos !== 7) return;
-                var showEvent = line.currentShowEvent || null;
-                if (!showEvent || !showEvent.finish) return;
-                var x = Laya.stage.mouseX;
-                var y = Laya.stage.mouseY;
-                for (var choiceIndex = 0; choiceIndex < lobbyBoxes.length; choiceIndex++) {
-                  if (!insideBox(x, y, lobbyBoxes[choiceIndex])) continue;
-                  var now = Date.now ? Date.now() : new Date().getTime();
-                  if (window.__runnerFirstSceneLobbyHitProxyAt && now - window.__runnerFirstSceneLobbyHitProxyAt < 600) return;
-                  window.__runnerFirstSceneLobbyHitProxyAt = now;
-                  var button = showEvent.buttons && showEvent.buttons[choiceIndex];
-                  logLine('PATCH FIRST SCENE LOBBY HIT PROXY ' + JSON.stringify({
-                    choiceIndex: choiceIndex,
-                    x: x,
-                    y: y,
-                    buttonIndex: button && button.index,
-                    linePos: line.pos
-                  }));
-                  showEvent.finish(choiceIndex);
-                  if (event && event.stopPropagation) event.stopPropagation();
-                  return;
-                }
-              } catch (lobbyProxyError) {
-                logLine('PATCH FIRST SCENE LOBBY HIT PROXY ERROR ' + (lobbyProxyError && (lobbyProxyError.stack || lobbyProxyError.message) || lobbyProxyError));
-              }
-            });
-            logLine('first scene lobby hit proxy enabled');
-          };
           var maybeStubInitialVitals = function () {
             if (!hasQueryFlag('stubInitialVitals') || window.__runnerInitialVitalsStubbed) return;
             try {
@@ -3777,10 +3416,8 @@
               maybeStubInitialVitals();
               maybeMarkInnMainScreenSeen(line);
               maybeAutoPreMainCode214Close(line);
-              if (!window.__runnerTitleViewOverlayHiddenOnce && window.__runnerHideTitleViewOverlay) window.__runnerHideTitleViewOverlay('story-state');
               installSCUIButtonHitPatch();
               installNewbieChestHitProxy();
-              installFirstSceneLobbyHitProxy();
               probeAutoNameChoiceState(line);
               maybeDebugJumpStory(line, iMain);
               patchFirstSceneLobbyButtonsNow(line);

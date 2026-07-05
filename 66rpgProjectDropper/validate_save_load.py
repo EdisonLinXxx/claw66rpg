@@ -408,13 +408,6 @@ def run_validation(browser, httpd, base_url, args):
             raise RuntimeError(f"save failed: {save_result}")
         if not save_info.get("exists"):
             raise RuntimeError(f"save slot was not written: {save_info}")
-        expected_restore_state = dict(saved_state)
-        saved_payload = save_info.get("data") or save_result.get("data") or {}
-        if saved_payload.get("storyId") is not None and saved_payload.get("pos") is not None:
-            expected_restore_state["storyId"] = saved_payload.get("storyId")
-            expected_restore_state["pos"] = saved_payload.get("pos")
-            if saved_payload.get("code") is not None:
-                expected_restore_state["code"] = saved_payload.get("code")
 
         advanced_records = drive_steps(page, args, play_context, args.advance_steps, "after-save", trace)
         mark_progress(args, "after-save:done")
@@ -459,7 +452,7 @@ def run_validation(browser, httpd, base_url, args):
             page2,
             args,
             settle_context,
-            expected_restore_state,
+            saved_state,
             advanced_state,
             restored_state,
             trace,
@@ -467,7 +460,7 @@ def run_validation(browser, httpd, base_url, args):
         if not restored_matches.get("ok"):
             raise RuntimeError(
                 "restored state is not compatible with saved state: "
-                f"expected={summarize_state(expected_restore_state)} restored={summarize_state(restored_state)}"
+                f"saved={summarize_state(saved_state)} restored={summarize_state(restored_state)}"
             )
 
         continue_context = build_context(args)
@@ -490,7 +483,6 @@ def run_validation(browser, httpd, base_url, args):
         "status": "ok",
         "slot": args.slot,
         "savedState": summarize_state(saved_state),
-        "expectedRestoreState": summarize_state(expected_restore_state),
         "advancedState": summarize_state(advanced_state) if advanced_state else None,
         "restoreBeforeState": summarize_state(restore_before_state) if restore_before_state else None,
         "restoredState": summarize_state(restored_state) if restored_state else None,
@@ -532,7 +524,6 @@ def main():
     parser.add_argument("--restore-pos-tolerance", type=int, default=8)
     parser.add_argument("--restore-settle-steps", type=int, default=8)
     parser.add_argument("--choice-policy", choices=("round-robin", "first", "last"), default="round-robin")
-    parser.add_argument("--choice-loop-escape-after", type=int, default=4)
     parser.add_argument("--main-buttons", default=DEFAULT_MAIN_BUTTONS)
     parser.add_argument("--headed", action="store_true", help="show the browser window")
     parser.add_argument("--page-timeout-ms", type=int, default=15000)
