@@ -1350,6 +1350,90 @@
           return false;
         }
       };
+      var titlePageHasCoverTexture = function () {
+        try {
+          if (!window.Laya || !Laya.stage) return false;
+          var titleMd5 = '7343317c521796fcc02d77401212663c';
+          var found = false;
+          var nodeHint = function (node) {
+            try {
+              return String(
+                node && (
+                  node.skin ||
+                  node._skin ||
+                  node.url ||
+                  node._url ||
+                  node.texture && (node.texture.url || node.texture._url) ||
+                  node._bitmap && node._bitmap.source && (node._bitmap.source.url || node._bitmap.source._url) ||
+                  ''
+                ) || ''
+              );
+            } catch (hintError) {
+              return '';
+            }
+          };
+          var scan = function (node, depth) {
+            if (!node || depth > 8 || found) return;
+            if (nodeHint(node).toLowerCase().indexOf(titleMd5) !== -1 && node.visible !== false && node.alpha !== 0) {
+              found = true;
+              return;
+            }
+            var children = node._childs || node._children || node.children || [];
+            for (var childIndex = 0; childIndex < children.length; childIndex++) scan(children[childIndex], depth + 1);
+          };
+          scan(Laya.stage, 0);
+          return found;
+        } catch (titleCoverCheckError) {
+          return false;
+        }
+      };
+      var removeFallbackTitlePageImage = function () {
+        try {
+          var fallback = window.__runnerFallbackTitlePageImage;
+          if (!fallback) return false;
+          window.__runnerFallbackTitlePageImage = null;
+          if (fallback.parent && typeof fallback.parent.removeChild === 'function') fallback.parent.removeChild(fallback);
+          else if (typeof fallback.removeSelf === 'function') fallback.removeSelf();
+          fallback.visible = false;
+          return true;
+        } catch (removeFallbackTitleError) {
+          logLine('TITLE FALLBACK REMOVE ERROR ' + (removeFallbackTitleError && (removeFallbackTitleError.stack || removeFallbackTitleError.message) || removeFallbackTitleError));
+          return false;
+        }
+      };
+      var ensureFallbackTitlePageImage = function (reason) {
+        try {
+          if (!hasQueryFlag('patchTitleClick') && !hasQueryFlag('autoStartTitle')) return false;
+          if (!window.Laya || !Laya.stage || !window.UIManager || !UIManager.getInstance) return false;
+          var gd = window.GloableData && GloableData.getInstance ? GloableData.getInstance() : null;
+          if (gd && gd.currentLine) return removeFallbackTitlePageImage();
+          if (titlePageHasCoverTexture()) return false;
+          if (window.__runnerFallbackTitlePageImage && window.__runnerFallbackTitlePageImage.parent) return true;
+          var titleMd5 = '7343317c521796fcc02d77401212663c';
+          var baseUrl = (window.location.protocol === 'http:' || window.location.protocol === 'https:') && window.location.host
+            ? window.location.protocol + '//' + window.location.host + '/'
+            : 'http://127.0.0.1:8765/';
+          var titleUrl = baseUrl + 'shareres/73/' + titleMd5;
+          var layer = UIManager.getInstance().gameSystemUILayer || Laya.stage;
+          var cover = window.Laya && Laya.Image ? new Laya.Image(titleUrl) : new Laya.Sprite();
+          if (!cover) return false;
+          if (typeof cover.loadImage === 'function' && !(window.Laya && Laya.Image)) cover.loadImage(titleUrl);
+          cover.x = 0;
+          cover.y = 0;
+          cover.width = 960;
+          cover.height = 540;
+          cover.mouseEnabled = true;
+          cover.zOrder = 9999;
+          cover.__runnerFallbackTitleUrl = titleUrl;
+          if (typeof layer.addChild === 'function') layer.addChild(cover);
+          window.__runnerFallbackTitlePageImage = cover;
+          logLine('TITLE FALLBACK COVER ADDED ' + JSON.stringify({ reason: reason || '', url: titleUrl }));
+          return true;
+        } catch (ensureFallbackTitleError) {
+          logLine('TITLE FALLBACK COVER ERROR ' + (ensureFallbackTitleError && (ensureFallbackTitleError.stack || ensureFallbackTitleError.message) || ensureFallbackTitleError));
+          return false;
+        }
+      };
       var scheduleTitlePageReturnHide = function (reason) {
         if (!hasQueryFlag('patchTitleClick') && !hasQueryFlag('autoStartTitle')) return;
         [0, 150, 500, 1000, 1800, 3000].forEach(function (delay) {
@@ -1438,6 +1522,7 @@
           }
           window.__runnerTitleStoryStarted = true;
           logLine(label + ' storyId=' + system.StartStoryId);
+          removeFallbackTitlePageImage();
           try {
             if (window.UIManager && UIManager.getInstance && window.view && view.TitleUIMediator) {
               UIManager.getInstance().closeView(view.TitleUIMediator.NAME, false);
@@ -1512,6 +1597,11 @@
         var runEntryKick = function (reason) {
           patchTitleClick();
           scheduleTitlePageReturnHide(reason);
+          [800, 1600, 3000].forEach(function (delay) {
+            setTimeout(function () {
+              ensureFallbackTitlePageImage(reason);
+            }, delay);
+          });
           scheduleAutoStart(reason);
         };
         if (window.Main && Main.prototype && !Main.prototype.__runnerTitleEntryMethodsWrapped) {
