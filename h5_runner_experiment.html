@@ -65,6 +65,7 @@
         stubPropShop: true,
         stubInitialVitals: true,
         patchOfficialChoiceUi: true,
+        patchCode214NamePanel: true,
         patchSaveFileUI: true,
         traceRuntime: true,
         traceStoryState: true
@@ -79,6 +80,7 @@
         autoNewbieChestChoice: true,
         autoPreMainCode214Close: true,
         patchOfficialChoiceUi: true,
+        patchCode214NamePanel: true,
         patchSaveFileUI: true,
         traceRuntime: true,
         traceStoryState: true
@@ -1260,6 +1262,299 @@
         WrappedButtonDifEvent.__runnerBranchWrapped = true;
         org_event.ButtonDifEvent = WrappedButtonDifEvent;
         logLine('ButtonDifEvent branch wrapper enabled');
+      }
+      var installCode214NamePanelPatch = function () {
+        if (!hasQueryFlag('patchCode214NamePanel')) return false;
+        if (!window.org_event || !org_event.CallMenuEvent || org_event.CallMenuEvent.__runnerCode214NamePanelPatched) return false;
+        if (!window.Laya || !Laya.Sprite || !Laya.Text) return false;
+        var OriginalCallMenuEvent = org_event.CallMenuEvent;
+        var candidatePages = [
+          ['周', '沈', '杨', '何', '柳', '谢', '云', '苏', '舒', '纪', '萧', '穆', '舒', '安', '颜', '乐', '顾', '林', '凌', '陆', '清', '戎', '酒', '楼'],
+          ['白', '叶', '楚', '温', '宋', '宁', '赵', '辛', '顾', '闻', '韩', '庄', '穆', '廿', '方', '许', '烟', '雨', '醉', '仙', '富', '顺', '同', '福'],
+          ['柳', '舒', '安', '乐', '苏', '清', '颜', '灵', '客', '栈', '春', '梦', '云', '间', '月', '满', '花', '开', '酒', '香', '灯', '影', '楼', '台']
+        ];
+        var isCode214NamePanelEvent = function (event) {
+          if (!event || event.Code !== 214) return false;
+          var index = parseInt(event.Argv && event.Argv[0], 10);
+          var fields = String(event.Argv && event.Argv[3] || '');
+          return index >= 10000 && (
+            (fields.indexOf('姓') !== -1 && fields.indexOf('名') !== -1) ||
+            fields.indexOf('客栈名称') !== -1
+          );
+        };
+        var parseCode214NameFields = function (event) {
+          var parts = String(event.Argv && event.Argv[3] || '').split(',');
+          var fieldLimit = parseInt(event.Argv && event.Argv[4], 10);
+          var fields = [];
+          for (var i = 0; i + 2 < parts.length; i += 3) {
+            var label = parts[i];
+            var stringIndex = parseInt(parts[i + 2], 10);
+            if (!isFinite(stringIndex)) continue;
+            if (label === '姓' || label === '名' || label === '昵称' || label === '客栈名称') {
+              fields.push({ label: label, stringIndex: stringIndex });
+            }
+          }
+          if (isFinite(fieldLimit) && fieldLimit > 0) fields = fields.slice(0, fieldLimit);
+          return fields;
+        };
+        var getGameStringStore = function () {
+          var gd = window.GloableData && GloableData.getInstance ? GloableData.getInstance() : null;
+          return gd && gd.dGameSystem && gd.dGameSystem.dGameString || null;
+        };
+        var getGameString = function (store, index) {
+          try {
+            if (!store) return '';
+            if (store.getVar) return store.getVar(index) || '';
+            if (store.data) return store.data[index] || '';
+          } catch (getStringError) {}
+          return '';
+        };
+        var setGameString = function (store, index, value) {
+          try {
+            if (store && store.setVar) store.setVar(index, value || '');
+            else if (store && store.data) store.data[index] = value || '';
+          } catch (setStringError) {
+            logLine('CODE214 NAME PANEL set string error ' + (setStringError && (setStringError.stack || setStringError.message) || setStringError));
+          }
+        };
+        var getPanelFontName = function () {
+          try {
+            var gd = window.GloableData && GloableData.getInstance ? GloableData.getInstance() : null;
+            var name = gd && gd.gameMainData && gd.gameMainData.System && gd.gameMainData.System.FontName;
+            return name || 'Microsoft YaHei';
+          } catch (fontNameError) {
+            return 'Microsoft YaHei';
+          }
+        };
+        var addText = function (parent, text, x, y, width, height, size, color, align) {
+          var label = new Laya.Text();
+          label.text = text || '';
+          label.font = getPanelFontName();
+          label.fontSize = size || 22;
+          label.color = color || '#8a3f37';
+          label.align = align || 'center';
+          label.valign = 'middle';
+          label.width = width || 120;
+          label.height = height || 32;
+          label.x = x || 0;
+          label.y = y || 0;
+          parent.addChild(label);
+          return label;
+        };
+        var drawRectButton = function (parent, x, y, width, height, label, fill, stroke, clickHandler) {
+          var button = new Laya.Sprite();
+          button.x = x;
+          button.y = y;
+          button.size(width, height);
+          button.mouseEnabled = true;
+          button.graphics.drawRect(0, 0, width, height, fill || 'rgba(213,118,96,0.55)', stroke || '#d9b19b', 1);
+          addText(button, label, 0, 1, width, height, Math.min(24, Math.max(17, Math.floor(height * 0.55))), '#8b342f', 'center');
+          if (clickHandler) button.on(window.OEvent && OEvent.CLICK || 'click', null, clickHandler);
+          parent.addChild(button);
+          return button;
+        };
+        var drawRoundTextButton = function (parent, x, y, radius, label, fill, stroke, clickHandler, textColor) {
+          var button = new Laya.Sprite();
+          button.x = x - radius;
+          button.y = y - radius;
+          button.size(radius * 2, radius * 2);
+          button.mouseEnabled = true;
+          button.graphics.drawCircle(radius, radius, radius, fill || 'rgba(190,84,63,0.72)', stroke || '#f2d2b4', 2);
+          button.graphics.drawCircle(radius, radius, Math.max(1, radius - 5), 'rgba(255,255,255,0)', '#eec7af', 1);
+          addText(button, label, 0, 0, radius * 2, radius * 2, 24, textColor || '#7f302d', 'center');
+          if (clickHandler) button.on(window.OEvent && OEvent.CLICK || 'click', null, clickHandler);
+          parent.addChild(button);
+          return button;
+        };
+        var RunnerCode214NamePanelEvent = function (event, line) {
+          this.data = event;
+          this.mainLine = line;
+          this.index = parseInt(event.Argv && event.Argv[0], 10);
+          this.code = 214;
+          this.finished = false;
+          this.isSuiFinish = false;
+          this.fields = parseCode214NameFields(event);
+          this.values = {};
+          this.page = 0;
+          this.activeField = 0;
+          this.panel = null;
+          this.init();
+        };
+        RunnerCode214NamePanelEvent.prototype.init = function () {
+          var gd = window.GloableData && GloableData.getInstance ? GloableData.getInstance() : null;
+          try {
+            if (window.UIManager && UIManager.getInstance) {
+              UIManager.getInstance().closeAllView(false);
+              UIManager.getInstance().cancleLongDown();
+              UIManager.getInstance().isSCUIShow = true;
+              if (UIManager.getInstance().gameSystemUILayer && UIManager.getInstance().gameSystemUILayer.setMenuVisible) {
+                UIManager.getInstance().gameSystemUILayer.setMenuVisible(false);
+              }
+            }
+            if (this.mainLine && this.mainLine.pause) this.mainLine.pause();
+            if (gd && gd.currentLine && gd.currentLine.pause) gd.currentLine.pause();
+            if (gd) gd.CUIFromIndex = this.index;
+            var store = getGameStringStore();
+            for (var i = 0; i < this.fields.length; i++) {
+              this.values[i] = getGameString(store, this.fields[i].stringIndex);
+            }
+            this.render();
+            logLine('CODE214 NAME PANEL open ' + JSON.stringify({
+              index: this.index,
+              fields: this.fields,
+              storyId: this.mainLine && this.mainLine.storyId,
+              pos: this.mainLine && this.mainLine.pos
+            }));
+          } catch (namePanelInitError) {
+            logLine('CODE214 NAME PANEL init error ' + (namePanelInitError && (namePanelInitError.stack || namePanelInitError.message) || namePanelInitError));
+            return new OriginalCallMenuEvent(this.data, this.mainLine);
+          }
+        };
+        RunnerCode214NamePanelEvent.prototype.removePanel = function () {
+          if (this.panel && this.panel.parent) this.panel.parent.removeChild(this.panel);
+          if (this.panel && this.panel.destroy) this.panel.destroy(true);
+          this.panel = null;
+          window.__runnerCode214NamePanel = null;
+        };
+        RunnerCode214NamePanelEvent.prototype.setActiveField = function (index) {
+          if (index >= 0 && index < this.fields.length) {
+            this.activeField = index;
+            this.render();
+          }
+        };
+        RunnerCode214NamePanelEvent.prototype.pick = function (value) {
+          if (!this.fields.length) return;
+          this.values[this.activeField] = value;
+          if (this.activeField < this.fields.length - 1) this.activeField += 1;
+          this.render();
+        };
+        RunnerCode214NamePanelEvent.prototype.randomize = function () {
+          var page = candidatePages[this.page] || candidatePages[0];
+          for (var i = 0; i < this.fields.length; i++) {
+            this.values[i] = page[(i * 7 + Math.floor(Math.random() * page.length)) % page.length];
+          }
+          if (this.fields.length === 1) this.values[0] = (page[4] || '柳') + (page[8] || '舒') + (page[13] || '安') + (page[15] || '乐');
+          this.render();
+        };
+        RunnerCode214NamePanelEvent.prototype.undo = function () {
+          if (!this.fields.length) return;
+          this.values[this.activeField] = '';
+          if (this.activeField > 0) this.activeField -= 1;
+          this.render();
+        };
+        RunnerCode214NamePanelEvent.prototype.nextPage = function (delta) {
+          this.page = (this.page + delta + candidatePages.length) % candidatePages.length;
+          this.render();
+        };
+        RunnerCode214NamePanelEvent.prototype.confirm = function () {
+          var store = getGameStringStore();
+          for (var i = 0; i < this.fields.length; i++) {
+            var value = this.values[i] || '';
+            if (!value) {
+              if (this.fields.length === 1) value = '柳舒安乐';
+              else if (this.fields[i].label === '姓') value = '苏';
+              else if (this.fields[i].label === '名') value = '清';
+              else if (this.fields[i].label === '昵称') value = (this.values[0] || '苏') + (this.values[1] || '清');
+            }
+            setGameString(store, this.fields[i].stringIndex, value);
+          }
+          this.finish();
+        };
+        RunnerCode214NamePanelEvent.prototype.finish = function () {
+          this.finished = true;
+          this.isSuiFinish = true;
+          this.removePanel();
+          try {
+            if (window.UIManager && UIManager.getInstance) {
+              UIManager.getInstance().isSCUIShow = false;
+              if (UIManager.getInstance().gameSystemUILayer && UIManager.getInstance().gameSystemUILayer.setMenuVisible) {
+                UIManager.getInstance().gameSystemUILayer.setMenuVisible(true);
+              }
+            }
+            var gd = window.GloableData && GloableData.getInstance ? GloableData.getInstance() : null;
+            if (gd) gd.CUIFromIndex = -1;
+            if (this.mainLine) {
+              this.mainLine.isPause = false;
+              this.mainLine.eventRunFinish = true;
+            }
+            if (gd && gd.currentLine && gd.currentLine !== this.mainLine) {
+              gd.currentLine.isPause = false;
+              gd.currentLine.eventRunFinish = true;
+            }
+          } catch (namePanelFinishError) {
+            logLine('CODE214 NAME PANEL finish error ' + (namePanelFinishError && (namePanelFinishError.stack || namePanelFinishError.message) || namePanelFinishError));
+          }
+        };
+        RunnerCode214NamePanelEvent.prototype.render = function () {
+          this.removePanel();
+          var root = new Laya.Sprite();
+          root.name = 'runnerCode214NamePanel';
+          root.mouseEnabled = true;
+          root.size(960, 540);
+          root.zOrder = 9999;
+          root.graphics.drawRect(0, 0, 960, 540, '#e6b777');
+          root.graphics.drawRect(0, 58, 960, 390, 'rgba(255,250,238,0.92)', '#d8b59a', 2);
+          root.graphics.drawRect(0, 448, 960, 92, 'rgba(218,124,80,0.48)');
+          root.graphics.drawRect(0, 72, 960, 12, 'rgba(255,255,255,0.48)');
+          var self = this;
+          var store = getGameStringStore();
+          var topY = this.fields.length === 1 ? 113 : 112;
+          if (this.fields.length === 1) {
+            var oneValue = this.values[0] || getGameString(store, this.fields[0].stringIndex) || '';
+            addText(root, this.fields[0].label, 320, 110, 110, 42, 24, '#8c3d37', 'right');
+            drawRectButton(root, 442, 113, 168, 32, oneValue || '点击输入', 'rgba(221,130,116,0.58)', '#e9c1a7', function () { self.setActiveField(0); });
+          } else {
+            var fieldXs = [58, 348, 638];
+            var inputXs = [132, 422, 712];
+            for (var fieldIndex = 0; fieldIndex < this.fields.length; fieldIndex++) {
+              var field = this.fields[fieldIndex];
+              var value = this.values[fieldIndex] || getGameString(store, field.stringIndex) || '';
+              addText(root, field.label, fieldXs[fieldIndex], topY, 54, 36, 24, '#8c3d37', 'left');
+              (function (idx, val) {
+                var button = drawRectButton(root, inputXs[idx], 113, 170, 31, val || '点击输入', idx === self.activeField ? 'rgba(221,130,116,0.68)' : 'rgba(221,130,116,0.48)', '#e9c1a7', function () {
+                  self.setActiveField(idx);
+                });
+                button.graphics.drawRect(2, 2, 166, 27, 'rgba(255,255,255,0.12)', '#f0d5c0', 1);
+              })(fieldIndex, value);
+            }
+          }
+          var page = candidatePages[this.page] || candidatePages[0];
+          for (var itemIndex = 0; itemIndex < page.length; itemIndex++) {
+            var col = itemIndex % 8;
+            var row = Math.floor(itemIndex / 8);
+            (function (value, x, y) {
+              drawRoundTextButton(root, x, y, 31, value, 'rgba(198,91,68,0.72)', '#f0c8ac', function () {
+                self.pick(value);
+              });
+            })(page[itemIndex], 94 + col * 95, 196 + row * 90);
+          }
+          drawRoundTextButton(root, 853, 196, 32, '随机', 'rgba(106,39,35,0.86)', '#f3d7b4', function () { self.randomize(); }, '#f7e7c7');
+          drawRoundTextButton(root, 853, 286, 32, '撤销', 'rgba(106,39,35,0.86)', '#f3d7b4', function () { self.undo(); }, '#f7e7c7');
+          drawRoundTextButton(root, 853, 377, 32, '确认', 'rgba(106,39,35,0.86)', '#f3d7b4', function () { self.confirm(); }, '#f7e7c7');
+          drawRectButton(root, 382, 470, 48, 48, '<', 'rgba(194,92,70,0.6)', '#f2d7be', function () { self.nextPage(-1); });
+          addText(root, String(this.page + 1) + '/' + candidatePages.length, 453, 478, 54, 32, 23, '#8c3d37', 'center');
+          drawRectButton(root, 535, 470, 48, 48, '>', 'rgba(194,92,70,0.6)', '#f2d7be', function () { self.nextPage(1); });
+          var layer = window.UIManager && UIManager.getInstance && UIManager.getInstance().gameAdvanceUILayer || Laya.stage;
+          layer.addChild(root);
+          this.panel = root;
+          window.__runnerCode214NamePanel = this;
+        };
+        var PatchedCallMenuEvent = function (event, line) {
+          if (isCode214NamePanelEvent(event)) return new RunnerCode214NamePanelEvent(event, line);
+          return new OriginalCallMenuEvent(event, line);
+        };
+        PatchedCallMenuEvent.prototype = OriginalCallMenuEvent.prototype;
+        PatchedCallMenuEvent.__runnerCode214NamePanelPatched = true;
+        org_event.CallMenuEvent = PatchedCallMenuEvent;
+        logLine('Code214 name panel patch enabled');
+        return true;
+      };
+      if (!installCode214NamePanelPatch()) {
+        var code214NamePanelPatchProbeCount = 0;
+        var code214NamePanelPatchProbe = setInterval(function () {
+          code214NamePanelPatchProbeCount += 1;
+          if (installCode214NamePanelPatch() || code214NamePanelPatchProbeCount >= 40) clearInterval(code214NamePanelPatchProbe);
+        }, 500);
       }
       if (window.Main && Main.prototype && Main.prototype.setGameConfig && !Main.prototype.__runnerPatched) {
         var originalSetGameConfig = Main.prototype.setGameConfig;
