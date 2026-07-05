@@ -67,6 +67,7 @@
         patchNewDSystem: true,
         patchFirstSceneLobbyButtons: true,
         patchInnMainButtons: true,
+        patchTitleClick: true,
         autoStartTitle: true,
         hideDebug: true,
         quietOafEvents: true,
@@ -88,6 +89,7 @@
       var playableDefaultFlags = {
         patchFirstSceneLobbyButtons: true,
         patchInnMainButtons: true,
+        patchTitleClick: true,
         quietOafEvents: true,
         stubPropShop: true,
         stubInitialVitals: true,
@@ -489,20 +491,31 @@
         var showEvent = line.currentShowEvent || null;
         var key = window.__runnerLocalSaveKey(slot);
         var displayName = '\u5ba2\u6808';
+        var rawStoryId = line.storyId;
+        var rawPos = line.pos;
+        var rawCode = event && event.Code;
+        var restoreStoryId = rawStoryId;
+        var restorePos = rawPos;
+        if (rawStoryId === 15 && rawPos >= 648 && rawPos <= 1190) {
+          restorePos = 648;
+        }
         var payload = {
           format: 'runner-local-save-v1',
           savedAt: (new Date()).toISOString(),
           guid: guid,
           version: ver,
           slot: slot || 0,
-          storyId: line.storyId,
+          storyId: restoreStoryId,
           storyName: line.storyName || story && story.Name || '',
           displayName: displayName,
-          pos: line.pos,
-          code: event && event.Code,
+          pos: restorePos,
+          code: rawCode,
+          rawStoryId: rawStoryId,
+          rawPos: rawPos,
+          rawCode: rawCode,
           currentLinks: line.currentLinks ? Array.prototype.slice.call(line.currentLinks) : (event && event.links ? Array.prototype.slice.call(event.links) : []),
           showEventButtonsLength: showEvent && showEvent.buttons ? showEvent.buttons.length : 0,
-          note: 'lightweight runner save; restores story position through jumpStoryCallBack/jumpToIndex'
+          note: 'lightweight runner save; restores story position through a visual-safe jump anchor'
         };
         localStorage.setItem(key, JSON.stringify(payload));
         logLine('RUNNER LOCAL SAVE ' + JSON.stringify({
@@ -1606,6 +1619,66 @@
         };
         Main.prototype.__runnerPatched = true;
       }
+      if (!window.__runnerHideTitleViewOverlay) {
+        window.__runnerHideTitleViewOverlay = function (reason) {
+          try {
+            if (!window.UIManager || !UIManager.getInstance) return false;
+            var ui = UIManager.getInstance();
+            var layer = ui && ui.gameSystemUILayer;
+            if (!layer || !layer._childs) return false;
+            var hasTitleTexture = function (node) {
+              if (!node) return false;
+              try {
+                var url = node._bitmap && node._bitmap.source && (node._bitmap.source.url || node._bitmap.source._url)
+                  || node.texture && (node.texture.url || node.texture._url)
+                  || node.skin
+                  || '';
+                url = String(url || '');
+                if (url.indexOf('/shareres/73/7343317c521796fcc02d77401212663c') !== -1) return true;
+                if (url.indexOf('res/logo/960x540.jpg') !== -1) return true;
+              } catch (textureCheckError) {}
+              if (node._childs) {
+                for (var i = 0; i < node._childs.length; i++) {
+                  if (hasTitleTexture(node._childs[i])) return true;
+                }
+              }
+              return false;
+            };
+            var removed = 0;
+            for (var childIndex = layer._childs.length - 1; childIndex >= 0; childIndex--) {
+              var child = layer._childs[childIndex];
+              if (!hasTitleTexture(child)) continue;
+              if (child && child.parent && typeof child.parent.removeChild === 'function') child.parent.removeChild(child);
+              else if (child && typeof child.removeSelf === 'function') child.removeSelf();
+              if (child) child.visible = false;
+              removed += 1;
+            }
+            if (removed) logLine('TITLE VIEW OVERLAY HIDDEN ' + JSON.stringify({ reason: reason || '', removed: removed }));
+            return removed > 0;
+          } catch (hideTitleOverlayError) {
+            logLine('TITLE VIEW OVERLAY HIDE ERROR ' + (hideTitleOverlayError && (hideTitleOverlayError.stack || hideTitleOverlayError.message) || hideTitleOverlayError));
+            return false;
+          }
+        };
+      }
+      if (!window.__runnerTitleOverlayHideWatchStarted) {
+        window.__runnerTitleOverlayHideWatchStarted = true;
+        var titleOverlayHideWatchCount = 0;
+        var titleOverlayHideWatch = setInterval(function () {
+          titleOverlayHideWatchCount += 1;
+          try {
+            var gd = window.GloableData && GloableData.getInstance ? GloableData.getInstance() : null;
+            if (gd && gd.currentLine && window.__runnerHideTitleViewOverlay) {
+              window.__runnerHideTitleViewOverlay('watch');
+            }
+          } catch (titleOverlayHideWatchError) {
+            if (titleOverlayHideWatchCount === 1 || titleOverlayHideWatchCount % 20 === 0) {
+              logLine('TITLE VIEW OVERLAY WATCH ERROR ' + (titleOverlayHideWatchError && (titleOverlayHideWatchError.stack || titleOverlayHideWatchError.message) || titleOverlayHideWatchError));
+            }
+          }
+          if (titleOverlayHideWatchCount >= 80) clearInterval(titleOverlayHideWatch);
+        }, 250);
+      }
       var installTitleEntryPatch = function () {
         if (!hasQueryFlag('autoStartTitle') && !hasQueryFlag('patchTitleClick')) return;
         if (window.__runnerTitleEntryPatchInstalled) return;
@@ -1630,6 +1703,7 @@
             if (window.UIManager && UIManager.getInstance && window.view && view.TitleUIMediator) {
               UIManager.getInstance().closeView(view.TitleUIMediator.NAME, false);
             }
+            if (window.__runnerHideTitleViewOverlay) window.__runnerHideTitleViewOverlay(label + ' close');
           } catch (closeTitleError) {
             logLine(label + ' close title error ' + (closeTitleError && closeTitleError.message || closeTitleError));
           }
@@ -1637,6 +1711,9 @@
             gd.dGameSystem.varsEx.loadExData(!!gd.isFreeLimit);
           }
           gd.iMain.jumpStoryCallBack(system.StartStoryId);
+          setTimeout(function () {
+            if (window.__runnerHideTitleViewOverlay) window.__runnerHideTitleViewOverlay(label + ' post-jump');
+          }, 0);
         };
         var scheduleAutoStart = function (reason) {
           if (!hasQueryFlag('autoStartTitle') || window.__runnerTitleAutoStartScheduled || hasCurrentLine()) return;
@@ -1959,12 +2036,16 @@
             window.__runnerTitleStoryStarted = true;
             logLine(label + ' storyId=' + system.StartStoryId);
             UIManager.getInstance().closeView(view.TitleUIMediator.NAME, false);
+            if (window.__runnerHideTitleViewOverlay) window.__runnerHideTitleViewOverlay(label + ' close');
             if (GloableData.getInstance().isFreeLimit) {
               GloableData.getInstance().dGameSystem.varsEx.loadExData(true);
             } else {
               GloableData.getInstance().dGameSystem.varsEx.loadExData();
             }
             GloableData.getInstance().iMain.jumpStoryCallBack(system.StartStoryId);
+            setTimeout(function () {
+              if (window.__runnerHideTitleViewOverlay) window.__runnerHideTitleViewOverlay(label + ' post-jump');
+            }, 0);
           };
           var autoStartTitle = function () {
             if (!hasQueryFlag('autoStartTitle')) return;
@@ -3099,7 +3180,7 @@
             try {
               if (!hasQueryFlag('autoNewbieChestChoice')) return;
               var event = line && (line.currentEvent || (line.story && line.story.events && line.pos !== undefined && line.story.events[line.pos])) || null;
-              if (!line || line.storyId !== 1 || (line.pos !== 2126 && line.pos !== 2127) || !event || event.Code !== 204 || !line.currentShowEvent || !line.currentShowEvent.finish) return;
+              if (!line || line.storyId !== 1 || (line.pos !== 2126 && line.pos !== 2127 && line.pos !== 2153) || !event || event.Code !== 204 || !line.currentShowEvent || !line.currentShowEvent.finish) return;
               var buttons = line.currentShowEvent.buttons || [];
               if (buttons.length !== 1) return;
               var button = buttons[0];
@@ -3611,6 +3692,53 @@
             });
             logLine('newbie chest hit proxy enabled');
           };
+          var installFirstSceneLobbyHitProxy = function () {
+            if (!hasQueryFlag('patchFirstSceneLobbyButtons') || window.__runnerFirstSceneLobbyHitProxyPatched) return;
+            if (!window.Laya || !Laya.stage) return;
+            window.__runnerFirstSceneLobbyHitProxyPatched = true;
+            var lobbyBoxes = [
+              { x: 470, y: 388, w: 132, h: 50 },
+              { x: 605, y: 388, w: 132, h: 50 },
+              { x: 740, y: 388, w: 132, h: 50 },
+              { x: 555, y: 100, w: 132, h: 50 },
+              { x: 655, y: 100, w: 132, h: 50 },
+              { x: 755, y: 100, w: 132, h: 50 }
+            ];
+            var insideBox = function (x, y, box) {
+              return x >= box.x && x <= box.x + box.w && y >= box.y && y <= box.y + box.h;
+            };
+            Laya.stage.on(window.OEvent && OEvent.MOUSE_DOWN || 'mousedown', null, function (event) {
+              try {
+                var gd = window.GloableData && GloableData.getInstance ? GloableData.getInstance() : null;
+                var line = gd && gd.currentLine || null;
+                if (!line || line.storyId !== 1 || line.pos !== 7) return;
+                var showEvent = line.currentShowEvent || null;
+                if (!showEvent || !showEvent.finish) return;
+                var x = Laya.stage.mouseX;
+                var y = Laya.stage.mouseY;
+                for (var choiceIndex = 0; choiceIndex < lobbyBoxes.length; choiceIndex++) {
+                  if (!insideBox(x, y, lobbyBoxes[choiceIndex])) continue;
+                  var now = Date.now ? Date.now() : new Date().getTime();
+                  if (window.__runnerFirstSceneLobbyHitProxyAt && now - window.__runnerFirstSceneLobbyHitProxyAt < 600) return;
+                  window.__runnerFirstSceneLobbyHitProxyAt = now;
+                  var button = showEvent.buttons && showEvent.buttons[choiceIndex];
+                  logLine('PATCH FIRST SCENE LOBBY HIT PROXY ' + JSON.stringify({
+                    choiceIndex: choiceIndex,
+                    x: x,
+                    y: y,
+                    buttonIndex: button && button.index,
+                    linePos: line.pos
+                  }));
+                  showEvent.finish(choiceIndex);
+                  if (event && event.stopPropagation) event.stopPropagation();
+                  return;
+                }
+              } catch (lobbyProxyError) {
+                logLine('PATCH FIRST SCENE LOBBY HIT PROXY ERROR ' + (lobbyProxyError && (lobbyProxyError.stack || lobbyProxyError.message) || lobbyProxyError));
+              }
+            });
+            logLine('first scene lobby hit proxy enabled');
+          };
           var maybeStubInitialVitals = function () {
             if (!hasQueryFlag('stubInitialVitals') || window.__runnerInitialVitalsStubbed) return;
             try {
@@ -3738,6 +3866,7 @@
               maybeAutoPreMainCode214Close(line);
               installSCUIButtonHitPatch();
               installNewbieChestHitProxy();
+              installFirstSceneLobbyHitProxy();
               probeAutoNameChoiceState(line);
               maybeDebugJumpStory(line, iMain);
               patchFirstSceneLobbyButtonsNow(line);
