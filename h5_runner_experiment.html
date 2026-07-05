@@ -2836,11 +2836,116 @@
               logLine('AUTO NEWBIE CHEST CHOICE ERROR ' + (autoNewbieChestChoiceError && (autoNewbieChestChoiceError.stack || autoNewbieChestChoiceError.message) || autoNewbieChestChoiceError));
             }
           };
+          var cleanupNewbieChestResidue = function (line) {
+            try {
+              if (!line || line.storyId !== 44 || line.pos > 80 || window.__runnerNewbieChestResidueCleaned) return false;
+              var ui = window.UIManager && UIManager.getInstance ? UIManager.getInstance() : null;
+              var layer = ui && ui.backgroundLayer || null;
+              var targetMd5s = [
+                'aff7ce8227c9d36a0af2e8ce379827b3',
+                '641ca6bf1d556dfda219acb61688910f',
+                'd7bdc00088102c36aa1e54d615b1e651',
+                '5443241bd581273f7d9975ba7cd6f716',
+                '2284dceb90fb25a0f79d9519c00ca7fd'
+              ];
+              var targetNames = [
+                '创建人物/宝箱',
+                '创建人物\\宝箱',
+                '美食背景旋转光_540'
+              ];
+              var canUseEarlyChestIds = line.pos <= 50;
+              var targetImageIds = { 4: true, 10: true, 11: true };
+              var addHint = function (parts, value) {
+                if (value !== null && value !== undefined && value !== '') parts.push(String(value));
+              };
+              var nodeHint = function (node) {
+                var parts = [];
+                try {
+                  addHint(parts, node && node.url);
+                  addHint(parts, node && node.path);
+                  addHint(parts, node && node.oaf2Path);
+                  addHint(parts, node && node.source);
+                  addHint(parts, node && node.skin);
+                  addHint(parts, node && node.name);
+                  addHint(parts, node && node.__runnerResourceUrl);
+                  addHint(parts, node && node.__runnerInnMainBackgroundUrl);
+                  addHint(parts, node && node.texture && (node.texture.url || node.texture._url));
+                  addHint(parts, node && node._texture && (node._texture.url || node._texture._url));
+                  addHint(parts, node && node.bitmap && node.bitmap.url);
+                  addHint(parts, node && node._bitmap && node._bitmap.url);
+                  addHint(parts, node && node._bitmap && node._bitmap.source && (node._bitmap.source.url || node._bitmap.source._url));
+                  addHint(parts, node && node.graphics && node.graphics._one && node.graphics._one.texture && (node.graphics._one.texture.url || node.graphics._one.texture._url));
+                  addHint(parts, node && node._graphics && node._graphics._one && node._graphics._one.texture && (node._graphics._one.texture.url || node._graphics._one.texture._url));
+                } catch (hintError) {}
+                return parts.join(' ');
+              };
+              var isTarget = function (node) {
+                var hint = nodeHint(node).replace(/\\/g, '/').toLowerCase();
+                for (var md5Index = 0; md5Index < targetMd5s.length; md5Index++) {
+                  if (hint.indexOf(targetMd5s[md5Index]) !== -1) return true;
+                }
+                for (var nameIndex = 0; nameIndex < targetNames.length; nameIndex++) {
+                  if (hint.indexOf(targetNames[nameIndex].replace(/\\/g, '/').toLowerCase()) !== -1) return true;
+                }
+                return false;
+              };
+              var isTargetImageId = function (node) {
+                if (!canUseEarlyChestIds || !node) return false;
+                var imageId = node.id !== undefined ? node.id : node.bgId;
+                return targetImageIds[String(imageId)] === true;
+              };
+              var hideNode = function (node) {
+                if (!node) return false;
+                if (node.__runnerNewbieChestResidueRemoved) return false;
+                node.__runnerNewbieChestResidueRemoved = true;
+                try { node.visible = false; } catch (visibleError) {}
+                try { node.alpha = 0; } catch (alphaError) {}
+                try {
+                  if (node.parent && typeof node.parent.removeChild === 'function') node.parent.removeChild(node);
+                  else if (typeof node.removeSelf === 'function') node.removeSelf();
+                } catch (removeError) {}
+                return true;
+              };
+              var removed = 0;
+              var imageValues = layer && layer.imageList && layer.imageList.values ? layer.imageList.values() : [];
+              for (var imageIndex = 0; imageIndex < imageValues.length; imageIndex++) {
+                if ((isTarget(imageValues[imageIndex]) || isTargetImageId(imageValues[imageIndex])) && hideNode(imageValues[imageIndex])) removed += 1;
+              }
+              var visit = function (node, depth) {
+                if (!node || depth > 8) return;
+                if (isTarget(node)) {
+                  if (hideNode(node)) removed += 1;
+                  return;
+                }
+                var childCount = 0;
+                try { childCount = node.numChildren || 0; } catch (childCountError) {}
+                if (childCount && typeof node.getChildAt === 'function') {
+                  for (var childIndex = childCount - 1; childIndex >= 0; childIndex--) {
+                    visit(node.getChildAt(childIndex), depth + 1);
+                  }
+                }
+                var childList = node._childs || node._children || node.children || [];
+                for (var listIndex = childList.length - 1; listIndex >= 0; listIndex--) {
+                  visit(childList[listIndex], depth + 1);
+                }
+              };
+              visit(layer, 0);
+              if (window.Laya && Laya.stage) visit(Laya.stage, 0);
+              if (removed) {
+                window.__runnerNewbieChestResidueCleaned = true;
+                logLine('NEWBIE CHEST RESIDUE CLEANED ' + JSON.stringify({ storyId: line.storyId, pos: line.pos, removed: removed }));
+              }
+              return removed > 0;
+            } catch (cleanupNewbieChestResidueError) {
+              logLine('NEWBIE CHEST RESIDUE CLEAN ERROR ' + (cleanupNewbieChestResidueError && (cleanupNewbieChestResidueError.stack || cleanupNewbieChestResidueError.message) || cleanupNewbieChestResidueError));
+              return false;
+            }
+          };
           var maybeAutoInitialContinueButton = function (line) {
             try {
               if (!hasQueryFlag('autoNewbieChestChoice')) return;
               var event = line && (line.currentEvent || (line.story && line.story.events && line.pos !== undefined && line.story.events[line.pos])) || null;
-              if (!line || line.storyId !== 1 || (line.pos !== 2126 && line.pos !== 2127) || !event || event.Code !== 204 || !line.currentShowEvent || !line.currentShowEvent.finish) return;
+              if (!line || line.storyId !== 1 || (line.pos !== 2126 && line.pos !== 2127 && line.pos !== 2153 && line.pos !== 2154 && line.pos !== 2179 && line.pos !== 2180) || !event || event.Code !== 204 || !line.currentShowEvent || !line.currentShowEvent.finish) return;
               var buttons = line.currentShowEvent.buttons || [];
               if (buttons.length !== 1) return;
               var button = buttons[0];
@@ -3544,6 +3649,7 @@
               maybeAutoPreMainCode214Close(line);
               if (!window.__runnerTitleViewOverlayHiddenOnce && window.__runnerHideTitleViewOverlay) window.__runnerHideTitleViewOverlay('story-state');
               ensureInnMainBackground(line, backgroundLayer);
+              cleanupNewbieChestResidue(line);
               installSCUIButtonHitPatch();
               installNewbieChestHitProxy();
               probeAutoNameChoiceState(line);
