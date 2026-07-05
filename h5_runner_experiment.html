@@ -2,6 +2,9 @@
 <html>
 <head>
   <meta charset="utf-8">
+  <meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate, max-age=0">
+  <meta http-equiv="Pragma" content="no-cache">
+  <meta http-equiv="Expires" content="0">
   <base href="https://c2.cgyouxi.com/website/hfplayer/v2/bin/">
   <title>66RPG H5 Runner Experiment</title>
   <meta name="viewport" content="width=device-width,initial-scale=1.0,minimum-scale=1.0,maximum-scale=1.0,user-scalable=no">
@@ -943,6 +946,63 @@
         var saveFileMenuBridgeProbe = setInterval(function () {
           saveFileMenuBridgeProbeCount += 1;
           if (installSaveFileMenuBridge() || saveFileMenuBridgeProbeCount >= 80) clearInterval(saveFileMenuBridgeProbe);
+        }, 500);
+      }
+      if (!window.__runnerSaveFileOpenViewHealStarted) {
+        window.__runnerSaveFileOpenViewHealStarted = true;
+        window.__runnerHealOpenSaveFileView = function (reason) {
+          try {
+            if (!window.UIManager || !UIManager.getInstance || !window.view || !view.SaveFileUIMediator) return false;
+            var ui = UIManager.getInstance();
+            var saveFileView = ui.getViewByName(view.SaveFileUIMediator.NAME);
+            if (!saveFileView || saveFileView.__runnerSaveFileSelfHealing) return false;
+            var gd = window.GloableData && GloableData.getInstance ? GloableData.getInstance() : null;
+            var system = gd && gd.gameMainData && gd.gameMainData.System || null;
+            var saveData = system && system.SaveData || null;
+            var cells = saveFileView.itemList && saveFileView.itemList.cells || [];
+            var brokenConfig = saveData && (
+              saveData.backButton && saveData.backButton.index !== 18 ||
+              saveData.closeButton && saveData.closeButton.index !== 16 ||
+              saveData.previousPageButton && saveData.previousPageButton.index !== 42 ||
+              saveData.nextPageButton && saveData.nextPageButton.index !== 43
+            );
+            var brokenView = !saveFileView.__runnerSaveFilePaged || !saveFileView.itemList || cells.length !== 6;
+            if (!brokenConfig && !brokenView) {
+              if (window.__runnerApplySaveFileDataToView) window.__runnerApplySaveFileDataToView(saveFileView);
+              return false;
+            }
+            if (typeof normalizeSaveFileUiConfig === 'function') normalizeSaveFileUiConfig(system, 'open-view-heal:' + (reason || ''));
+            var isSave = !!saveFileView.isSave;
+            saveFileView.__runnerSaveFileSelfHealing = true;
+            try {
+              ui.closeView(view.SaveFileUIMediator.NAME, false);
+            } catch (closeHealError) {}
+            setTimeout(function () {
+              try {
+                if (window.__runnerOpenSaveFileView) window.__runnerOpenSaveFileView(isSave, 'self-heal:' + (reason || ''));
+              } catch (openHealError) {
+                logLine('RUNNER SAVE FILE SELF HEAL OPEN ERROR ' + (openHealError && (openHealError.stack || openHealError.message) || openHealError));
+              }
+            }, 0);
+            logLine('RUNNER SAVE FILE SELF HEAL ' + JSON.stringify({
+              reason: reason || '',
+              brokenConfig: !!brokenConfig,
+              brokenView: !!brokenView,
+              cells: cells.length
+            }));
+            return true;
+          } catch (healError) {
+            logLine('RUNNER SAVE FILE SELF HEAL ERROR ' + (healError && (healError.stack || healError.message) || healError));
+            return false;
+          }
+        };
+        var saveFileOpenViewHealCount = 0;
+        var saveFileOpenViewHealTimer = setInterval(function () {
+          saveFileOpenViewHealCount += 1;
+          try {
+            if (window.__runnerHealOpenSaveFileView) window.__runnerHealOpenSaveFileView('timer');
+          } catch (timerHealError) {}
+          if (saveFileOpenViewHealCount >= 240) clearInterval(saveFileOpenViewHealTimer);
         }, 500);
       }
     }
