@@ -1291,7 +1291,7 @@
           try {
             var gd = window.GloableData && GloableData.getInstance ? GloableData.getInstance() : null;
             var line = gd && gd.currentLine || null;
-            if (!line || line.storyId !== 1 || line.pos !== 7) return false;
+            if (!line) return false;
             if (!window.UIManager || !UIManager.getInstance) return false;
             var ui = UIManager.getInstance();
             var layer = ui && ui.gameSystemUILayer;
