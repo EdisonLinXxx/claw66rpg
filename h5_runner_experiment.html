@@ -56,7 +56,12 @@
       var params = new URLSearchParams(window.location.search);
       var value = params.get(name);
       if (value !== null) return value === '1';
-      var isDefaultPlayMode = window.location.search === '' || params.get('runId') === 'play' || params.get('play') === '1';
+      var isDefaultPlayMode = params.get('raw') !== '1' && (
+        window.location.search === '' ||
+        params.get('runId') === 'play' ||
+        params.get('play') === '1' ||
+        !params.has('runId')
+      );
       var defaultPlayFlags = {
         localRes: true,
         patchNewDSystem: true,
@@ -540,6 +545,22 @@
           pos: data.pos,
           code: data.code
         }));
+        if (!hasQueryFlag('restoreInPlace')) {
+          try {
+            var restoreUrl = new URL(window.location.href);
+            restoreUrl.searchParams.delete('clearStorage');
+            restoreUrl.searchParams.set('runId', 'restore_' + String(Date.now()));
+            restoreUrl.searchParams.set('debugJumpStoryId', String(data.storyId));
+            restoreUrl.searchParams.set('debugJumpIndex', String(data.pos));
+            restoreUrl.searchParams.set('debugJumpNoEventFinish', '1');
+            setTimeout(function () {
+              window.location.replace(restoreUrl.toString());
+            }, 0);
+            return { ok: true, key: info.key, data: data, mode: 'reload' };
+          } catch (restoreUrlError) {
+            logLine('RUNNER LOCAL RESTORE RELOAD ERROR ' + (restoreUrlError && (restoreUrlError.stack || restoreUrlError.message) || restoreUrlError));
+          }
+        }
         targetLine.jumpStoryCallBack(data.storyId, function () {
           try {
             var latestGd = window.GloableData && GloableData.getInstance ? GloableData.getInstance() : null;
@@ -554,7 +575,7 @@
             logLine('RUNNER LOCAL RESTORE JUMP ERROR ' + (jumpError && (jumpError.stack || jumpError.message) || jumpError));
           }
         });
-        return { ok: true, key: info.key, data: data };
+        return { ok: true, key: info.key, data: data, mode: 'in-place' };
       };
       logLine('runner local save helpers installed');
     }
@@ -2888,7 +2909,7 @@
                   innMainEvent.Argv = getInnMainButtonArgv();
                   innMainEvent.links = getInnMainButtonLinks();
                   line.currentLinks = innMainEvent.links.slice();
-                  if (line.currentEvent === innMainEvent || !line.currentEvent || line.currentEvent.Code === 204) line.currentEvent = innMainEvent;
+                  line.currentEvent = innMainEvent;
                   logLine('PATCH INN MAIN BUTTONS FORCE ' + JSON.stringify({ oldArgv: oldInnMainArgv, newArgv: innMainEvent.Argv, newLinks: innMainEvent.links, branchVisible: innMainEvent.Argv.length > 11 }));
                 }
                 return;
