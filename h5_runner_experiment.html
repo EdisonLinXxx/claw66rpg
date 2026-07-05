@@ -675,6 +675,7 @@
       };
       window.__runnerOpenSaveFileView = function (isSave, label) {
         try {
+          window.__runnerSaveFileOpenRequested = true;
           var gd = window.GloableData && GloableData.getInstance ? GloableData.getInstance() : null;
           if (gd) gd.isCloud = false;
           if (window.view && view.SCustomUI && view.SCustomUI.getInstance) view.SCustomUI.getInstance().hideUI();
@@ -694,9 +695,9 @@
                 try {
                   var delayedSaveFileView = UIManager.getInstance().getViewByName(view.SaveFileUIMediator.NAME);
                   if (window.__runnerApplySaveFileDataToView) window.__runnerApplySaveFileDataToView(delayedSaveFileView);
+                  if (window.__runnerHealOpenSaveFileView) window.__runnerHealOpenSaveFileView('open:' + (label || ''));
                 } catch (delayedApplySaveFileDataError) {}
-              }, 0);
-              if (window.__runnerScheduleSaveFileViewHeal) window.__runnerScheduleSaveFileViewHeal('open:' + (label || ''));
+              }, 120);
             } catch (applyOpenSaveFileDataError) {
               logLine('RUNNER OPEN SAVE FILE VIEW DATA ERROR ' + (applyOpenSaveFileDataError && (applyOpenSaveFileDataError.stack || applyOpenSaveFileDataError.message) || applyOpenSaveFileDataError));
             }
@@ -707,15 +708,6 @@
           logLine('RUNNER OPEN SAVE FILE VIEW ERROR ' + (openSaveFileViewError && (openSaveFileViewError.stack || openSaveFileViewError.message) || openSaveFileViewError));
           return false;
         }
-      };
-      window.__runnerScheduleSaveFileViewHeal = function (reason) {
-        [350, 900, 1800, 2600].forEach(function (delay) {
-          setTimeout(function () {
-            try {
-              if (window.__runnerHealOpenSaveFileView) window.__runnerHealOpenSaveFileView(reason || 'scheduled');
-            } catch (scheduleHealError) {}
-          }, delay);
-        });
       };
       window.__runnerSetOText = function (target, text) {
         if (!target) return;
@@ -831,51 +823,13 @@
             } catch (menuBridgeError) {
               logLine('RUNNER SAVE FILE MENU BRIDGE ERROR ' + (menuBridgeError && (menuBridgeError.stack || menuBridgeError.message) || menuBridgeError));
             }
-            var dispatchResult = originalDispatchEventForSaveFileMenu.apply(this, arguments);
-            try {
-              if (event && event.type === GameEventConstant.CLICK_SCUI_BUTTON && window.__runnerScheduleSaveFileViewHeal) {
-                window.__runnerScheduleSaveFileViewHeal('menu-dispatch');
-              }
-            } catch (menuDispatchHealError) {}
-            return dispatchResult;
+            return originalDispatchEventForSaveFileMenu.apply(this, arguments);
           };
           EventCenter.dispatchEvent.__runnerSaveFileMenuBridgePatched = true;
           logLine('runner save file menu bridge enabled');
           return true;
         } catch (installMenuBridgeError) {
           logLine('RUNNER SAVE FILE MENU BRIDGE INSTALL ERROR ' + (installMenuBridgeError && (installMenuBridgeError.stack || installMenuBridgeError.message) || installMenuBridgeError));
-          return false;
-        }
-      };
-      var installSaveFileShowViewWatch = function () {
-        try {
-          if (!window.UIManager || !UIManager.getInstance || !window.view || !view.SaveFileUIMediator) return false;
-          var ui = UIManager.getInstance();
-          if (!ui || typeof ui.showView !== 'function') return false;
-          if (ui.showView.__runnerSaveFileShowViewWatched) return true;
-          var originalShowViewForSaveFile = ui.showView;
-          ui.showView = function (viewObj, viewName) {
-            var result = originalShowViewForSaveFile.apply(this, arguments);
-            try {
-              var saveName = window.view && view.SaveFileUIMediator && view.SaveFileUIMediator.NAME;
-              var isSaveFileView = viewName === saveName || (window.view && view.SaveFileUI && viewObj instanceof view.SaveFileUI);
-              if (isSaveFileView && window.__runnerScheduleSaveFileViewHeal) {
-                var now = Date.now ? Date.now() : new Date().getTime();
-                if (viewObj) viewObj.__runnerSaveFileShownAt = now;
-                try {
-                  var liveSaveView = UIManager.getInstance().getViewByName(saveName);
-                  if (liveSaveView) liveSaveView.__runnerSaveFileShownAt = now;
-                } catch (markLiveSaveViewError) {}
-                window.__runnerScheduleSaveFileViewHeal('showView:' + (viewName || ''));
-              }
-            } catch (showViewHealError) {}
-            return result;
-          };
-          ui.showView.__runnerSaveFileShowViewWatched = true;
-          logLine('runner save file showView watcher enabled');
-          return true;
-        } catch (showViewWatchError) {
-          logLine('RUNNER SAVE FILE SHOWVIEW WATCH ERROR ' + (showViewWatchError && (showViewWatchError.stack || showViewWatchError.message) || showViewWatchError));
           return false;
         }
       };
@@ -887,6 +841,7 @@
             var originalInit = saveUIProto.init;
             if (typeof originalInit === 'function') {
               saveUIProto.init = function () {
+                window.__runnerSaveFileOpenRequested = true;
                 normalizeSaveFileUiConfig(null, 'SaveFileUI.init');
                 var saveData = null;
                 var originalMax = null;
@@ -1015,7 +970,6 @@
             mediatorProto.__runnerLocalSaveBridgePatched = true;
           }
           logLine('runner save file UI bridge enabled');
-          if (window.__runnerScheduleSaveFileViewHeal) window.__runnerScheduleSaveFileViewHeal('ui-patch-installed');
           return true;
         } catch (patchSaveFileUIError) {
           logLine('RUNNER SAVE FILE UI PATCH ERROR ' + (patchSaveFileUIError && (patchSaveFileUIError.stack || patchSaveFileUIError.message) || patchSaveFileUIError));
@@ -1036,17 +990,11 @@
           if (installSaveFileMenuBridge() || saveFileMenuBridgeProbeCount >= 80) clearInterval(saveFileMenuBridgeProbe);
         }, 500);
       }
-      if (!installSaveFileShowViewWatch()) {
-        var saveFileShowViewWatchProbeCount = 0;
-        var saveFileShowViewWatchProbe = setInterval(function () {
-          saveFileShowViewWatchProbeCount += 1;
-          if (installSaveFileShowViewWatch() || saveFileShowViewWatchProbeCount >= 80) clearInterval(saveFileShowViewWatchProbe);
-        }, 500);
-      }
       if (!window.__runnerSaveFileOpenViewHealStarted) {
         window.__runnerSaveFileOpenViewHealStarted = true;
         window.__runnerHealOpenSaveFileView = function (reason) {
           try {
+            if (!window.__runnerSaveFileOpenRequested) return false;
             if (!window.UIManager || !UIManager.getInstance || !window.view || !view.SaveFileUIMediator) return false;
             var ui = UIManager.getInstance();
             var saveFileView = ui.getViewByName(view.SaveFileUIMediator.NAME);
@@ -1055,31 +1003,13 @@
             var system = gd && gd.gameMainData && gd.gameMainData.System || null;
             var saveData = system && system.SaveData || null;
             var cells = saveFileView.itemList && saveFileView.itemList.cells || [];
-            var shownAt = parseFloat(saveFileView.__runnerSaveFileShownAt || 0);
-            var viewAge = shownAt ? ((Date.now ? Date.now() : new Date().getTime()) - shownAt) : 9999;
-            if (cells.length === 0 && viewAge < 700) return false;
             var brokenConfig = saveData && (
               saveData.backButton && saveData.backButton.index !== 18 ||
               saveData.closeButton && saveData.closeButton.index !== 16 ||
               saveData.previousPageButton && saveData.previousPageButton.index !== 42 ||
               saveData.nextPageButton && saveData.nextPageButton.index !== 43
             );
-            var cellLayoutBroken = false;
-            try {
-              if (cells.length === 6) {
-                var itemArrayLen = saveFileView.itemList && saveFileView.itemList.array && saveFileView.itemList.array.length;
-                var firstCell = cells[0];
-                var secondCell = cells[1];
-                var fourthCell = cells[3];
-                cellLayoutBroken = itemArrayLen !== 6 ||
-                  !firstCell || !firstCell._childs || firstCell._childs.length < 4 ||
-                  !secondCell || Math.abs((secondCell.x || 0) - (firstCell.x || 0)) < 120 ||
-                  !fourthCell || Math.abs((fourthCell.y || 0) - (firstCell.y || 0)) < 100;
-              }
-            } catch (cellLayoutCheckError) {
-              cellLayoutBroken = true;
-            }
-            var brokenView = !saveFileView.__runnerSaveFilePaged || !saveFileView.itemList || cells.length !== 6 || cellLayoutBroken;
+            var brokenView = !saveFileView.__runnerSaveFilePaged || !saveFileView.itemList || cells.length !== 6;
             if (!brokenConfig && !brokenView) {
               if (window.__runnerApplySaveFileDataToView) window.__runnerApplySaveFileDataToView(saveFileView);
               return false;
@@ -1101,7 +1031,6 @@
               reason: reason || '',
               brokenConfig: !!brokenConfig,
               brokenView: !!brokenView,
-              cellLayoutBroken: !!cellLayoutBroken,
               cells: cells.length
             }));
             return true;
@@ -1110,14 +1039,6 @@
             return false;
           }
         };
-        var saveFileOpenViewHealCount = 0;
-        var saveFileOpenViewHealTimer = setInterval(function () {
-          saveFileOpenViewHealCount += 1;
-          try {
-            if (window.__runnerHealOpenSaveFileView) window.__runnerHealOpenSaveFileView('timer');
-          } catch (timerHealError) {}
-          if (saveFileOpenViewHealCount >= 240) clearInterval(saveFileOpenViewHealTimer);
-        }, 500);
       }
     }
     logLine('starting game init');
