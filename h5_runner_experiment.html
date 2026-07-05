@@ -59,7 +59,7 @@
         patchNewDSystem: true,
         patchFirstSceneLobbyButtons: true,
         patchInnMainButtons: true,
-        autoStartTitle: true,
+        patchTitleClick: true,
         hideDebug: true,
         quietOafEvents: true,
         stubPropShop: true,
@@ -1286,6 +1286,78 @@
         };
         Main.prototype.__runnerPatched = true;
       }
+      var hideTitlePageReturnButton = function (reason) {
+        try {
+          if (!window.Laya || !Laya.stage) return false;
+          var gd = window.GloableData && GloableData.getInstance ? GloableData.getInstance() : null;
+          if (gd && gd.currentLine) return false;
+          var titleMd5 = '7343317c521796fcc02d77401212663c';
+          var returnMd5s = [
+            'a8960086d87d7d441a29d281a0cde38c',
+            'f6315584df310dbd0ccf1130e544bb1b'
+          ];
+          var nodeHint = function (node) {
+            try {
+              return String(
+                node && (
+                  node.skin ||
+                  node._skin ||
+                  node.url ||
+                  node._url ||
+                  node.texture && (node.texture.url || node.texture._url) ||
+                  node._bitmap && node._bitmap.source && (node._bitmap.source.url || node._bitmap.source._url) ||
+                  ''
+                ) || ''
+              );
+            } catch (hintError) {
+              return '';
+            }
+          };
+          var hasTitleTexture = false;
+          var returnNodes = [];
+          var scan = function (node, depth) {
+            if (!node || depth > 8) return;
+            var hint = nodeHint(node).toLowerCase();
+            if (hint.indexOf(titleMd5) !== -1) hasTitleTexture = true;
+            for (var md5Index = 0; md5Index < returnMd5s.length; md5Index++) {
+              if (hint.indexOf(returnMd5s[md5Index]) !== -1) returnNodes.push(node);
+            }
+            var children = node._childs || node._children || node.children || [];
+            for (var childIndex = 0; childIndex < children.length; childIndex++) {
+              scan(children[childIndex], depth + 1);
+            }
+          };
+          scan(Laya.stage, 0);
+          if (!hasTitleTexture || !returnNodes.length) return false;
+          var hidden = 0;
+          for (var nodeIndex = 0; nodeIndex < returnNodes.length; nodeIndex++) {
+            var node = returnNodes[nodeIndex];
+            var parent = node && node.parent;
+            while (parent && parent.parent && parent.width <= 100 && parent.height <= 120 && parent.x <= 120 && parent.y <= 120) {
+              node = parent;
+              parent = parent.parent;
+            }
+            if (!node || node.__runnerTitleReturnHidden) continue;
+            node.__runnerTitleReturnHidden = true;
+            try { node.visible = false; } catch (visibleError) {}
+            try { node.alpha = 0; } catch (alphaError) {}
+            hidden += 1;
+          }
+          if (hidden) logLine('TITLE RETURN HIDDEN ' + JSON.stringify({ reason: reason || '', hidden: hidden }));
+          return hidden > 0;
+        } catch (hideTitleReturnError) {
+          logLine('TITLE RETURN HIDE ERROR ' + (hideTitleReturnError && (hideTitleReturnError.stack || hideTitleReturnError.message) || hideTitleReturnError));
+          return false;
+        }
+      };
+      var scheduleTitlePageReturnHide = function (reason) {
+        if (!hasQueryFlag('patchTitleClick') && !hasQueryFlag('autoStartTitle')) return;
+        [0, 150, 500, 1000, 1800, 3000].forEach(function (delay) {
+          setTimeout(function () {
+            hideTitlePageReturnButton(reason || 'scheduled');
+          }, delay);
+        });
+      };
       if (!window.__runnerHideTitleViewOverlay) {
         window.__runnerHideTitleViewOverlay = function (reason) {
           try {
@@ -1439,6 +1511,7 @@
         };
         var runEntryKick = function (reason) {
           patchTitleClick();
+          scheduleTitlePageReturnHide(reason);
           scheduleAutoStart(reason);
         };
         if (window.Main && Main.prototype && !Main.prototype.__runnerTitleEntryMethodsWrapped) {
