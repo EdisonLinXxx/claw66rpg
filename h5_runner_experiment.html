@@ -1079,26 +1079,6 @@
         var patchNewCUIData = function (cuiIndex, cuiData) {
           try {
             if (!cuiData || !cuiData.controls) return;
-            var controlOpensCui = function (control, targetIndex) {
-              var events = control && control.event || [];
-              return events.some(function (event) {
-                return event && event.Code === 214 && String(event.Argv && event.Argv[0]) === String(targetIndex);
-              });
-            };
-            for (var controlIndex = 0; controlIndex < cuiData.controls.length; controlIndex++) {
-              var control = cuiData.controls[controlIndex];
-              if (cuiIndex === 495 && controlOpensCui(control, 496) && control.index === 58) {
-                control.index = 26;
-                logLine('PATCH BIRTHDAY CONFIRM BUTTON INDEX ' + JSON.stringify({ cuiIndex: cuiIndex, controlIndex: controlIndex, newIndex: control.index }));
-              }
-              if (cuiIndex === 496 && controlOpensCui(control, 497) && control.index === 27) {
-                var oldAbilityConfirm = { index: control.index, x: control.x, y: control.y };
-                control.index = 26;
-                control.x = 860;
-                control.y = 420;
-                logLine('PATCH ABILITY CONFIRM BUTTON ' + JSON.stringify({ cuiIndex: cuiIndex, controlIndex: controlIndex, old: oldAbilityConfirm, newIndex: control.index, x: control.x, y: control.y }));
-              }
-            }
           } catch (patchCuiError) {
             logLine('PATCH NEW CUI DATA ERROR ' + (patchCuiError && (patchCuiError.stack || patchCuiError.message) || patchCuiError));
           }
@@ -3856,23 +3836,29 @@
               if (resolvedIndex < 0 || resolvedIndex >= buttons.length) resolvedIndex = 0;
               return resolvedIndex;
             };
-            var applyDynamicButtonImage = function (scui, button) {
-              if (!button || !button.tag || button.tag.type !== 0 || !button.tag.isUserIndex || !button.updateButton) return false;
+            var resolveStaticButtonIndex = function (control) {
+              var gd = window.GloableData && GloableData.getInstance ? GloableData.getInstance() : null;
+              var system = gd && gd.gameMainData && gd.gameMainData.System;
+              var buttons = system && system.Buttons || [];
+              if (!control || control.type !== 0 || control.isUserIndex || !buttons.length) return NaN;
+              var rawIndex = parseInt(control.index, 10);
+              if (!isFinite(rawIndex) || rawIndex <= 0) return NaN;
+              var resolvedIndex = rawIndex - 1;
+              if (resolvedIndex < 0 || resolvedIndex >= buttons.length) return NaN;
+              return resolvedIndex;
+            };
+            var applyResolvedButtonImage = function (scui, button, resolvedIndex, tracePrefix) {
               var gd = window.GloableData && GloableData.getInstance ? GloableData.getInstance() : null;
               var buttons = gd && gd.gameMainData && gd.gameMainData.System && gd.gameMainData.System.Buttons || [];
-              var resolvedIndex = resolveDynamicButtonIndex(button.tag);
               if (!isFinite(resolvedIndex) || !buttons[resolvedIndex]) return false;
               var systemButton = buttons[resolvedIndex];
               var buttonBaseUrl = scui && scui._btn_url || 'graphics/button/';
               var image1 = systemButton.image1 && systemButton.image1.name ? (buttonBaseUrl + systemButton.image1.name) : '';
               var image2 = systemButton.image2 && systemButton.image2.name ? (buttonBaseUrl + systemButton.image2.name) : '';
-              if (hasQueryFlag('traceNewCuiDynamicButtons') && (window.__runnerDynamicButtonPatchLogCount || 0) < 20) {
+              if (hasQueryFlag('traceNewCuiDynamicButtons') && (window.__runnerDynamicButtonPatchLogCount || 0) < 30) {
                 window.__runnerDynamicButtonPatchLogCount = (window.__runnerDynamicButtonPatchLogCount || 0) + 1;
-                var vars = gd && gd.dGameSystem && gd.dGameSystem.vars;
-                var rawIndex = vars && vars.getVar ? parseInt(vars.getVar(button.tag.index), 10) : NaN;
-                logLine('PATCH NEW CUI DYNAMIC BUTTON ' + JSON.stringify({
-                  tagIndex: button.tag.index,
-                  rawIndex: rawIndex,
+                logLine(tracePrefix + ' ' + JSON.stringify({
+                  tagIndex: button && button.tag && button.tag.index,
                   resolvedIndex: resolvedIndex,
                   name: systemButton.name || '',
                   image1: image1,
@@ -3881,15 +3867,29 @@
               }
               if (button.image_1_url !== image1 || button.image_2_url !== image2) button.updateButton(image1, image2);
               button.visible = true;
-              button.index = button.tag.index;
               button.postion = scui.getControlPoint(button.tag);
               return true;
+            };
+            var applyDynamicButtonImage = function (scui, button) {
+              if (!button || !button.tag || button.tag.type !== 0 || !button.tag.isUserIndex || !button.updateButton) return false;
+              var resolvedIndex = resolveDynamicButtonIndex(button.tag);
+              var patched = applyResolvedButtonImage(scui, button, resolvedIndex, 'PATCH NEW CUI DYNAMIC BUTTON');
+              if (patched) button.index = button.tag.index;
+              return patched;
+            };
+            var applyStaticButtonImage = function (scui, button) {
+              if (!button || !button.tag || button.tag.type !== 0 || button.tag.isUserIndex || !button.updateButton) return false;
+              var resolvedIndex = resolveStaticButtonIndex(button.tag);
+              var patched = applyResolvedButtonImage(scui, button, resolvedIndex, 'PATCH NEW CUI STATIC BUTTON');
+              if (patched) button.index = resolvedIndex;
+              return patched;
             };
             var applyCurrentDynamicButtons = function (scui) {
               var patchedCount = 0;
               if (!scui || !scui.controlsArr) return patchedCount;
               for (var index = 0; index < scui.controlsArr.length; index++) {
                 if (applyDynamicButtonImage(scui, scui.controlsArr[index])) patchedCount++;
+                else if (applyStaticButtonImage(scui, scui.controlsArr[index])) patchedCount++;
               }
               return patchedCount;
             };
@@ -3907,8 +3907,9 @@
               var beforeCount = this.controlsArr && this.controlsArr.length || 0;
               var result = originalLoadControls.apply(this, arguments);
               try {
-                if (control && control.type === 0 && control.isUserIndex && this.controlsArr && this.controlsArr.length > beforeCount) {
-                  applyDynamicButtonImage(this, this.controlsArr[this.controlsArr.length - 1]);
+                if (control && control.type === 0 && this.controlsArr && this.controlsArr.length > beforeCount) {
+                  var newButton = this.controlsArr[this.controlsArr.length - 1];
+                  if (!applyDynamicButtonImage(this, newButton)) applyStaticButtonImage(this, newButton);
                 }
               } catch (loadPatchError) {
                 logLine('PATCH NEW CUI DYNAMIC BUTTON LOAD ERROR ' + (loadPatchError && (loadPatchError.stack || loadPatchError.message) || loadPatchError));
