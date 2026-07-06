@@ -67,6 +67,7 @@
         patchOfficialChoiceUi: true,
         patchCode214NamePanel: true,
         patchSaveFileUI: true,
+        patchNewCuiDynamicButtons: true,
         traceRuntime: true,
         traceStoryState: true
       };
@@ -82,6 +83,7 @@
         patchOfficialChoiceUi: true,
         patchCode214NamePanel: true,
         patchSaveFileUI: true,
+        patchNewCuiDynamicButtons: true,
         traceRuntime: true,
         traceStoryState: true
       };
@@ -3835,6 +3837,99 @@
               return false;
             }
           };
+          var installNewCuiDynamicButtonPatch = function () {
+            if (!hasQueryFlag('patchNewCuiDynamicButtons')) return;
+            if (window.__runnerNewCuiDynamicButtonPatched && window.__runnerApplyNewCuiDynamicButtons) return;
+            if (!window.view || !view.SCustomUI || !view.SCustomUI.prototype) return;
+            var proto = view.SCustomUI.prototype;
+            if (!proto.loadControls || !proto.updateControls) return;
+            window.__runnerNewCuiDynamicButtonPatched = true;
+            var resolveDynamicButtonIndex = function (control) {
+              var gd = window.GloableData && GloableData.getInstance ? GloableData.getInstance() : null;
+              var system = gd && gd.gameMainData && gd.gameMainData.System;
+              var vars = gd && gd.dGameSystem && gd.dGameSystem.vars;
+              var buttons = system && system.Buttons || [];
+              if (!control || control.type !== 0 || !control.isUserIndex || !vars || !vars.getVar || !buttons.length) return NaN;
+              var rawIndex = parseInt(vars.getVar(control.index), 10);
+              if (!isFinite(rawIndex) || rawIndex <= 0) return 0;
+              var resolvedIndex = rawIndex - 2;
+              if (resolvedIndex < 0 || resolvedIndex >= buttons.length) resolvedIndex = 0;
+              return resolvedIndex;
+            };
+            var applyDynamicButtonImage = function (scui, button) {
+              if (!button || !button.tag || button.tag.type !== 0 || !button.tag.isUserIndex || !button.updateButton) return false;
+              var gd = window.GloableData && GloableData.getInstance ? GloableData.getInstance() : null;
+              var buttons = gd && gd.gameMainData && gd.gameMainData.System && gd.gameMainData.System.Buttons || [];
+              var resolvedIndex = resolveDynamicButtonIndex(button.tag);
+              if (!isFinite(resolvedIndex) || !buttons[resolvedIndex]) return false;
+              var systemButton = buttons[resolvedIndex];
+              var buttonBaseUrl = scui && scui._btn_url || 'graphics/button/';
+              var image1 = systemButton.image1 && systemButton.image1.name ? (buttonBaseUrl + systemButton.image1.name) : '';
+              var image2 = systemButton.image2 && systemButton.image2.name ? (buttonBaseUrl + systemButton.image2.name) : '';
+              if (hasQueryFlag('traceNewCuiDynamicButtons') && (window.__runnerDynamicButtonPatchLogCount || 0) < 20) {
+                window.__runnerDynamicButtonPatchLogCount = (window.__runnerDynamicButtonPatchLogCount || 0) + 1;
+                var vars = gd && gd.dGameSystem && gd.dGameSystem.vars;
+                var rawIndex = vars && vars.getVar ? parseInt(vars.getVar(button.tag.index), 10) : NaN;
+                logLine('PATCH NEW CUI DYNAMIC BUTTON ' + JSON.stringify({
+                  tagIndex: button.tag.index,
+                  rawIndex: rawIndex,
+                  resolvedIndex: resolvedIndex,
+                  name: systemButton.name || '',
+                  image1: image1,
+                  previous: button.image_1_url || ''
+                }));
+              }
+              if (button.image_1_url !== image1 || button.image_2_url !== image2) button.updateButton(image1, image2);
+              button.visible = true;
+              button.index = button.tag.index;
+              button.postion = scui.getControlPoint(button.tag);
+              return true;
+            };
+            var applyCurrentDynamicButtons = function (scui) {
+              var patchedCount = 0;
+              if (!scui || !scui.controlsArr) return patchedCount;
+              for (var index = 0; index < scui.controlsArr.length; index++) {
+                if (applyDynamicButtonImage(scui, scui.controlsArr[index])) patchedCount++;
+              }
+              return patchedCount;
+            };
+            window.__runnerApplyNewCuiDynamicButtons = function () {
+              try {
+                var scui = window.view && view.SCustomUI && view.SCustomUI.getInstance ? view.SCustomUI.getInstance() : null;
+                return applyCurrentDynamicButtons(scui);
+              } catch (currentPatchError) {
+                logLine('PATCH NEW CUI DYNAMIC BUTTON CURRENT ERROR ' + (currentPatchError && (currentPatchError.stack || currentPatchError.message) || currentPatchError));
+                return 0;
+              }
+            };
+            var originalLoadControls = proto.loadControls;
+            proto.loadControls = function (control) {
+              var beforeCount = this.controlsArr && this.controlsArr.length || 0;
+              var result = originalLoadControls.apply(this, arguments);
+              try {
+                if (control && control.type === 0 && control.isUserIndex && this.controlsArr && this.controlsArr.length > beforeCount) {
+                  applyDynamicButtonImage(this, this.controlsArr[this.controlsArr.length - 1]);
+                }
+              } catch (loadPatchError) {
+                logLine('PATCH NEW CUI DYNAMIC BUTTON LOAD ERROR ' + (loadPatchError && (loadPatchError.stack || loadPatchError.message) || loadPatchError));
+              }
+              return result;
+            };
+            proto.loadControls.__runnerNewCuiDynamicButtonPatched = true;
+            var originalUpdateControls = proto.updateControls;
+            proto.updateControls = function () {
+              var result = originalUpdateControls.apply(this, arguments);
+              try {
+                applyCurrentDynamicButtons(this);
+              } catch (updatePatchError) {
+                logLine('PATCH NEW CUI DYNAMIC BUTTON UPDATE ERROR ' + (updatePatchError && (updatePatchError.stack || updatePatchError.message) || updatePatchError));
+              }
+              return result;
+            };
+            proto.updateControls.__runnerNewCuiDynamicButtonPatched = true;
+            logLine('new CUI dynamic button patch enabled');
+            window.__runnerApplyNewCuiDynamicButtons();
+          };
           var installSCUIButtonHitPatch = function () {
             if (!hasQueryFlag('patchFirstSceneLobbyButtons') || window.__runnerSCUIButtonHitPatched) return;
             if (!window.Laya || !window.view || !view.SCustomUI || !view.SCustomUI.getInstance || !window.EventCenter || !window.GameEvent || !window.GameEventConstant) return;
@@ -4098,6 +4193,8 @@
               maybeStubInitialVitals();
               maybeMarkInnMainScreenSeen(line);
               maybeAutoPreMainCode214Close(line);
+              installNewCuiDynamicButtonPatch();
+              if (window.__runnerApplyNewCuiDynamicButtons) window.__runnerApplyNewCuiDynamicButtons();
               if (!window.__runnerTitleViewOverlayHiddenOnce && window.__runnerHideTitleViewOverlay) window.__runnerHideTitleViewOverlay('story-state');
               ensureInnMainBackground(line, backgroundLayer);
               cleanupNewbieChestResidue(line);
