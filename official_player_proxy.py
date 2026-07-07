@@ -229,6 +229,8 @@ class OfficialPlayerProxyHandler(SimpleHTTPRequestHandler):
         return urllib.parse.parse_qs(text)
 
     def _is_stub_route(self, route):
+        if route.startswith("shareres/"):
+            return False
         if route.startswith(LOCAL_API_PREFIXES):
             return True
         if not self.server.dev_free_unlock:
@@ -236,7 +238,7 @@ class OfficialPlayerProxyHandler(SimpleHTTPRequestHandler):
         route_lower = route.lower()
         return any(
             keyword in route_lower
-            for keyword in ("propshop", "pay", "unlock", "buy", "flower", "accountmoney", "share", "award", "welfare")
+            for keyword in ("propshop", "pay", "unlock", "buy", "flower", "accountmoney", "ajax/share", "award", "welfare")
         )
 
     def _serve_web_bin(self, name):
