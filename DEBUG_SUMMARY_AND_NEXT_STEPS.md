@@ -1,8 +1,37 @@
 # 66RPG Game Grab/Run Technical Debug Summary
 
-Last updated: 2026-07-02
+Last updated: 2026-07-07
 
 Previous baseline: 2026-06-23
+
+## 2026-07-07 Primary Implementation Direction
+
+Decision:
+
+- The primary local play implementation is now the official 66RPG H5 player plus a local resource/API proxy.
+- Primary runbook: `PRIMARY_PLAY_PATH.md`
+- Default play server: `scripts/serve-play.ps1`
+- Default play URL: `http://127.0.0.1:8766/`
+- Direct player URL: `http://127.0.0.1:8766/official_player_proxy.html`
+- `h5_runner_experiment.html` is retained as a legacy/debug harness only. Do not continue UI parity work on the old runner unless the official proxy path is blocked.
+
+Why:
+
+- The official proxy path keeps the official renderer, UI layout, text rendering, scene transitions, and resource loading behavior much closer to the live site.
+- The old local runner required many visual and platform patches and repeatedly diverged from official behavior.
+
+Current verified result:
+
+- The official proxy parses the newer DSystem layout with `454` buttons using the `80/80/80/454` table header.
+- The local free-time gate is bypassed for local play.
+- The title start flow enters story execution: observed `storyId=1`, `pos=7`, `currentCode=204`.
+- `game1.bin` and subsequent `/shareres/...` resources are served through the local proxy with HTTP 200 in the verified run.
+
+Next focus:
+
+- Build save/load support on top of the official proxy path.
+- Re-validate main management pages and second-level pages through the official proxy path.
+- Keep old-runner fixes frozen unless needed for comparison or offline parser diagnostics.
 
 ## 2026-07-02 Local Save Scope
 
