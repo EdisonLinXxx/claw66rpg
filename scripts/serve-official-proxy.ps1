@@ -10,6 +10,8 @@ param(
     [string]$Python = "python",
     [string]$HostName = "127.0.0.1",
     [int]$Port = 8766,
+    [switch]$PlatformUnlock,
+    [switch]$NoPlatformUnlock,
     [switch]$DevFreeUnlock
 )
 
@@ -19,8 +21,11 @@ $repoRoot = Resolve-Path (Join-Path $PSScriptRoot "..")
 $server = Join-Path $repoRoot "official_player_proxy.py"
 
 $argsList = @($server, "--host", $HostName, "--port", $Port, "--root", $repoRoot)
-if ($DevFreeUnlock) {
-    $argsList += "--dev-free-unlock"
+if ($NoPlatformUnlock) {
+    $argsList += "--no-platform-unlock"
+}
+if ($PlatformUnlock -or $DevFreeUnlock) {
+    $argsList += "--platform-unlock"
 }
 
 & $Python @argsList

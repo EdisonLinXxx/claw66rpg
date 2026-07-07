@@ -39,8 +39,10 @@
   <script>
     var urlParams = new URLSearchParams(window.location.search);
     var debug = urlParams.get("debug") === "1";
-    var devFreeUnlock = urlParams.get("devFreeUnlock") === "1";
-    window.__officialProxyDevFreeUnlock = devFreeUnlock;
+    var platformUnlock = urlParams.get("platformUnlock") !== "0" && urlParams.get("devFreeUnlock") !== "0";
+    window.__officialProxyPlatformUnlock = platformUnlock;
+    window.__officialProxyDevFreeUnlock = platformUnlock;
+    document.cookie = "officialProxyPlatformUnlock=" + (platformUnlock ? "1" : "0") + "; path=/; SameSite=Lax";
     var webUrl = "https://www.66rpg.com";
     var passUrl = "https://passport.66rpg.com";
     var cgUrl = "https://cg.66rpg.com";
@@ -58,8 +60,8 @@
     var channel_id = "";
     var guid = "0a235c54f16c431ab5736c92997edb47";
     var ver = "364";
-    var flower_unlock = devFreeUnlock ? "0" : "35";
-    var gamefv_times = devFreeUnlock ? "999999" : "24010";
+    var flower_unlock = platformUnlock ? "0" : "35";
+    var gamefv_times = platformUnlock ? "999999" : "24010";
     var platMark = "";
     var aspect_ratio = "1";
     var quality = "0";
@@ -70,7 +72,7 @@
     var commonPlayer = {
       channel_id: "",
       platform: 0,
-      loginStatus: devFreeUnlock,
+      loginStatus: platformUnlock,
       userInfos: {
         uid: "local-player",
         code: "local-player",
@@ -175,7 +177,7 @@
           OrgWeb.prototype.upTrafficFileNum = function () {};
           OrgWeb.prototype.getServerTime = function () { return Math.floor(Date.now() / 1000); };
         }
-        if (devFreeUnlock && window.GloableData && GloableData.getInstance) {
+        if (platformUnlock && window.GloableData && GloableData.getInstance) {
           var data = GloableData.getInstance();
           data.flowerUnlock = 0;
           data.gameFvTimes = 999999;
@@ -207,7 +209,7 @@
           ""
         );
         logLine("official proxy initGameData called");
-        if (devFreeUnlock) logLine("official proxy dev free unlock mode enabled");
+        if (platformUnlock) logLine("official proxy platform unlock mode enabled");
       } catch (error) {
         logLine("INIT ERROR: " + (error && (error.stack || error.message) || error));
       }

@@ -223,10 +223,10 @@
     if (!isLocalApi) return null;
 
     if (lower.indexOf("game_flower_by_me") !== -1) {
-      return { status: 1, msg: "local dev flower state", data: devFlowerState() };
+      return { status: 1, msg: "local platform flower state", data: devFlowerState() };
     }
     if (lower.indexOf("get_flower") !== -1) {
-      return { status: 1, msg: "local dev flower account", data: devUserFlowerAccount() };
+      return { status: 1, msg: "local platform flower account", data: devUserFlowerAccount() };
     }
     if (
       lower.indexOf("contains/flower") !== -1 ||
@@ -234,10 +234,10 @@
       lower.indexOf("pay/flower") !== -1
     ) {
       applyDevFlowerState();
-      return { status: 1, msg: "local dev flower ok", data: devFlowerState() };
+      return { status: 1, msg: "local platform flower ok", data: devFlowerState() };
     }
     if (lower.indexOf("all_share_award_conf") !== -1 || lower.indexOf("share_award_conf") !== -1) {
-      return { status: 1, msg: "local dev award ok", data: devAwardPayload() };
+      return { status: 1, msg: "local platform award ok", data: devAwardPayload() };
     }
     if (lower.indexOf("getmyaccountmoney") !== -1 || lower.indexOf("accountmoney") !== -1 || lower.indexOf("balance") !== -1) {
       return {
@@ -276,7 +276,7 @@
       var boughtItem = goodsId ? addDevInventory(goodsId, buyNum) : null;
       return {
         status: 1,
-        msg: "local dev free unlock",
+        msg: "local platform unlock",
         data: {
           ok: 1,
           success: 1,
@@ -286,7 +286,7 @@
           goods_id: boughtItem ? boughtItem.goods_id : goodsId,
           buy_num: buyNum,
           using_num: boughtItem ? boughtItem.using_num : buyNum,
-          order_id: "local-dev-free-unlock"
+          order_id: "local-platform-unlock"
         }
       };
     }
@@ -322,7 +322,7 @@
           var payload = getDevFreeUnlockPayload(value);
           var callbackName = payload && getJsonpCallbackName(value);
           if (payload && callbackName) {
-            compatLog("official proxy dev free unlock JSONP " + callbackName + " " + value);
+            compatLog("official proxy platform unlock JSONP " + callbackName + " " + value);
             var script = callbackName + "(" + JSON.stringify(payload) + ");";
             return scriptSrcDescriptor.set.call(this, "data:text/javascript;charset=utf-8," + encodeURIComponent(script));
           }
@@ -330,7 +330,7 @@
         }
       });
       Object.getOwnPropertyDescriptor(HTMLScriptElement.prototype, "src").set.__officialProxyDevFreeUnlockWrapped = true;
-      compatLog("official proxy dev free unlock JSONP patch enabled");
+      compatLog("official proxy platform unlock JSONP patch enabled");
       patched = true;
     }
 
@@ -549,7 +549,7 @@
     }
     run("DButton padding", installButtonPaddingPatch);
     run("DSystem/CUI", installNewDSystemPatch);
-    run("dev free unlock", installDevFreeUnlockPatch);
+    run("platform unlock", installDevFreeUnlockPatch);
     run("free-time", installFreeTimeBypass);
     return ok;
   }

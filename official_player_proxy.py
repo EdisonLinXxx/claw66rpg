@@ -153,7 +153,8 @@ class OfficialPlayerProxyHandler(SimpleHTTPRequestHandler):
         body_query = self._read_request_query()
         for key, values in body_query.items():
             query.setdefault(key, []).extend(values)
-        if (self.server.dev_free_unlock or self._query_flag(query, "devFreeUnlock")) and self._is_stub_route(route):
+        platform_unlock = self._platform_unlock_enabled(query)
+        if platform_unlock and self._is_stub_route(route, platform_unlock):
             self._send_stub(route, query)
             return
         self._send_json({"status": 1, "msg": "ok", "data": {}})
@@ -171,7 +172,8 @@ class OfficialPlayerProxyHandler(SimpleHTTPRequestHandler):
             if route == "api/oapi_map.php":
                 self._send_bytes(self.server.map_api_payload, "application/json; charset=utf-8")
                 return
-            if self._is_stub_route(route):
+            platform_unlock = self._platform_unlock_enabled(query)
+            if self._is_stub_route(route, platform_unlock):
                 self._send_stub(route, query)
                 return
             if "ajax/LightText/get_status" in route:
@@ -228,12 +230,14 @@ class OfficialPlayerProxyHandler(SimpleHTTPRequestHandler):
             return {}
         return urllib.parse.parse_qs(text)
 
-    def _is_stub_route(self, route):
+    def _is_stub_route(self, route, platform_unlock=None):
         if route.startswith("shareres/"):
             return False
         if route.startswith(LOCAL_API_PREFIXES):
             return True
-        if not self.server.dev_free_unlock:
+        if platform_unlock is None:
+            platform_unlock = self.server.platform_unlock
+        if not platform_unlock:
             return False
         route_lower = route.lower()
         return any(
@@ -290,24 +294,24 @@ class OfficialPlayerProxyHandler(SimpleHTTPRequestHandler):
             shutil.copyfileobj(source, self.wfile)
 
     def _send_stub(self, route, query):
-        dev_free_unlock = self.server.dev_free_unlock or self._query_flag(query, "devFreeUnlock")
+        platform_unlock = self._platform_unlock_enabled(query)
         route_lower = route.lower()
-        amount = DEV_FREE_UNLOCK_AMOUNT if dev_free_unlock else 0
+        amount = DEV_FREE_UNLOCK_AMOUNT if platform_unlock else 0
         goods_id = self._int_param(query, ("goods_id", "goodsId", "goodsid", "item_id", "itemId", "id"), 0)
         buy_num = self._int_param(query, ("buy_num", "buyNum", "buynum", "num", "count"), 1)
 
-        if dev_free_unlock and "game_flower_by_me" in route_lower:
-            payload = {"status": 1, "msg": "local dev flower state", "data": dev_flower_state()}
-        elif dev_free_unlock and "get_flower" in route_lower:
-            payload = {"status": 1, "msg": "local dev flower account", "data": dev_user_flower_account()}
-        elif dev_free_unlock and any(
+        if platform_unlock and "game_flower_by_me" in route_lower:
+            payload = {"status": 1, "msg": "local platform flower state", "data": dev_flower_state()}
+        elif platform_unlock and "get_flower" in route_lower:
+            payload = {"status": 1, "msg": "local platform flower account", "data": dev_user_flower_account()}
+        elif platform_unlock and any(
             keyword in route_lower for keyword in ("contains/flower", "share_game", "pay/flower")
         ):
-            payload = {"status": 1, "msg": "local dev flower ok", "data": dev_flower_state()}
-        elif dev_free_unlock and any(keyword in route_lower for keyword in ("all_share_award_conf", "share_award_conf")):
-            payload = {"status": 1, "msg": "local dev award ok", "data": dev_award_payload()}
+            payload = {"status": 1, "msg": "local platform flower ok", "data": dev_flower_state()}
+        elif platform_unlock and any(keyword in route_lower for keyword in ("all_share_award_conf", "share_award_conf")):
+            payload = {"status": 1, "msg": "local platform award ok", "data": dev_award_payload()}
         elif "getmyaccountmoney" in route_lower or "accountmoney" in route_lower or "balance" in route_lower:
-            if dev_free_unlock:
+            if platform_unlock:
                 payload = {
                     "status": 1,
                     "data": {
@@ -320,11 +324,11 @@ class OfficialPlayerProxyHandler(SimpleHTTPRequestHandler):
                 }
             else:
                 payload = {"status": 1, "data": {"coin_count": 0}}
-        elif dev_free_unlock and "createbuyorder" in route_lower:
+        elif platform_unlock and "createbuyorder" in route_lower:
             item = self._add_dev_inventory(goods_id, buy_num)
             payload = {
                 "status": 1,
-                "msg": "local dev free unlock",
+                "msg": "local platform unlock",
                 "data": {
                     "ok": 1,
                     "success": 1,
@@ -334,27 +338,27 @@ class OfficialPlayerProxyHandler(SimpleHTTPRequestHandler):
                     "goods_id": item["goods_id"] if item else goods_id,
                     "buy_num": buy_num,
                     "using_num": item["using_num"] if item else buy_num,
-                    "order_id": "local-dev-free-unlock",
+                    "order_id": "local-platform-unlock",
                 },
             }
         elif "getUserHavePropNum" in route:
-            if dev_free_unlock:
+            if platform_unlock:
                 item = self._ensure_dev_inventory(goods_id)
                 payload = {"status": 1, "data": [item] if item else self._dev_inventory_array()}
             else:
                 payload = {"status": 1, "data": []}
         elif "getUserHaveAllPropNum" in route:
-            payload = {"status": 1, "data": self._dev_inventory_array() if dev_free_unlock else []}
+            payload = {"status": 1, "data": self._dev_inventory_array() if platform_unlock else []}
         elif "get_user_hp" in route or "init_user_hp" in route:
             payload = {"status": 1, "data": {"hp": amount, "max_hp": amount}}
         elif "getLimitFreeTime" in route or "getOldLimitFreeTime" in route:
             payload = {"status": 1, "data": {"is_free": 1, "time": 0}}
         elif "get_sys_time" in route:
             payload = {"status": 1, "data": int(__import__("time").time())}
-        elif dev_free_unlock and any(keyword in route_lower for keyword in ("unlock", "buy", "pay", "consume", "charge", "flower", "award")):
+        elif platform_unlock and any(keyword in route_lower for keyword in ("unlock", "buy", "pay", "consume", "charge", "flower", "award")):
             payload = {
                 "status": 1,
-                "msg": "local dev free unlock",
+                "msg": "local platform unlock",
                 "data": {"ok": 1, "success": 1, "is_buy": 1, "is_unlock": 1, "unlock": 1, "flower": dev_flower_state()},
             }
         else:
@@ -363,6 +367,29 @@ class OfficialPlayerProxyHandler(SimpleHTTPRequestHandler):
 
     def _query_flag(self, query, name):
         return any(value in ("1", "true", "True", "yes", "on") for value in query.get(name, []))
+
+    def _query_flag_false(self, query, name):
+        return any(value in ("0", "false", "False", "no", "off") for value in query.get(name, []))
+
+    def _cookie_value(self, name):
+        cookies = self.headers.get("Cookie", "")
+        for part in cookies.split(";"):
+            key, _, value = part.strip().partition("=")
+            if key == name:
+                return value
+        return None
+
+    def _platform_unlock_enabled(self, query):
+        if self._query_flag_false(query, "platformUnlock") or self._query_flag_false(query, "devFreeUnlock"):
+            return False
+        if self._query_flag(query, "platformUnlock") or self._query_flag(query, "devFreeUnlock"):
+            return True
+        cookie_value = self._cookie_value("officialProxyPlatformUnlock")
+        if cookie_value in ("0", "false", "False", "no", "off"):
+            return False
+        if cookie_value in ("1", "true", "True", "yes", "on"):
+            return True
+        return self.server.platform_unlock
 
     def _int_param(self, query, names, default):
         for name in names:
@@ -424,14 +451,14 @@ class OfficialPlayerProxyHandler(SimpleHTTPRequestHandler):
 
 
 class OfficialPlayerProxyServer(ThreadingHTTPServer):
-    def __init__(self, server_address, handler_class, root, downloads, cdn_hosts, download_missing, download_timeout, dev_free_unlock):
+    def __init__(self, server_address, handler_class, root, downloads, cdn_hosts, download_missing, download_timeout, platform_unlock):
         super().__init__(server_address, handler_class)
         self.root = root.resolve()
         self.downloads = downloads.resolve()
         self.cdn_hosts = tuple(cdn_hosts)
         self.download_missing = download_missing
         self.download_timeout = download_timeout
-        self.dev_free_unlock = dev_free_unlock
+        self.platform_unlock = platform_unlock
         self.dev_inventory = {}
         self.map_path = self.downloads / "Map_32.bin"
         self.map_entries = parse_map_bin(self.map_path)
@@ -447,7 +474,10 @@ def main():
     parser.add_argument("--cdn-host", action="append", default=[], help="CDN host used to fill missing /shareres resources.")
     parser.add_argument("--no-download-missing", action="store_true")
     parser.add_argument("--download-timeout", type=float, default=30.0)
-    parser.add_argument("--dev-free-unlock", action="store_true", help="Enable local-only developer stubs for paid unlock flows.")
+    parser.set_defaults(platform_unlock=True)
+    parser.add_argument("--platform-unlock", dest="platform_unlock", action="store_true", help="Enable platform entitlement stubs for one-time-paid play.")
+    parser.add_argument("--no-platform-unlock", dest="platform_unlock", action="store_false", help="Disable platform entitlement stubs for comparison.")
+    parser.add_argument("--dev-free-unlock", dest="platform_unlock", action="store_true", help=argparse.SUPPRESS)
     args = parser.parse_args()
 
     root = Path(args.root)
@@ -462,11 +492,13 @@ def main():
         cdn_hosts,
         not args.no_download_missing,
         args.download_timeout,
-        args.dev_free_unlock,
+        args.platform_unlock,
     )
     print(f"serving official player proxy at http://{args.host}:{args.port}/official_player_proxy.html")
-    if args.dev_free_unlock:
-        print(f"dev free unlock URL: http://{args.host}:{args.port}/official_player_proxy.html?devFreeUnlock=1")
+    if args.platform_unlock:
+        print(f"platform unlock URL: http://{args.host}:{args.port}/official_player_proxy.html")
+    else:
+        print(f"platform unlock disabled; compare at http://{args.host}:{args.port}/official_player_proxy.html?platformUnlock=0")
     print(f"root={server.root}")
     print(f"map={server.map_path} entries={len(server.map_entries)}")
     server.serve_forever()

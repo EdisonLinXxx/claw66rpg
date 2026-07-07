@@ -10,6 +10,7 @@ param(
     [string]$Python = "python",
     [string]$HostName = "127.0.0.1",
     [int]$Port = 8766,
+    [switch]$NoPlatformUnlock,
     [switch]$DevFreeUnlock
 )
 
@@ -18,8 +19,11 @@ $ErrorActionPreference = "Stop"
 $script = Join-Path $PSScriptRoot "serve-official-proxy.ps1"
 
 $argsList = @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $script, "-Python", $Python, "-HostName", $HostName, "-Port", $Port)
+if ($NoPlatformUnlock) {
+    $argsList += "-NoPlatformUnlock"
+}
 if ($DevFreeUnlock) {
-    $argsList += "-DevFreeUnlock"
+    $argsList += "-PlatformUnlock"
 }
 
 & powershell @argsList
