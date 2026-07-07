@@ -159,6 +159,22 @@
     if (!window.__officialProxyDevFreeUnlock) return false;
     var patched = false;
 
+    if (window.commonPlayer) {
+      commonPlayer.loginStatus = true;
+      commonPlayer.userInfos = commonPlayer.userInfos || {};
+      commonPlayer.userInfos.uid = commonPlayer.userInfos.uid || "local-player";
+      commonPlayer.userInfos.code = commonPlayer.userInfos.code || "local-player";
+      commonPlayer.userInfos.gindex = commonPlayer.userInfos.gindex || "1569947";
+      commonPlayer.userInfos.open_id = commonPlayer.userInfos.open_id || "";
+      commonPlayer.userInfos.channel_type = commonPlayer.userInfos.channel_type || "";
+      commonPlayer.userInfos.third_sign = commonPlayer.userInfos.third_sign || "";
+      commonPlayer.login = commonPlayer.login || {};
+      commonPlayer.login.midLogin = function (callback) {
+        commonPlayer.loginStatus = true;
+        if (typeof callback === "function") callback(true);
+      };
+    }
+
     if (window.GloableData && GloableData.getInstance) {
       var data = GloableData.getInstance();
       data.isFreeLimit = false;
@@ -392,10 +408,18 @@
   }
 
   function install() {
-    var ok = installButtonPaddingPatch();
-    ok = installNewDSystemPatch() || ok;
-    ok = installFreeTimeBypass() || ok;
-    ok = installDevFreeUnlockPatch() || ok;
+    var ok = false;
+    function run(name, fn) {
+      try {
+        ok = fn() || ok;
+      } catch (error) {
+        compatLog("official proxy " + name + " patch skipped: " + (error && (error.stack || error.message) || error));
+      }
+    }
+    run("DButton padding", installButtonPaddingPatch);
+    run("DSystem/CUI", installNewDSystemPatch);
+    run("dev free unlock", installDevFreeUnlockPatch);
+    run("free-time", installFreeTimeBypass);
     return ok;
   }
 
