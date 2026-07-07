@@ -9,9 +9,86 @@
     return match ? decodeURIComponent(match[1]) : "";
   }
 
+  var DEV_INVENTORY_KEY = "officialProxyDevFreeUnlockInventory:v1";
+
+  function parseUrlParams(url) {
+    var params = {};
+    var query = String(url || "").split("?")[1] || "";
+    query = query.split("#")[0];
+    query.split("&").forEach(function (part) {
+      if (!part) return;
+      var pair = part.split("=");
+      var key = decodeURIComponent(pair.shift() || "");
+      var value = decodeURIComponent(pair.join("=") || "");
+      if (!key) return;
+      params[key] = value;
+    });
+    return params;
+  }
+
+  function intParam(params, keys, fallback) {
+    for (var index = 0; index < keys.length; index++) {
+      var value = params[keys[index]];
+      if (value !== undefined && value !== "") {
+        var parsed = parseInt(value, 10);
+        if (!isNaN(parsed)) return parsed;
+      }
+    }
+    return fallback;
+  }
+
+  function readDevInventory() {
+    try {
+      var raw = window.localStorage && localStorage.getItem(DEV_INVENTORY_KEY);
+      var parsed = raw ? JSON.parse(raw) : {};
+      return parsed && typeof parsed === "object" ? parsed : {};
+    } catch (error) {
+      return {};
+    }
+  }
+
+  function writeDevInventory(inventory) {
+    try {
+      if (window.localStorage) localStorage.setItem(DEV_INVENTORY_KEY, JSON.stringify(inventory));
+    } catch (error) {}
+  }
+
+  function devInventoryArray() {
+    var inventory = readDevInventory();
+    return Object.keys(inventory).map(function (key) {
+      return { goods_id: parseInt(key, 10), using_num: parseInt(inventory[key], 10) || 0 };
+    }).filter(function (item) {
+      return item.goods_id > 0;
+    });
+  }
+
+  function addDevInventory(goodsId, buyNum) {
+    if (!goodsId || goodsId <= 0) return null;
+    var inventory = readDevInventory();
+    var key = String(goodsId);
+    var next = (parseInt(inventory[key], 10) || 0) + Math.max(1, buyNum || 1);
+    inventory[key] = next;
+    writeDevInventory(inventory);
+    return { goods_id: goodsId, using_num: next };
+  }
+
+  function ensureDevInventory(goodsId) {
+    if (!goodsId || goodsId <= 0) return null;
+    var inventory = readDevInventory();
+    var key = String(goodsId);
+    if (!inventory[key]) {
+      inventory[key] = 1;
+      writeDevInventory(inventory);
+    }
+    return { goods_id: goodsId, using_num: parseInt(inventory[key], 10) || 1 };
+  }
+
   function getDevFreeUnlockPayload(url) {
     var text = String(url || "");
     var lower = text.toLowerCase();
+    var params = parseUrlParams(text);
+    var goodsId = intParam(params, ["goods_id", "goodsId", "goodsid", "item_id", "itemId", "id"], 0);
+    var buyNum = intParam(params, ["buy_num", "buyNum", "buynum", "num", "count"], 1);
     var isLocalApi =
       lower.indexOf("propshop/") !== -1 ||
       lower.indexOf("/engine/") !== -1 ||
@@ -37,10 +114,11 @@
       };
     }
     if (lower.indexOf("getuserhaveallpropnum") !== -1) {
-      return { status: 1, data: [] };
+      return { status: 1, data: devInventoryArray() };
     }
     if (lower.indexOf("getuserhavepropnum") !== -1 || lower.indexOf("propnum") !== -1) {
-      return { status: 1, data: { num: 999999, count: 999999, prop_num: 999999 } };
+      var item = goodsId ? ensureDevInventory(goodsId) : null;
+      return { status: 1, data: item ? [item] : devInventoryArray() };
     }
     if (lower.indexOf("get_user_hp") !== -1 || lower.indexOf("init_user_hp") !== -1) {
       return { status: 1, data: { hp: 999999, max_hp: 999999 } };
@@ -49,6 +127,7 @@
       return { status: 1, data: { is_free: 1, time: 0 } };
     }
     if (
+      lower.indexOf("createbuyorder") !== -1 ||
       lower.indexOf("unlock") !== -1 ||
       lower.indexOf("buy") !== -1 ||
       lower.indexOf("pay") !== -1 ||
@@ -56,10 +135,21 @@
       lower.indexOf("charge") !== -1 ||
       lower.indexOf("flower") !== -1
     ) {
+      var boughtItem = goodsId ? addDevInventory(goodsId, buyNum) : null;
       return {
         status: 1,
         msg: "local dev free unlock",
-        data: { ok: 1, success: 1, is_buy: 1, is_unlock: 1, unlock: 1 }
+        data: {
+          ok: 1,
+          success: 1,
+          is_buy: 1,
+          is_unlock: 1,
+          unlock: 1,
+          goods_id: boughtItem ? boughtItem.goods_id : goodsId,
+          buy_num: buyNum,
+          using_num: boughtItem ? boughtItem.using_num : buyNum,
+          order_id: "local-dev-free-unlock"
+        }
       };
     }
     return null;

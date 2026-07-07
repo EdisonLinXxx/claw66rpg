@@ -103,6 +103,9 @@ class OfficialPlayerProxyHandler(SimpleHTTPRequestHandler):
         route = urllib.parse.unquote(parsed.path).lstrip("/")
         query = urllib.parse.parse_qs(parsed.query)
         route, query = self._normalize_absolute_route(route, query)
+        body_query = self._read_request_query()
+        for key, values in body_query.items():
+            query.setdefault(key, []).extend(values)
         if (self.server.dev_free_unlock or self._query_flag(query, "devFreeUnlock")) and self._is_stub_route(route):
             self._send_stub(route, query)
             return
@@ -160,6 +163,23 @@ class OfficialPlayerProxyHandler(SimpleHTTPRequestHandler):
             merged_query.update(query)
             return normalized, merged_query
         return route, query
+
+    def _read_request_query(self):
+        length = int(self.headers.get("Content-Length") or 0)
+        if length <= 0:
+            return {}
+        raw = self.rfile.read(length)
+        content_type = self.headers.get("Content-Type", "")
+        text = raw.decode("utf-8", errors="replace")
+        if "application/json" in content_type:
+            try:
+                payload = json.loads(text)
+            except json.JSONDecodeError:
+                return {}
+            if isinstance(payload, dict):
+                return {str(key): [str(value)] for key, value in payload.items()}
+            return {}
+        return urllib.parse.parse_qs(text)
 
     def _is_stub_route(self, route):
         if route.startswith(LOCAL_API_PREFIXES):
@@ -221,6 +241,8 @@ class OfficialPlayerProxyHandler(SimpleHTTPRequestHandler):
         dev_free_unlock = self.server.dev_free_unlock or self._query_flag(query, "devFreeUnlock")
         route_lower = route.lower()
         amount = DEV_FREE_UNLOCK_AMOUNT if dev_free_unlock else 0
+        goods_id = self._int_param(query, ("goods_id", "goodsId", "goodsid", "item_id", "itemId", "id"), 0)
+        buy_num = self._int_param(query, ("buy_num", "buyNum", "buynum", "num", "count"), 1)
 
         if "getMyAccountMoney" in route or "accountmoney" in route_lower or "balance" in route_lower:
             if dev_free_unlock:
@@ -236,13 +258,31 @@ class OfficialPlayerProxyHandler(SimpleHTTPRequestHandler):
                 }
             else:
                 payload = {"status": 1, "data": {"coin_count": 0}}
+        elif dev_free_unlock and "createbuyorder" in route_lower:
+            item = self._add_dev_inventory(goods_id, buy_num)
+            payload = {
+                "status": 1,
+                "msg": "local dev free unlock",
+                "data": {
+                    "ok": 1,
+                    "success": 1,
+                    "is_buy": 1,
+                    "is_unlock": 1,
+                    "unlock": 1,
+                    "goods_id": item["goods_id"] if item else goods_id,
+                    "buy_num": buy_num,
+                    "using_num": item["using_num"] if item else buy_num,
+                    "order_id": "local-dev-free-unlock",
+                },
+            }
         elif "getUserHavePropNum" in route:
             if dev_free_unlock:
-                payload = {"status": 1, "data": {"num": amount, "count": amount, "prop_num": amount}}
+                item = self._ensure_dev_inventory(goods_id)
+                payload = {"status": 1, "data": [item] if item else self._dev_inventory_array()}
             else:
                 payload = {"status": 1, "data": []}
         elif "getUserHaveAllPropNum" in route:
-            payload = {"status": 1, "data": []}
+            payload = {"status": 1, "data": self._dev_inventory_array() if dev_free_unlock else []}
         elif "get_user_hp" in route or "init_user_hp" in route:
             payload = {"status": 1, "data": {"hp": amount, "max_hp": amount}}
         elif "getLimitFreeTime" in route or "getOldLimitFreeTime" in route:
@@ -261,6 +301,37 @@ class OfficialPlayerProxyHandler(SimpleHTTPRequestHandler):
 
     def _query_flag(self, query, name):
         return any(value in ("1", "true", "True", "yes", "on") for value in query.get(name, []))
+
+    def _int_param(self, query, names, default):
+        for name in names:
+            for value in query.get(name, []):
+                try:
+                    return int(value)
+                except (TypeError, ValueError):
+                    continue
+        return default
+
+    def _dev_inventory_array(self):
+        return [
+            {"goods_id": int(goods_id), "using_num": int(using_num)}
+            for goods_id, using_num in sorted(self.server.dev_inventory.items())
+            if int(goods_id) > 0
+        ]
+
+    def _add_dev_inventory(self, goods_id, buy_num):
+        if goods_id <= 0:
+            return None
+        current = int(self.server.dev_inventory.get(goods_id, 0))
+        next_num = current + max(1, int(buy_num or 1))
+        self.server.dev_inventory[goods_id] = next_num
+        return {"goods_id": goods_id, "using_num": next_num}
+
+    def _ensure_dev_inventory(self, goods_id):
+        if goods_id <= 0:
+            return None
+        if goods_id not in self.server.dev_inventory:
+            self.server.dev_inventory[goods_id] = 1
+        return {"goods_id": goods_id, "using_num": int(self.server.dev_inventory[goods_id])}
 
     def _send_jsonp(self, query, payload):
         callback = ""
@@ -299,6 +370,7 @@ class OfficialPlayerProxyServer(ThreadingHTTPServer):
         self.download_missing = download_missing
         self.download_timeout = download_timeout
         self.dev_free_unlock = dev_free_unlock
+        self.dev_inventory = {}
         self.map_path = self.downloads / "Map_32.bin"
         self.map_entries = parse_map_bin(self.map_path)
         self.map_api_payload = make_api_payload(self.map_entries)
