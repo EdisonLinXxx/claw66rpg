@@ -28,6 +28,14 @@ Implementation files:
 - `scripts/serve-play.ps1`
 - `scripts/serve-official-proxy.ps1`
 
+Regression validation:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\validate-official-proxy-pages.ps1
+```
+
+The validation script enters the official proxy path, captures the main management page, key second-level pages, menu, and save/load UI, then writes screenshots plus `summary.json` under `C:\tmp\official_proxy_main_pages` by default.
+
 Legacy/debug path:
 
 - `h5_runner_experiment.html`
