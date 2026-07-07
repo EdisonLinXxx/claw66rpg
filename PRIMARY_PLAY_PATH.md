@@ -20,6 +20,18 @@ Direct player URL:
 http://127.0.0.1:8766/official_player_proxy.html
 ```
 
+Developer free-unlock mode for local debugging only:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\serve-play.ps1 -DevFreeUnlock
+```
+
+```text
+http://127.0.0.1:8766/official_player_proxy.html?devFreeUnlock=1
+```
+
+This mode only affects the local proxy. It returns local stub balances, prop counts, HP, and buy/unlock success responses for debugging paid branches. The default play command and default URLs do not enable it.
+
 Implementation files:
 
 - `official_player_proxy.html`

@@ -20,6 +20,8 @@ DEFAULT_CDN_HOSTS = (
     "https://c3.cgyouxi.com",
     "https://c4.cgyouxi.com",
 )
+LOCAL_API_PREFIXES = ("engine/", "PropShop/", "game/", "task/", "pay/", "flower/", "account/", "user/")
+DEV_FREE_UNLOCK_AMOUNT = 999999
 TRANSPARENT_PNG = bytes.fromhex(
     "89504e470d0a1a0a0000000d4948445200000001000000010806000000"
     "1f15c4890000000a49444154789c6360000002000150a0f64500000000"
@@ -97,6 +99,13 @@ class OfficialPlayerProxyHandler(SimpleHTTPRequestHandler):
         self.end_headers()
 
     def do_POST(self):
+        parsed = urllib.parse.urlparse(self.path)
+        route = urllib.parse.unquote(parsed.path).lstrip("/")
+        query = urllib.parse.parse_qs(parsed.query)
+        route, query = self._normalize_absolute_route(route, query)
+        if (self.server.dev_free_unlock or self._query_flag(query, "devFreeUnlock")) and self._is_stub_route(route):
+            self._send_stub(route, query)
+            return
         self._send_json({"status": 1, "msg": "ok", "data": {}})
 
     def do_GET(self):
@@ -112,7 +121,7 @@ class OfficialPlayerProxyHandler(SimpleHTTPRequestHandler):
             if route == "api/oapi_map.php":
                 self._send_bytes(self.server.map_api_payload, "application/json; charset=utf-8")
                 return
-            if route.startswith("engine/") or route.startswith("PropShop/") or route.startswith("game/") or route.startswith("task/"):
+            if self._is_stub_route(route):
                 self._send_stub(route, query)
                 return
             if "ajax/LightText/get_status" in route:
@@ -151,6 +160,14 @@ class OfficialPlayerProxyHandler(SimpleHTTPRequestHandler):
             merged_query.update(query)
             return normalized, merged_query
         return route, query
+
+    def _is_stub_route(self, route):
+        if route.startswith(LOCAL_API_PREFIXES):
+            return True
+        if not self.server.dev_free_unlock:
+            return False
+        route_lower = route.lower()
+        return any(keyword in route_lower for keyword in ("propshop", "pay", "unlock", "buy", "flower", "accountmoney"))
 
     def _serve_web_bin(self, name):
         if name == "Game_mini.bin":
@@ -201,17 +218,49 @@ class OfficialPlayerProxyHandler(SimpleHTTPRequestHandler):
             shutil.copyfileobj(source, self.wfile)
 
     def _send_stub(self, route, query):
-        if "getMyAccountMoney" in route:
-            payload = {"status": 1, "data": {"coin_count": 0}}
+        dev_free_unlock = self.server.dev_free_unlock or self._query_flag(query, "devFreeUnlock")
+        route_lower = route.lower()
+        amount = DEV_FREE_UNLOCK_AMOUNT if dev_free_unlock else 0
+
+        if "getMyAccountMoney" in route or "accountmoney" in route_lower or "balance" in route_lower:
+            if dev_free_unlock:
+                payload = {
+                    "status": 1,
+                    "data": {
+                        "coin_count": amount,
+                        "gold_count": amount,
+                        "flower_count": amount,
+                        "diamond_count": amount,
+                        "acoin": amount,
+                    },
+                }
+            else:
+                payload = {"status": 1, "data": {"coin_count": 0}}
+        elif "getUserHavePropNum" in route:
+            if dev_free_unlock:
+                payload = {"status": 1, "data": {"num": amount, "count": amount, "prop_num": amount}}
+            else:
+                payload = {"status": 1, "data": []}
+        elif "getUserHaveAllPropNum" in route:
+            payload = {"status": 1, "data": []}
         elif "get_user_hp" in route or "init_user_hp" in route:
-            payload = {"status": 1, "data": {"hp": 0, "max_hp": 0}}
+            payload = {"status": 1, "data": {"hp": amount, "max_hp": amount}}
         elif "getLimitFreeTime" in route or "getOldLimitFreeTime" in route:
             payload = {"status": 1, "data": {"is_free": 1, "time": 0}}
         elif "get_sys_time" in route:
             payload = {"status": 1, "data": int(__import__("time").time())}
+        elif dev_free_unlock and any(keyword in route_lower for keyword in ("unlock", "buy", "pay", "consume", "charge", "flower")):
+            payload = {
+                "status": 1,
+                "msg": "local dev free unlock",
+                "data": {"ok": 1, "success": 1, "is_buy": 1, "is_unlock": 1, "unlock": 1},
+            }
         else:
             payload = {"status": 1, "data": []}
         self._send_jsonp(query, payload)
+
+    def _query_flag(self, query, name):
+        return any(value in ("1", "true", "True", "yes", "on") for value in query.get(name, []))
 
     def _send_jsonp(self, query, payload):
         callback = ""
@@ -242,13 +291,14 @@ class OfficialPlayerProxyHandler(SimpleHTTPRequestHandler):
 
 
 class OfficialPlayerProxyServer(ThreadingHTTPServer):
-    def __init__(self, server_address, handler_class, root, downloads, cdn_hosts, download_missing, download_timeout):
+    def __init__(self, server_address, handler_class, root, downloads, cdn_hosts, download_missing, download_timeout, dev_free_unlock):
         super().__init__(server_address, handler_class)
         self.root = root.resolve()
         self.downloads = downloads.resolve()
         self.cdn_hosts = tuple(cdn_hosts)
         self.download_missing = download_missing
         self.download_timeout = download_timeout
+        self.dev_free_unlock = dev_free_unlock
         self.map_path = self.downloads / "Map_32.bin"
         self.map_entries = parse_map_bin(self.map_path)
         self.map_api_payload = make_api_payload(self.map_entries)
@@ -263,6 +313,7 @@ def main():
     parser.add_argument("--cdn-host", action="append", default=[], help="CDN host used to fill missing /shareres resources.")
     parser.add_argument("--no-download-missing", action="store_true")
     parser.add_argument("--download-timeout", type=float, default=30.0)
+    parser.add_argument("--dev-free-unlock", action="store_true", help="Enable local-only developer stubs for paid unlock flows.")
     args = parser.parse_args()
 
     root = Path(args.root)
@@ -277,8 +328,11 @@ def main():
         cdn_hosts,
         not args.no_download_missing,
         args.download_timeout,
+        args.dev_free_unlock,
     )
     print(f"serving official player proxy at http://{args.host}:{args.port}/official_player_proxy.html")
+    if args.dev_free_unlock:
+        print(f"dev free unlock URL: http://{args.host}:{args.port}/official_player_proxy.html?devFreeUnlock=1")
     print(f"root={server.root}")
     print(f"map={server.map_path} entries={len(server.map_entries)}")
     server.serve_forever()

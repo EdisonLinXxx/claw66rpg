@@ -37,7 +37,10 @@
     }
   </style>
   <script>
-    var debug = new URLSearchParams(window.location.search).get("debug") === "1";
+    var urlParams = new URLSearchParams(window.location.search);
+    var debug = urlParams.get("debug") === "1";
+    var devFreeUnlock = urlParams.get("devFreeUnlock") === "1";
+    window.__officialProxyDevFreeUnlock = devFreeUnlock;
     var webUrl = "https://www.66rpg.com";
     var passUrl = "https://passport.66rpg.com";
     var cgUrl = "https://cg.66rpg.com";
@@ -55,8 +58,8 @@
     var channel_id = "";
     var guid = "0a235c54f16c431ab5736c92997edb47";
     var ver = "364";
-    var flower_unlock = "35";
-    var gamefv_times = "24010";
+    var flower_unlock = devFreeUnlock ? "0" : "35";
+    var gamefv_times = devFreeUnlock ? "999999" : "24010";
     var platMark = "";
     var aspect_ratio = "1";
     var quality = "0";
@@ -163,6 +166,11 @@
           OrgWeb.prototype.upTrafficFileNum = function () {};
           OrgWeb.prototype.getServerTime = function () { return Math.floor(Date.now() / 1000); };
         }
+        if (devFreeUnlock && window.GloableData && GloableData.getInstance) {
+          var data = GloableData.getInstance();
+          data.flowerUnlock = 0;
+          data.gameFvTimes = 999999;
+        }
       }
 
       try {
@@ -190,6 +198,7 @@
           ""
         );
         logLine("official proxy initGameData called");
+        if (devFreeUnlock) logLine("official proxy dev free unlock mode enabled");
       } catch (error) {
         logLine("INIT ERROR: " + (error && (error.stack || error.message) || error));
       }

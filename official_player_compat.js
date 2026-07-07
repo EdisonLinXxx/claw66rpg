@@ -4,6 +4,108 @@
     else if (window.console && console.log) console.log(message);
   }
 
+  function getJsonpCallbackName(url) {
+    var match = String(url).match(/[?&](?:jsonCallBack|callback|cb)=([^&]+)/);
+    return match ? decodeURIComponent(match[1]) : "";
+  }
+
+  function getDevFreeUnlockPayload(url) {
+    var text = String(url || "");
+    var lower = text.toLowerCase();
+    var isLocalApi =
+      lower.indexOf("propshop/") !== -1 ||
+      lower.indexOf("/engine/") !== -1 ||
+      lower.indexOf("/game/") !== -1 ||
+      lower.indexOf("/task/") !== -1 ||
+      lower.indexOf("/pay") !== -1 ||
+      lower.indexOf("/flower") !== -1 ||
+      lower.indexOf("/account") !== -1 ||
+      lower.indexOf("/user/") !== -1;
+
+    if (!isLocalApi) return null;
+
+    if (lower.indexOf("getmyaccountmoney") !== -1 || lower.indexOf("accountmoney") !== -1 || lower.indexOf("balance") !== -1) {
+      return {
+        status: 1,
+        data: {
+          coin_count: 999999,
+          gold_count: 999999,
+          flower_count: 999999,
+          diamond_count: 999999,
+          acoin: 999999
+        }
+      };
+    }
+    if (lower.indexOf("getuserhaveallpropnum") !== -1) {
+      return { status: 1, data: [] };
+    }
+    if (lower.indexOf("getuserhavepropnum") !== -1 || lower.indexOf("propnum") !== -1) {
+      return { status: 1, data: { num: 999999, count: 999999, prop_num: 999999 } };
+    }
+    if (lower.indexOf("get_user_hp") !== -1 || lower.indexOf("init_user_hp") !== -1) {
+      return { status: 1, data: { hp: 999999, max_hp: 999999 } };
+    }
+    if (lower.indexOf("getlimitfreetime") !== -1 || lower.indexOf("getoldlimitfreetime") !== -1) {
+      return { status: 1, data: { is_free: 1, time: 0 } };
+    }
+    if (
+      lower.indexOf("unlock") !== -1 ||
+      lower.indexOf("buy") !== -1 ||
+      lower.indexOf("pay") !== -1 ||
+      lower.indexOf("consume") !== -1 ||
+      lower.indexOf("charge") !== -1 ||
+      lower.indexOf("flower") !== -1
+    ) {
+      return {
+        status: 1,
+        msg: "local dev free unlock",
+        data: { ok: 1, success: 1, is_buy: 1, is_unlock: 1, unlock: 1 }
+      };
+    }
+    return null;
+  }
+
+  function installDevFreeUnlockPatch() {
+    if (!window.__officialProxyDevFreeUnlock) return false;
+    var patched = false;
+
+    if (window.GloableData && GloableData.getInstance) {
+      var data = GloableData.getInstance();
+      data.isFreeLimit = false;
+      data.isFreeTime = 0;
+      data.flowerUnlock = 0;
+      data.gameFvTimes = 999999;
+    }
+
+    var scriptSrcDescriptor = Object.getOwnPropertyDescriptor(HTMLScriptElement.prototype, "src");
+    if (scriptSrcDescriptor && scriptSrcDescriptor.set && !scriptSrcDescriptor.set.__officialProxyDevFreeUnlockWrapped) {
+      Object.defineProperty(HTMLScriptElement.prototype, "src", {
+        get: scriptSrcDescriptor.get,
+        set: function (value) {
+          var payload = getDevFreeUnlockPayload(value);
+          var callbackName = payload && getJsonpCallbackName(value);
+          if (payload && callbackName) {
+            compatLog("official proxy dev free unlock JSONP " + callbackName + " " + value);
+            var script = callbackName + "(" + JSON.stringify(payload) + ");";
+            return scriptSrcDescriptor.set.call(this, "data:text/javascript;charset=utf-8," + encodeURIComponent(script));
+          }
+          return scriptSrcDescriptor.set.call(this, value);
+        }
+      });
+      Object.getOwnPropertyDescriptor(HTMLScriptElement.prototype, "src").set.__officialProxyDevFreeUnlockWrapped = true;
+      compatLog("official proxy dev free unlock JSONP patch enabled");
+      patched = true;
+    }
+
+    if (window.OrgWeb && OrgWeb.prototype && !OrgWeb.prototype.__officialProxyDevFreeUnlockPatched) {
+      OrgWeb.prototype.__officialProxyDevFreeUnlockPatched = true;
+      OrgWeb.prototype.getIsUnLock = function () { return true; };
+      patched = true;
+    }
+
+    return patched;
+  }
+
   function installButtonPaddingPatch() {
     if (!window.org_data || !org_data.DButton || org_data.DButton.__officialProxyPadWrapped) return false;
     var OriginalDButton = org_data.DButton;
@@ -203,6 +305,7 @@
     var ok = installButtonPaddingPatch();
     ok = installNewDSystemPatch() || ok;
     ok = installFreeTimeBypass() || ok;
+    ok = installDevFreeUnlockPatch() || ok;
     return ok;
   }
 
