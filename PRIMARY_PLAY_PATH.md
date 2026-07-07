@@ -30,7 +30,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\serve-play.ps1 -De
 http://127.0.0.1:8766/official_player_proxy.html?devFreeUnlock=1
 ```
 
-This mode only affects the local proxy. It returns local stub balances, HP, buy/unlock success responses, and a local purchased-item inventory for debugging paid branches. The default play command and default URLs do not enable it.
+This mode only affects the local proxy. It returns local stub balances, HP, buy/unlock success responses, cumulative flower/activity state, welfare award responses, and a local purchased-item inventory for debugging paid branches. The default play command and default URLs do not enable it.
 
 Implementation files:
 

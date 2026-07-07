@@ -10,6 +10,8 @@
   }
 
   var DEV_INVENTORY_KEY = "officialProxyDevFreeUnlockInventory:v1";
+  var DEV_FLOWER_AMOUNT = 9999;
+  var DEV_FLOWER_COIN_AMOUNT = DEV_FLOWER_AMOUNT * 100;
 
   function parseUrlParams(url) {
     var params = {};
@@ -83,6 +85,122 @@
     return { goods_id: goodsId, using_num: parseInt(inventory[key], 10) || 1 };
   }
 
+  function mergeObject(target, source) {
+    target = target && typeof target === "object" ? target : {};
+    for (var key in source) {
+      if (Object.prototype.hasOwnProperty.call(source, key)) target[key] = source[key];
+    }
+    return target;
+  }
+
+  function devFlowerState() {
+    return {
+      fresh_flower_num: DEV_FLOWER_AMOUNT,
+      wild_flower_num: 0,
+      wild_flower: 0,
+      tanhua_flower_num: DEV_FLOWER_AMOUNT,
+      tanHuaPlayFowerStr: DEV_FLOWER_AMOUNT,
+      flower_num: DEV_FLOWER_AMOUNT,
+      num: DEV_FLOWER_AMOUNT,
+      sum: DEV_FLOWER_AMOUNT,
+      payFlowerNumStr: String(DEV_FLOWER_AMOUNT)
+    };
+  }
+
+  function devUserFlowerAccount() {
+    return {
+      coin1: { coin_count: DEV_FLOWER_COIN_AMOUNT },
+      coin2: { coin_count: DEV_FLOWER_COIN_AMOUNT },
+      coin_count: DEV_FLOWER_COIN_AMOUNT,
+      gold_count: DEV_FLOWER_COIN_AMOUNT,
+      flower_count: DEV_FLOWER_AMOUNT,
+      fresh_flower_num: DEV_FLOWER_AMOUNT,
+      wild_flower_num: 0,
+      tanhua_flower_num: DEV_FLOWER_AMOUNT,
+      num: DEV_FLOWER_AMOUNT,
+      sum: DEV_FLOWER_AMOUNT
+    };
+  }
+
+  function devAwardPayload() {
+    return {
+      is_receive: 0,
+      is_received: 0,
+      received: 0,
+      can_receive: 1,
+      can_get: 1,
+      status: 1,
+      flower_num: DEV_FLOWER_AMOUNT,
+      need_flower: 0,
+      award_flower: DEV_FLOWER_AMOUNT,
+      coin_count: DEV_FLOWER_COIN_AMOUNT,
+      data: devFlowerState()
+    };
+  }
+
+  function applyDevFlowerState() {
+    if (!window.__officialProxyDevFreeUnlock) return false;
+
+    if (window.commonPlayer) {
+      commonPlayer.loginStatus = true;
+      commonPlayer.flower = mergeObject(commonPlayer.flower, devFlowerState());
+      commonPlayer.flower_unlock = 0;
+      commonPlayer.sendFlower = commonPlayer.sendFlower || {};
+      commonPlayer.sendFlower.userCoin = mergeObject(commonPlayer.sendFlower.userCoin, devUserFlowerAccount());
+      commonPlayer.sendFlower.sendFlowerState = function (callback) {
+        applyDevFlowerState();
+        if (typeof callback === "function") callback(true);
+      };
+      commonPlayer.sendFlower.up_Sent_Flower = function (num, callback) {
+        applyDevFlowerState();
+        if (typeof callback === "function") callback(true);
+      };
+    }
+
+    if (window.GloableData && GloableData.getInstance) {
+      var data = GloableData.getInstance();
+      data.isFreeLimit = false;
+      data.isFreeTime = 0;
+      data.flowerUnlock = 0;
+      data.gameFvTimes = 999999;
+      data.flowerHua = DEV_FLOWER_AMOUNT;
+      data.flowerMallHua = DEV_FLOWER_AMOUNT;
+    }
+
+    if (window.OrgWeb && OrgWeb.prototype && !OrgWeb.prototype.__officialProxyDevFlowerPatched) {
+      OrgWeb.prototype.__officialProxyDevFlowerPatched = true;
+      OrgWeb.prototype.getFlowrHuaNum = function () { return DEV_FLOWER_AMOUNT; };
+      OrgWeb.prototype.getHaveFlower = function () { return DEV_FLOWER_COIN_AMOUNT; };
+      OrgWeb.prototype.getReWidFlower = function () { return DEV_FLOWER_AMOUNT; };
+      OrgWeb.prototype.getWebUserFlower = function (thisArg, callback) {
+        applyDevFlowerState();
+        if (typeof callback === "function") callback.call(thisArg, DEV_FLOWER_AMOUNT);
+      };
+      OrgWeb.prototype.getAllFlower = function (callback) {
+        applyDevFlowerState();
+        if (typeof callback === "function") callback();
+      };
+      OrgWeb.prototype.updateUserInfoCoin = function (callback) {
+        applyDevFlowerState();
+        if (typeof callback === "function") callback();
+      };
+      OrgWeb.prototype.sendReWidFlower = function (callback) {
+        applyDevFlowerState();
+        if (typeof callback === "function") callback();
+      };
+      OrgWeb.prototype.initSendFlower = function (thisArg, callback, priceType) {
+        applyDevFlowerState();
+        if (typeof callback === "function") callback.call(thisArg, true, priceType);
+      };
+      OrgWeb.prototype.sendFlower = function (thisArg, callback, num) {
+        applyDevFlowerState();
+        if (typeof callback === "function") callback.call(thisArg, [num || 1, true]);
+      };
+    }
+
+    return true;
+  }
+
   function getDevFreeUnlockPayload(url) {
     var text = String(url || "");
     var lower = text.toLowerCase();
@@ -97,19 +215,39 @@
       lower.indexOf("/pay") !== -1 ||
       lower.indexOf("/flower") !== -1 ||
       lower.indexOf("/account") !== -1 ||
-      lower.indexOf("/user/") !== -1;
+      lower.indexOf("/user/") !== -1 ||
+      lower.indexOf("/ajax/") !== -1 ||
+      lower.indexOf("ajax/") !== -1 ||
+      lower.indexOf("/api/client") !== -1;
 
     if (!isLocalApi) return null;
 
+    if (lower.indexOf("game_flower_by_me") !== -1) {
+      return { status: 1, msg: "local dev flower state", data: devFlowerState() };
+    }
+    if (lower.indexOf("get_flower") !== -1) {
+      return { status: 1, msg: "local dev flower account", data: devUserFlowerAccount() };
+    }
+    if (
+      lower.indexOf("contains/flower") !== -1 ||
+      lower.indexOf("share_game") !== -1 ||
+      lower.indexOf("pay/flower") !== -1
+    ) {
+      applyDevFlowerState();
+      return { status: 1, msg: "local dev flower ok", data: devFlowerState() };
+    }
+    if (lower.indexOf("all_share_award_conf") !== -1 || lower.indexOf("share_award_conf") !== -1) {
+      return { status: 1, msg: "local dev award ok", data: devAwardPayload() };
+    }
     if (lower.indexOf("getmyaccountmoney") !== -1 || lower.indexOf("accountmoney") !== -1 || lower.indexOf("balance") !== -1) {
       return {
         status: 1,
         data: {
-          coin_count: 999999,
-          gold_count: 999999,
-          flower_count: 999999,
-          diamond_count: 999999,
-          acoin: 999999
+          coin_count: DEV_FLOWER_COIN_AMOUNT,
+          gold_count: DEV_FLOWER_COIN_AMOUNT,
+          flower_count: DEV_FLOWER_AMOUNT,
+          diamond_count: DEV_FLOWER_AMOUNT,
+          acoin: DEV_FLOWER_AMOUNT
         }
       };
     }
@@ -174,14 +312,7 @@
         if (typeof callback === "function") callback(true);
       };
     }
-
-    if (window.GloableData && GloableData.getInstance) {
-      var data = GloableData.getInstance();
-      data.isFreeLimit = false;
-      data.isFreeTime = 0;
-      data.flowerUnlock = 0;
-      data.gameFvTimes = 999999;
-    }
+    patched = applyDevFlowerState() || patched;
 
     var scriptSrcDescriptor = Object.getOwnPropertyDescriptor(HTMLScriptElement.prototype, "src");
     if (scriptSrcDescriptor && scriptSrcDescriptor.set && !scriptSrcDescriptor.set.__officialProxyDevFreeUnlockWrapped) {

@@ -22,6 +22,8 @@ DEFAULT_CDN_HOSTS = (
 )
 LOCAL_API_PREFIXES = ("engine/", "PropShop/", "game/", "task/", "pay/", "flower/", "account/", "user/")
 DEV_FREE_UNLOCK_AMOUNT = 999999
+DEV_FLOWER_AMOUNT = 9999
+DEV_FLOWER_COIN_AMOUNT = DEV_FLOWER_AMOUNT * 100
 TRANSPARENT_PNG = bytes.fromhex(
     "89504e470d0a1a0a0000000d4948445200000001000000010806000000"
     "1f15c4890000000a49444154789c6360000002000150a0f64500000000"
@@ -66,6 +68,51 @@ def make_api_payload(entries):
         ensure_ascii=False,
         separators=(",", ":"),
     ).encode("utf-8")
+
+
+def dev_flower_state():
+    return {
+        "fresh_flower_num": DEV_FLOWER_AMOUNT,
+        "wild_flower_num": 0,
+        "wild_flower": 0,
+        "tanhua_flower_num": DEV_FLOWER_AMOUNT,
+        "tanHuaPlayFowerStr": DEV_FLOWER_AMOUNT,
+        "flower_num": DEV_FLOWER_AMOUNT,
+        "num": DEV_FLOWER_AMOUNT,
+        "sum": DEV_FLOWER_AMOUNT,
+        "payFlowerNumStr": str(DEV_FLOWER_AMOUNT),
+    }
+
+
+def dev_user_flower_account():
+    return {
+        "coin1": {"coin_count": DEV_FLOWER_COIN_AMOUNT},
+        "coin2": {"coin_count": DEV_FLOWER_COIN_AMOUNT},
+        "coin_count": DEV_FLOWER_COIN_AMOUNT,
+        "gold_count": DEV_FLOWER_COIN_AMOUNT,
+        "flower_count": DEV_FLOWER_AMOUNT,
+        "fresh_flower_num": DEV_FLOWER_AMOUNT,
+        "wild_flower_num": 0,
+        "tanhua_flower_num": DEV_FLOWER_AMOUNT,
+        "num": DEV_FLOWER_AMOUNT,
+        "sum": DEV_FLOWER_AMOUNT,
+    }
+
+
+def dev_award_payload():
+    return {
+        "is_receive": 0,
+        "is_received": 0,
+        "received": 0,
+        "can_receive": 1,
+        "can_get": 1,
+        "status": 1,
+        "flower_num": DEV_FLOWER_AMOUNT,
+        "need_flower": 0,
+        "award_flower": DEV_FLOWER_AMOUNT,
+        "coin_count": DEV_FLOWER_COIN_AMOUNT,
+        "data": dev_flower_state(),
+    }
 
 
 def safe_join(root, relative):
@@ -187,7 +234,10 @@ class OfficialPlayerProxyHandler(SimpleHTTPRequestHandler):
         if not self.server.dev_free_unlock:
             return False
         route_lower = route.lower()
-        return any(keyword in route_lower for keyword in ("propshop", "pay", "unlock", "buy", "flower", "accountmoney"))
+        return any(
+            keyword in route_lower
+            for keyword in ("propshop", "pay", "unlock", "buy", "flower", "accountmoney", "share", "award", "welfare")
+        )
 
     def _serve_web_bin(self, name):
         if name == "Game_mini.bin":
@@ -244,16 +294,26 @@ class OfficialPlayerProxyHandler(SimpleHTTPRequestHandler):
         goods_id = self._int_param(query, ("goods_id", "goodsId", "goodsid", "item_id", "itemId", "id"), 0)
         buy_num = self._int_param(query, ("buy_num", "buyNum", "buynum", "num", "count"), 1)
 
-        if "getMyAccountMoney" in route or "accountmoney" in route_lower or "balance" in route_lower:
+        if dev_free_unlock and "game_flower_by_me" in route_lower:
+            payload = {"status": 1, "msg": "local dev flower state", "data": dev_flower_state()}
+        elif dev_free_unlock and "get_flower" in route_lower:
+            payload = {"status": 1, "msg": "local dev flower account", "data": dev_user_flower_account()}
+        elif dev_free_unlock and any(
+            keyword in route_lower for keyword in ("contains/flower", "share_game", "pay/flower")
+        ):
+            payload = {"status": 1, "msg": "local dev flower ok", "data": dev_flower_state()}
+        elif dev_free_unlock and any(keyword in route_lower for keyword in ("all_share_award_conf", "share_award_conf")):
+            payload = {"status": 1, "msg": "local dev award ok", "data": dev_award_payload()}
+        elif "getmyaccountmoney" in route_lower or "accountmoney" in route_lower or "balance" in route_lower:
             if dev_free_unlock:
                 payload = {
                     "status": 1,
                     "data": {
-                        "coin_count": amount,
-                        "gold_count": amount,
-                        "flower_count": amount,
-                        "diamond_count": amount,
-                        "acoin": amount,
+                        "coin_count": DEV_FLOWER_COIN_AMOUNT,
+                        "gold_count": DEV_FLOWER_COIN_AMOUNT,
+                        "flower_count": DEV_FLOWER_AMOUNT,
+                        "diamond_count": DEV_FLOWER_AMOUNT,
+                        "acoin": DEV_FLOWER_AMOUNT,
                     },
                 }
             else:
@@ -289,11 +349,11 @@ class OfficialPlayerProxyHandler(SimpleHTTPRequestHandler):
             payload = {"status": 1, "data": {"is_free": 1, "time": 0}}
         elif "get_sys_time" in route:
             payload = {"status": 1, "data": int(__import__("time").time())}
-        elif dev_free_unlock and any(keyword in route_lower for keyword in ("unlock", "buy", "pay", "consume", "charge", "flower")):
+        elif dev_free_unlock and any(keyword in route_lower for keyword in ("unlock", "buy", "pay", "consume", "charge", "flower", "award")):
             payload = {
                 "status": 1,
                 "msg": "local dev free unlock",
-                "data": {"ok": 1, "success": 1, "is_buy": 1, "is_unlock": 1, "unlock": 1},
+                "data": {"ok": 1, "success": 1, "is_buy": 1, "is_unlock": 1, "unlock": 1, "flower": dev_flower_state()},
             }
         else:
             payload = {"status": 1, "data": []}
