@@ -14,6 +14,7 @@ from pathlib import Path
 
 DEFAULT_GUID = "0a235c54f16c431ab5736c92997edb47"
 DEFAULT_VERSION = "364"
+DEFAULT_GINDEX = "1569947"
 DEFAULT_CDN_HOSTS = (
     "https://dlcdn1.cgyouxi.com",
     "https://c2.cgyouxi.com",
@@ -170,7 +171,7 @@ class OfficialPlayerProxyHandler(SimpleHTTPRequestHandler):
                 self._send_bytes(TRANSPARENT_PNG, "image/png")
                 return
             if route == "api/oapi_map.php":
-                self._send_bytes(self.server.map_api_payload, "application/json; charset=utf-8")
+                self._send_bytes(self._map_api_payload(query), "application/json; charset=utf-8")
                 return
             platform_unlock = self._platform_unlock_enabled(query)
             if self._is_stub_route(route, platform_unlock):
@@ -191,7 +192,7 @@ class OfficialPlayerProxyHandler(SimpleHTTPRequestHandler):
 
             web_match = WEB_BIN_RE.match(route)
             if web_match:
-                self._serve_web_bin(web_match.group(3))
+                self._serve_web_bin(web_match.group(1), web_match.group(2), web_match.group(3))
                 return
 
             if SHARERES_RE.match(route):
@@ -245,11 +246,10 @@ class OfficialPlayerProxyHandler(SimpleHTTPRequestHandler):
             for keyword in ("propshop", "pay", "unlock", "buy", "flower", "accountmoney", "ajax/share", "award", "welfare")
         )
 
-    def _serve_web_bin(self, name):
-        if name == "Game_mini.bin":
-            target = self.server.downloads / "Game_mini.bin"
-        else:
-            target = self.server.downloads / "Map_32.bin"
+    def _serve_web_bin(self, guid, version, name):
+        target = self._game_bundle_dir(guid, version) / name
+        if not target.exists():
+            target = self.server.downloads / name
         self._serve_file(target, "application/octet-stream")
 
     def _serve_shareres(self, route):
@@ -376,8 +376,39 @@ class OfficialPlayerProxyHandler(SimpleHTTPRequestHandler):
         for part in cookies.split(";"):
             key, _, value = part.strip().partition("=")
             if key == name:
-                return value
+                return urllib.parse.unquote(value)
         return None
+
+    def _query_value(self, query, names, default=""):
+        for name in names:
+            values = query.get(name)
+            if values and values[0]:
+                return str(values[0])
+        return default
+
+    def _game_context(self, query):
+        gindex = self._query_value(query, ("gameId", "gindex"), "") or self._cookie_value("officialProxyGameId") or DEFAULT_GINDEX
+        guid = self._query_value(query, ("guid",), "") or self._cookie_value("officialProxyGuid") or DEFAULT_GUID
+        version = self._query_value(query, ("version", "ver"), "") or self._cookie_value("officialProxyVersion") or DEFAULT_VERSION
+        return str(gindex), str(guid), str(version)
+
+    def _game_bundle_dir(self, guid, version):
+        return self.server.downloads / "games" / str(guid) / str(version)
+
+    def _map_path(self, query):
+        _, guid, version = self._game_context(query)
+        bundled = self._game_bundle_dir(guid, version) / "Map_32.bin"
+        if bundled.exists():
+            return bundled
+        return self.server.downloads / "Map_32.bin"
+
+    def _map_api_payload(self, query):
+        map_path = self._map_path(query).resolve()
+        cached = self.server.map_payload_cache.get(map_path)
+        if cached is None:
+            cached = make_api_payload(parse_map_bin(map_path))
+            self.server.map_payload_cache[map_path] = cached
+        return cached
 
     def _platform_unlock_enabled(self, query):
         if self._query_flag_false(query, "platformUnlock") or self._query_flag_false(query, "devFreeUnlock"):
@@ -460,9 +491,7 @@ class OfficialPlayerProxyServer(ThreadingHTTPServer):
         self.download_timeout = download_timeout
         self.platform_unlock = platform_unlock
         self.dev_inventory = {}
-        self.map_path = self.downloads / "Map_32.bin"
-        self.map_entries = parse_map_bin(self.map_path)
-        self.map_api_payload = make_api_payload(self.map_entries)
+        self.map_payload_cache = {}
 
 
 def main():
@@ -500,7 +529,10 @@ def main():
     else:
         print(f"platform unlock disabled; compare at http://{args.host}:{args.port}/official_player_proxy.html?platformUnlock=0")
     print(f"root={server.root}")
-    print(f"map={server.map_path} entries={len(server.map_entries)}")
+    default_map = server.downloads / "Map_32.bin"
+    default_entries = len(parse_map_bin(default_map)) if default_map.exists() else 0
+    print(f"default map={default_map} entries={default_entries}")
+    print(f"game bundles={server.downloads / 'games'}")
     server.serve_forever()
 
 

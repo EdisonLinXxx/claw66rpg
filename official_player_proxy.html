@@ -40,9 +40,18 @@
     var urlParams = new URLSearchParams(window.location.search);
     var debug = urlParams.get("debug") === "1";
     var platformUnlock = urlParams.get("platformUnlock") !== "0" && urlParams.get("devFreeUnlock") !== "0";
+    var gameId = urlParams.get("gameId") || urlParams.get("gindex") || "1569947";
+    var guid = urlParams.get("guid") || "0a235c54f16c431ab5736c92997edb47";
+    var ver = urlParams.get("version") || urlParams.get("ver") || "364";
     window.__officialProxyPlatformUnlock = platformUnlock;
     window.__officialProxyDevFreeUnlock = platformUnlock;
+    window.__officialProxyGameId = gameId;
+    window.__officialProxyGuid = guid;
+    window.__officialProxyVersion = ver;
     document.cookie = "officialProxyPlatformUnlock=" + (platformUnlock ? "1" : "0") + "; path=/; SameSite=Lax";
+    document.cookie = "officialProxyGameId=" + encodeURIComponent(gameId) + "; path=/; SameSite=Lax";
+    document.cookie = "officialProxyGuid=" + encodeURIComponent(guid) + "; path=/; SameSite=Lax";
+    document.cookie = "officialProxyVersion=" + encodeURIComponent(ver) + "; path=/; SameSite=Lax";
     var webUrl = "https://www.66rpg.com";
     var passUrl = "https://passport.66rpg.com";
     var cgUrl = "https://cg.66rpg.com";
@@ -58,8 +67,6 @@
     var hfSWFUrl = "__HFSWF__";
     var reportUrl = "https://report.66rpg.com";
     var channel_id = "";
-    var guid = "0a235c54f16c431ab5736c92997edb47";
-    var ver = "364";
     var flower_unlock = platformUnlock ? "0" : "35";
     var gamefv_times = platformUnlock ? "999999" : "24010";
     var platMark = "";
@@ -76,7 +83,7 @@
       userInfos: {
         uid: "local-player",
         code: "local-player",
-        gindex: "1569947",
+        gindex: gameId,
         open_id: "",
         channel_type: "",
         third_sign: ""
@@ -205,10 +212,10 @@
           quality,
           "web/" + guid + "/" + ver + "/Game_mini.bin",
           "1",
-          "1569947",
+          gameId,
           ""
         );
-        logLine("official proxy initGameData called");
+        logLine("official proxy initGameData called gameId=" + gameId + " guid=" + guid + " version=" + ver);
         if (platformUnlock) logLine("official proxy platform unlock mode enabled");
       } catch (error) {
         logLine("INIT ERROR: " + (error && (error.stack || error.message) || error));
