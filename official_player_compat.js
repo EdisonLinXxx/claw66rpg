@@ -201,6 +201,51 @@
     return true;
   }
 
+  function applyLocalSaveUserFlags(target) {
+    if (!target || typeof target !== "object") return false;
+    var changed = false;
+    function setValue(key, value) {
+      if (target[key] !== value) {
+        target[key] = value;
+        changed = true;
+      }
+    }
+    setValue("savePageShowLocal", 1);
+    setValue("showLocalLoadM", 1);
+    if (target.curOPCloudOption === undefined || target.curOPCloudOption === null) {
+      target.curOPCloudOption = 0;
+      changed = true;
+    }
+    return changed;
+  }
+
+  function applyCommonPlayerLocalSaveFlags() {
+    if (!window.commonPlayer) return false;
+    commonPlayer.userInfos = commonPlayer.userInfos || {};
+    return applyLocalSaveUserFlags(commonPlayer.userInfos);
+  }
+
+  function installLocalSaveModePatch() {
+    var patched = applyCommonPlayerLocalSaveFlags();
+
+    if (typeof window.SAL_getUserData === "function" && !window.SAL_getUserData.__officialProxyLocalSaveWrapped) {
+      var originalGetUserData = window.SAL_getUserData;
+      window.SAL_getUserData = function () {
+        var userData = originalGetUserData.apply(this, arguments) || {};
+        applyLocalSaveUserFlags(userData);
+        if (userData.userData) applyLocalSaveUserFlags(userData.userData);
+        if (userData.userInfos) applyLocalSaveUserFlags(userData.userInfos);
+        return userData;
+      };
+      window.SAL_getUserData.__officialProxyLocalSaveWrapped = true;
+      patched = true;
+      compatLog("official proxy local save user-data patch enabled");
+    }
+
+    if (patched) compatLog("official proxy local save flags enabled");
+    return patched;
+  }
+
   function getDevFreeUnlockPayload(url) {
     var text = String(url || "");
     var lower = text.toLowerCase();
@@ -291,6 +336,244 @@
       };
     }
     return null;
+  }
+
+  function getLocalPlatformApiPayload(url) {
+    var payload = getDevFreeUnlockPayload(url);
+    if (payload) return payload;
+
+    var lower = String(url || "").toLowerCase();
+    if (lower.indexOf("new_get_game_ad_list") !== -1) {
+      return {
+        status: 1,
+        msg: "local platform ad list",
+        data: {
+          ad: {
+            adurl: "",
+            imgurl: "",
+            mobile_img_url: ""
+          }
+        }
+      };
+    }
+    if (lower.indexOf("get_game_info") !== -1) {
+      return {
+        status: 1,
+        msg: "local platform game info",
+        data: {
+          game: {
+            first_pub_time: "2026-01-01",
+            author_uname: "",
+            gname: "",
+            month_card: 0
+          }
+        }
+      };
+    }
+    if (lower.indexOf("get_limit_free_status") !== -1 || lower.indexOf("getlimitfreetime") !== -1) {
+      return { status: 1, msg: "local platform free status", data: { status: 0, is_free: 1, time: 0 } };
+    }
+    if (lower.indexOf("get_orange_flower_color_status") !== -1) {
+      return { status: 1, msg: "local platform orange flower status", data: { status: 0 } };
+    }
+    if (lower.indexOf("check_refund_flower") !== -1) {
+      return { status: 1, msg: "local platform refund status", data: { status: 0, have_refund: 0 } };
+    }
+    if (lower.indexOf("get_status_v3") !== -1) {
+      return { status: 1, msg: "local platform light text status", data: { status: 0 } };
+    }
+    if (lower.indexOf("get_global_cfg") !== -1) {
+      return { status: 1, msg: "local platform prop shop config", data: {} };
+    }
+    if (lower.indexOf("get_goods_list") !== -1) {
+      return { status: 1, msg: "local platform prop shop goods", data: [] };
+    }
+    if (lower.indexOf("cloud_load_ex") !== -1 || lower.indexOf("cloud_save_ex") !== -1) {
+      return { status: 1, msg: "ok", data: null };
+    }
+    if (lower.indexOf("oweb_log.php") !== -1) {
+      return { ret: 1 };
+    }
+    return null;
+  }
+
+  function createResolvedAjaxResult(payload) {
+    var result = {
+      abort: function () {},
+      done: function (handler) {
+        if (typeof handler === "function") setTimeout(function () { handler(payload, "success", result); }, 0);
+        return result;
+      },
+      fail: function () { return result; },
+      always: function (handler) {
+        if (typeof handler === "function") setTimeout(function () { handler(result, "success"); }, 0);
+        return result;
+      },
+      status: 200,
+      responseJSON: payload,
+      responseText: JSON.stringify(payload)
+    };
+    return result;
+  }
+
+  function installLocalRequestPatch() {
+    var patched = false;
+    if (typeof window.SAL_request === "function" && !window.SAL_request.__officialProxyLocalRequestWrapped) {
+      var originalRequest = window.SAL_request;
+      window.SAL_request = function (url, method, dataType, callback) {
+        var payload = getLocalPlatformApiPayload(url);
+        if (payload) {
+          compatLog("official proxy local API SAL_request " + url);
+          if (typeof callback === "function") setTimeout(function () { callback(200, payload); }, 0);
+          return null;
+        }
+        return originalRequest.apply(this, arguments);
+      };
+      window.SAL_request.__officialProxyLocalRequestWrapped = true;
+      patched = true;
+    }
+
+    if (window.$ && $.ajax && !$.ajax.__officialProxyLocalRequestWrapped) {
+      var originalAjax = $.ajax;
+      $.ajax = function (options) {
+        var url = typeof options === "string" ? options : options && options.url;
+        var payload = getLocalPlatformApiPayload(url);
+        if (payload) {
+          compatLog("official proxy local API ajax " + url);
+          var result = createResolvedAjaxResult(payload);
+          setTimeout(function () {
+            if (options && typeof options.success === "function") options.success(payload, "success", result);
+            if (options && typeof options.complete === "function") options.complete(result, "success");
+          }, 0);
+          return result;
+        }
+        return originalAjax.apply(this, arguments);
+      };
+      $.ajax.__officialProxyLocalRequestWrapped = true;
+      patched = true;
+    }
+
+    if (patched) compatLog("official proxy local API patch enabled");
+    return patched;
+  }
+
+  function isLocalNetworkNoiseToast(value) {
+    var text = String(value || "");
+    return text.indexOf("网络异常") !== -1 &&
+      (text.indexOf("退出重进") !== -1 || text.indexOf("联系客服") !== -1 || text.indexOf("刷新重试") !== -1);
+  }
+
+  function hideLocalNetworkNoiseObject(object) {
+    if (!object) return object;
+    object.__officialProxyHiddenNetworkNoiseToast = true;
+    try { object.visible = false; } catch (error) {}
+    try { object._visible = false; } catch (error) {}
+    try { object._opacity = 0; } catch (error) {}
+    try {
+      if (typeof object.setVisible === "function") object.setVisible(false);
+    } catch (error) {}
+    try {
+      if (typeof object.setOpacity === "function") object.setOpacity(0);
+    } catch (error) {}
+    return object;
+  }
+
+  function installNetworkNoiseToastFilterPatch() {
+    var state = window.__officialProxyNetworkNoiseToastFilter ||
+      (window.__officialProxyNetworkNoiseToastFilter = { lastEmptySprite: null, logged: false });
+    var patched = false;
+
+    if (typeof window.SALSprite === "function" && !window.SALSprite.__officialProxyNetworkNoiseWrapped) {
+      var originalSprite = window.SALSprite;
+      window.SALSprite = function (path) {
+        var object = originalSprite.apply(this, arguments);
+        if (!path) state.lastEmptySprite = { object: object, at: Date.now() };
+        return object;
+      };
+      window.SALSprite.__officialProxyNetworkNoiseWrapped = true;
+      patched = true;
+    }
+
+    if (typeof window.SALText === "function" && !window.SALText.__officialProxyNetworkNoiseWrapped) {
+      var originalText = window.SALText;
+      window.SALText = function (text) {
+        var args = Array.prototype.slice.call(arguments);
+        var isNoise = isLocalNetworkNoiseToast(text);
+        if (isNoise) {
+          args[0] = "";
+          var last = state.lastEmptySprite;
+          if (last && Date.now() - last.at < 1000) hideLocalNetworkNoiseObject(last.object);
+        }
+        var object = originalText.apply(this, args);
+        if (isNoise) {
+          hideLocalNetworkNoiseObject(object);
+          if (!state.logged) {
+            state.logged = true;
+            compatLog("official proxy suppressed local network toast");
+          }
+        }
+        return object;
+      };
+      window.SALText.__officialProxyNetworkNoiseWrapped = true;
+      patched = true;
+    }
+
+    if (typeof window.SAL_addElement === "function" && !window.SAL_addElement.__officialProxyNetworkNoiseWrapped) {
+      var originalAddElement = window.SAL_addElement;
+      window.SAL_addElement = function (parent, child) {
+        if (child && child.__officialProxyHiddenNetworkNoiseToast) hideLocalNetworkNoiseObject(child);
+        var result = originalAddElement.apply(this, arguments);
+        if (child && child.__officialProxyHiddenNetworkNoiseToast) hideLocalNetworkNoiseObject(child);
+        return result;
+      };
+      window.SAL_addElement.__officialProxyNetworkNoiseWrapped = true;
+      patched = true;
+    }
+
+    if (typeof window.SAL_setElementOpacity === "function" && !window.SAL_setElementOpacity.__officialProxyNetworkNoiseWrapped) {
+      var originalSetOpacity = window.SAL_setElementOpacity;
+      window.SAL_setElementOpacity = function (object, opacity) {
+        if (object && object.__officialProxyHiddenNetworkNoiseToast) {
+          var args = Array.prototype.slice.call(arguments);
+          args[1] = 0;
+          return originalSetOpacity.apply(this, args);
+        }
+        return originalSetOpacity.apply(this, arguments);
+      };
+      window.SAL_setElementOpacity.__officialProxyNetworkNoiseWrapped = true;
+      patched = true;
+    }
+
+    if (typeof window.SAL_setElementVisible === "function" && !window.SAL_setElementVisible.__officialProxyNetworkNoiseWrapped) {
+      var originalSetVisible = window.SAL_setElementVisible;
+      window.SAL_setElementVisible = function (object, visible) {
+        if (object && object.__officialProxyHiddenNetworkNoiseToast) {
+          var args = Array.prototype.slice.call(arguments);
+          args[1] = false;
+          return originalSetVisible.apply(this, args);
+        }
+        return originalSetVisible.apply(this, arguments);
+      };
+      window.SAL_setElementVisible.__officialProxyNetworkNoiseWrapped = true;
+      patched = true;
+    }
+
+    if (typeof window.SAL_runAction === "function" && !window.SAL_runAction.__officialProxyNetworkNoiseWrapped) {
+      var originalRunAction = window.SAL_runAction;
+      window.SAL_runAction = function (object, action, callback) {
+        if (object && object.__officialProxyHiddenNetworkNoiseToast) {
+          hideLocalNetworkNoiseObject(object);
+          if (typeof callback === "function") setTimeout(callback, 0);
+          return null;
+        }
+        return originalRunAction.apply(this, arguments);
+      };
+      window.SAL_runAction.__officialProxyNetworkNoiseWrapped = true;
+      patched = true;
+    }
+
+    if (patched) compatLog("official proxy network toast filter patch enabled");
+    return patched;
   }
 
   function installDevFreeUnlockPatch() {
@@ -544,6 +827,279 @@
     return patched;
   }
 
+  function installStorageTracePatch() {
+    if (window.__officialProxyStorageTracePatched) return false;
+    var hasStorageAPI =
+      typeof window.SAL_setStorage === "function" ||
+      typeof window.SAL_getStorage === "function" ||
+      typeof window.SAL_removeStorage === "function" ||
+      typeof window.SAL_getStorageInfo === "function" ||
+      (window.OStorage && OStorage.prototype);
+    if (!hasStorageAPI) return false;
+
+    window.__officialProxyStorageTracePatched = true;
+    window.__officialProxyStorageTrace = window.__officialProxyStorageTrace || [];
+
+    var AUTO_SAVE_SUFFIX = "-100";
+    var PRIMARY_ARCHIVE_SLOT = "1";
+    var COMPAT_ARCHIVE_SLOT = "0";
+    var SAVE_INDEX_SUFFIX = "SaveFileIndex";
+    var SAVE_INDEX_LOCAL_SUFFIX = "SaveFileIndexLocal";
+    var SAVE_ICON_SUFFIX = "icon";
+    var BRIDGE_MARKER_SUFFIX = "__officialProxyAutoArchiveBridge";
+    var bridgeWriteDepth = 0;
+
+    function trace(action, key, value) {
+      var item = {
+        action: action,
+        key: key === undefined ? "" : String(key),
+        length: value === undefined || value === null ? 0 : String(value).length,
+        at: Date.now()
+      };
+      window.__officialProxyStorageTrace.push(item);
+      if (window.__officialProxyStorageTrace.length > 100) window.__officialProxyStorageTrace.shift();
+      compatLog("official proxy storage " + action + " key=" + item.key + " len=" + item.length);
+    }
+
+    function isMissingStorageValue(value) {
+      return value === undefined || value === null || value === "";
+    }
+
+    function readRaw(storage, originalLoadFile, key) {
+      try {
+        return originalLoadFile.call(storage, key);
+      } catch (error) {
+        return null;
+      }
+    }
+
+    function writeRaw(storage, originalSaveFile, key, value) {
+      try {
+        bridgeWriteDepth += 1;
+        originalSaveFile.call(storage, key, value);
+        return true;
+      } catch (error) {
+        return false;
+      } finally {
+        bridgeWriteDepth -= 1;
+      }
+    }
+
+    function archivePrefixFromKey(key) {
+      key = String(key || "");
+      if (key.indexOf("local-player") < 0) return "";
+      if (key.slice(-SAVE_INDEX_LOCAL_SUFFIX.length) === SAVE_INDEX_LOCAL_SUFFIX) {
+        return key.slice(0, -SAVE_INDEX_LOCAL_SUFFIX.length);
+      }
+      if (key.slice(-SAVE_INDEX_SUFFIX.length) === SAVE_INDEX_SUFFIX) {
+        return key.slice(0, -SAVE_INDEX_SUFFIX.length);
+      }
+      if (key.slice(-SAVE_ICON_SUFFIX.length) === SAVE_ICON_SUFFIX) {
+        return key.slice(0, -SAVE_ICON_SUFFIX.length);
+      }
+      return "";
+    }
+
+    function archivePrefixFromAutoKey(key) {
+      key = String(key || "");
+      if (key.indexOf("local-player") < 0) return "";
+      return key.slice(-AUTO_SAVE_SUFFIX.length) === AUTO_SAVE_SUFFIX ? key.slice(0, -AUTO_SAVE_SUFFIX.length) : "";
+    }
+
+    function isManualArchiveSlotKey(key) {
+      key = String(key || "");
+      return /local-player\d+$/.test(key);
+    }
+
+    function archivePrefixFromManualSlotKey(key) {
+      var match = String(key || "").match(/^(.*local-player)\d+$/);
+      return match ? match[1] : "";
+    }
+
+    function buildArchiveIconValue(autoSaveValue) {
+      var picurl = "";
+      try {
+        var parsed = JSON.parse(autoSaveValue);
+        var thumb = parsed && parsed.Thumbnail;
+        picurl = thumb && (thumb.base64 || thumb.picurl || thumb.cloudImageUrl || thumb.cloudImageUr || "") || "";
+      } catch (error) {}
+      if (!picurl) picurl = buildArchivePlaceholderImage();
+
+      var slots = [];
+      for (var index = 0; index < 20; index++) {
+        var active = index === parseInt(PRIMARY_ARCHIVE_SLOT, 10);
+        slots.push({
+          index: index,
+          picurl: active ? picurl : "",
+          name: active ? "自动存档" : "",
+          date: active ? Date.now() : -1
+        });
+      }
+      return encodeURIComponent(JSON.stringify(slots));
+    }
+
+    function buildArchivePlaceholderImage() {
+      try {
+        var canvas = document.createElement("canvas");
+        canvas.width = 240;
+        canvas.height = 135;
+        var ctx = canvas.getContext("2d");
+        var gradient = ctx.createLinearGradient(0, 0, canvas.width, canvas.height);
+        gradient.addColorStop(0, "#f9e8ff");
+        gradient.addColorStop(1, "#b59cff");
+        ctx.fillStyle = gradient;
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.fillStyle = "rgba(255,255,255,.75)";
+        ctx.fillRect(12, 12, canvas.width - 24, canvas.height - 24);
+        ctx.strokeStyle = "rgba(134,94,190,.55)";
+        ctx.lineWidth = 3;
+        ctx.strokeRect(18, 18, canvas.width - 36, canvas.height - 36);
+        ctx.fillStyle = "#7b56b3";
+        ctx.font = "bold 22px sans-serif";
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillText("AUTO SAVE", canvas.width / 2, canvas.height / 2);
+        return canvas.toDataURL("image/png");
+      } catch (error) {
+        return "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=";
+      }
+    }
+
+    function ensureAutoArchiveBridge(storage, originalLoadFile, originalSaveFile, prefix, reason) {
+      if (!prefix) return false;
+      var autoKey = prefix + AUTO_SAVE_SUFFIX;
+      var autoSaveValue = readRaw(storage, originalLoadFile, autoKey);
+      if (isMissingStorageValue(autoSaveValue)) return false;
+
+      var markerKey = prefix + BRIDGE_MARKER_SUFFIX;
+      var marker = readRaw(storage, originalLoadFile, markerKey);
+      if (marker === "manual") return false;
+
+      var slotKey = prefix + PRIMARY_ARCHIVE_SLOT;
+      var compatSlotKey = prefix + COMPAT_ARCHIVE_SLOT;
+      var indexKey = prefix + SAVE_INDEX_SUFFIX;
+      var localIndexKey = prefix + SAVE_INDEX_LOCAL_SUFFIX;
+      var iconKey = prefix + SAVE_ICON_SUFFIX;
+      var changed = false;
+
+      if (isMissingStorageValue(readRaw(storage, originalLoadFile, slotKey)) || marker === "auto") {
+        changed = writeRaw(storage, originalSaveFile, slotKey, autoSaveValue) || changed;
+      }
+      if (isMissingStorageValue(readRaw(storage, originalLoadFile, compatSlotKey)) || marker === "auto") {
+        changed = writeRaw(storage, originalSaveFile, compatSlotKey, autoSaveValue) || changed;
+      }
+      if (isMissingStorageValue(readRaw(storage, originalLoadFile, indexKey)) || marker === "auto") {
+        changed = writeRaw(storage, originalSaveFile, indexKey, "0||" + PRIMARY_ARCHIVE_SLOT) || changed;
+      }
+      if (isMissingStorageValue(readRaw(storage, originalLoadFile, localIndexKey)) || marker === "auto") {
+        changed = writeRaw(storage, originalSaveFile, localIndexKey, PRIMARY_ARCHIVE_SLOT) || changed;
+      }
+      if (isMissingStorageValue(readRaw(storage, originalLoadFile, iconKey)) || marker === "auto") {
+        changed = writeRaw(storage, originalSaveFile, iconKey, buildArchiveIconValue(autoSaveValue)) || changed;
+      }
+      if (marker !== "auto") {
+        changed = writeRaw(storage, originalSaveFile, markerKey, "auto") || changed;
+      }
+      if (changed) compatLog("official proxy storage bridged autosave archive prefix=" + prefix + " reason=" + reason);
+      return changed;
+    }
+
+    function bridgeKnownAutoArchives(storage, originalLoadFile, originalSaveFile, originalGetAllFileName) {
+      var keys;
+      try {
+        keys = originalGetAllFileName.call(storage) || [];
+      } catch (error) {
+        return false;
+      }
+      var changed = false;
+      for (var index = 0; index < keys.length; index++) {
+        changed = ensureAutoArchiveBridge(storage, originalLoadFile, originalSaveFile, archivePrefixFromAutoKey(keys[index]), "scan") || changed;
+      }
+      return changed;
+    }
+
+    if (typeof window.SAL_setStorage === "function" && !window.SAL_setStorage.__officialProxyWrapped) {
+      var originalSetStorage = window.SAL_setStorage;
+      window.SAL_setStorage = function (key, value, callback) {
+        trace("SAL_setStorage", key, value);
+        return originalSetStorage.apply(this, arguments);
+      };
+      window.SAL_setStorage.__officialProxyWrapped = true;
+    }
+
+    if (typeof window.SAL_getStorage === "function" && !window.SAL_getStorage.__officialProxyWrapped) {
+      var originalGetStorage = window.SAL_getStorage;
+      window.SAL_getStorage = function (key, callback) {
+        trace("SAL_getStorage", key);
+        return originalGetStorage.call(this, key, function (value) {
+          trace("SAL_getStorageResult", key, value);
+          if (typeof callback === "function") callback(value);
+        });
+      };
+      window.SAL_getStorage.__officialProxyWrapped = true;
+    }
+
+    if (typeof window.SAL_removeStorage === "function" && !window.SAL_removeStorage.__officialProxyWrapped) {
+      var originalRemoveStorage = window.SAL_removeStorage;
+      window.SAL_removeStorage = function (key, callback) {
+        trace("SAL_removeStorage", key);
+        return originalRemoveStorage.apply(this, arguments);
+      };
+      window.SAL_removeStorage.__officialProxyWrapped = true;
+    }
+
+    if (typeof window.SAL_getStorageInfo === "function" && !window.SAL_getStorageInfo.__officialProxyWrapped) {
+      var originalGetStorageInfo = window.SAL_getStorageInfo;
+      window.SAL_getStorageInfo = function (callback) {
+        trace("SAL_getStorageInfo", "*");
+        return originalGetStorageInfo.call(this, function (keys) {
+          trace("SAL_getStorageInfoResult", "*", JSON.stringify(keys || []));
+          if (typeof callback === "function") callback(keys);
+        });
+      };
+      window.SAL_getStorageInfo.__officialProxyWrapped = true;
+    }
+
+    if (window.OStorage && OStorage.prototype && !OStorage.prototype.__officialProxyWrapped) {
+      OStorage.prototype.__officialProxyWrapped = true;
+      var originalSaveFile = OStorage.prototype.saveFile;
+      var originalLoadFile = OStorage.prototype.loadFile;
+      var originalRemoveFile = OStorage.prototype.removeFile;
+      var originalGetAllFileName = OStorage.prototype.getAllFileName;
+      OStorage.prototype.saveFile = function (key, value) {
+        trace("OStorage.saveFile", key, value);
+        var result = originalSaveFile.apply(this, arguments);
+        if (!bridgeWriteDepth && isManualArchiveSlotKey(key)) {
+          writeRaw(this, originalSaveFile, archivePrefixFromManualSlotKey(key) + BRIDGE_MARKER_SUFFIX, "manual");
+        }
+        ensureAutoArchiveBridge(this, originalLoadFile, originalSaveFile, archivePrefixFromAutoKey(key), "autosave");
+        return result;
+      };
+      OStorage.prototype.loadFile = function (key) {
+        var value = originalLoadFile.apply(this, arguments);
+        if (isMissingStorageValue(value)) {
+          ensureAutoArchiveBridge(this, originalLoadFile, originalSaveFile, archivePrefixFromKey(key), "load");
+          value = originalLoadFile.apply(this, arguments);
+        }
+        trace("OStorage.loadFile", key, value);
+        return value;
+      };
+      OStorage.prototype.removeFile = function (key) {
+        trace("OStorage.removeFile", key);
+        return originalRemoveFile.apply(this, arguments);
+      };
+      OStorage.prototype.getAllFileName = function () {
+        bridgeKnownAutoArchives(this, originalLoadFile, originalSaveFile, originalGetAllFileName);
+        var keys = originalGetAllFileName.apply(this, arguments);
+        trace("OStorage.getAllFileName", "*", JSON.stringify(keys || []));
+        return keys;
+      };
+    }
+
+    compatLog("official proxy storage trace patch enabled");
+    return true;
+  }
+
   function install() {
     var ok = false;
     function run(name, fn) {
@@ -556,7 +1112,11 @@
     run("DButton padding", installButtonPaddingPatch);
     run("DSystem/CUI", installNewDSystemPatch);
     run("platform unlock", installDevFreeUnlockPatch);
+    run("local API", installLocalRequestPatch);
+    run("network toast filter", installNetworkNoiseToastFilterPatch);
+    run("local save mode", installLocalSaveModePatch);
     run("free-time", installFreeTimeBypass);
+    run("storage trace", installStorageTracePatch);
     return ok;
   }
 
