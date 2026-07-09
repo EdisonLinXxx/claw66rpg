@@ -71,7 +71,11 @@
     var gamefv_times = platformUnlock ? "999999" : "24010";
     var platMark = "";
     var aspect_ratio = "1";
-    var quality = "0";
+    var quality = urlParams.get("quality") || "32";
+    var gameBinPath = urlParams.get("gameBinPath") || "";
+    if (!gameBinPath && urlParams.get("useGameMini") === "1") {
+      gameBinPath = "web/" + guid + "/" + ver + "/Game_mini.bin";
+    }
     var platformUid = "local-player";
     var platfromNum = "";
     var pmode = "0";
@@ -155,7 +159,7 @@
   <script crossorigin="anonymous" src="https://c1.cgyouxi.com/website/hfplayer/v2/bin/js/lib/LibClass.js?v=20210202002"></script>
   <script crossorigin="anonymous" src="https://c2.cgyouxi.com/website/hfplayer/v2/bin/libs/pc-common-VA.js?v=20210202002"></script>
   <script crossorigin="anonymous" src="https://c2.cgyouxi.com/website/hfplayer/v2/bin/main.min.js?v=20210202002"></script>
-  <script src="/official_player_compat.js"></script>
+  <script src="official_player_compat.js"></script>
 </head>
 <body>
   <div id="debug"></div>
@@ -210,7 +214,7 @@
           "",
           "",
           quality,
-          "web/" + guid + "/" + ver + "/Game_mini.bin",
+          gameBinPath,
           "1",
           gameId,
           ""

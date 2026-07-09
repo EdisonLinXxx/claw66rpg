@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>66RPG Official Player Proxy V3</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1.0,minimum-scale=1.0,maximum-scale=1.0,user-scalable=no">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="full-screen" content="true">
+  <meta name="screen-orientation" content="portrait">
+  <meta name="x5-fullscreen" content="true">
+  <meta name="360-fullscreen" content="true">
+  <meta name="referrer" content="no-referrer-when-downgrade">
+  <link rel="stylesheet" href="https://c3.cgyouxi.com/website/hfplayer/v2/bin/css/public.css?v=202606170002">
+  <style>
+    html, body {
+      margin: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: #000;
+    }
+    #debug {
+      position: fixed;
+      left: 0;
+      top: 0;
+      z-index: 99999;
+      display: none;
+      max-width: 560px;
+      max-height: 45vh;
+      overflow: hidden;
+      padding: 8px 10px;
+      color: #fff;
+      background: rgba(0, 0, 0, .72);
+      font: 12px/1.5 Consolas, monospace;
+      pointer-events: none;
+      white-space: pre-wrap;
+    }
+  </style>
+  <script>
+    var urlParams = new URLSearchParams(window.location.search);
+    var debug = urlParams.get("debug") === "1";
+    var platformUnlock = urlParams.get("platformUnlock") !== "0" && urlParams.get("devFreeUnlock") !== "0";
+    var gameId = urlParams.get("gameId") || urlParams.get("gindex") || "1692579";
+    var guid = urlParams.get("guid") || "fbb2a8717f628920e662bdba3b89b418";
+    var ver = urlParams.get("version") || urlParams.get("ver") || "18";
+    var quality = urlParams.get("quality") || "34";
+    var localBase = window.location.origin;
+    window.__officialProxyPlatformUnlock = platformUnlock;
+    window.__officialProxyDevFreeUnlock = platformUnlock;
+    window.__officialProxyGameId = gameId;
+    window.__officialProxyGuid = guid;
+    window.__officialProxyVersion = ver;
+    document.cookie = "officialProxyPlatformUnlock=" + (platformUnlock ? "1" : "0") + "; path=/; SameSite=Lax";
+    document.cookie = "officialProxyGameId=" + encodeURIComponent(gameId) + "; path=/; SameSite=Lax";
+    document.cookie = "officialProxyGuid=" + encodeURIComponent(guid) + "; path=/; SameSite=Lax";
+    document.cookie = "officialProxyVersion=" + encodeURIComponent(ver) + "; path=/; SameSite=Lax";
+
+    function logLine(text) {
+      if (!debug) return;
+      var el = document.getElementById("debug");
+      if (el) {
+        el.style.display = "block";
+        el.textContent += text + "\n";
+      }
+      console.log(text);
+    }
+
+    function GetQueryString(name) {
+      var reg = new RegExp("(^|&)" + name + "=([^&]*)(&|$)", "i");
+      var result = window.location.search.substr(1).match(reg);
+      return result ? result[2] : null;
+    }
+
+    function GetImageBase64(src, width, height, callback) {
+      var image = document.createElement("img");
+      image.setAttribute("crossOrigin", "anonymous");
+      image.onload = function () {
+        try {
+          var canvas = document.createElement("canvas");
+          canvas.width = width || image.naturalWidth || image.width || 1;
+          canvas.height = height || image.naturalHeight || image.height || 1;
+          canvas.getContext("2d").drawImage(image, 0, 0, canvas.width, canvas.height);
+          callback(canvas.toDataURL("image/png"));
+        } catch (error) {
+          logLine("GetImageBase64 failed: " + (error && (error.stack || error.message) || error));
+          callback("");
+        }
+      };
+      image.onerror = function () {
+        logLine("GetImageBase64 image error: " + src);
+        callback("");
+      };
+      image.src = src;
+    }
+
+    window.GetImageBase64 = GetImageBase64;
+    window.addEventListener("error", function (event) {
+      logLine("ERROR: " + event.message + " @ " + event.filename + ":" + event.lineno);
+      if (event.error && event.error.stack) logLine(event.error.stack);
+    }, true);
+    window.addEventListener("unhandledrejection", function (event) {
+      var reason = event.reason;
+      logLine("UNHANDLED: " + (reason && (reason.stack || reason.message) || reason));
+    });
+    try {
+      var originalLocationReplace = window.location.replace.bind(window.location);
+      window.location.replace = function (target) {
+        if (String(target) === "about:blank") {
+          logLine("official proxy blocked about:blank replace");
+          return;
+        }
+        return originalLocationReplace(target);
+      };
+    } catch (error) {
+      logLine("location replace guard skipped: " + (error && (error.message || error)));
+    }
+
+    var base64Canvas;
+    var isM = false;
+    var testPath = false;
+    var pmode = "0";
+    var webUrl = localBase;
+    var passUrl = "https://passport.66rpg.com";
+    var cgUrl = "https://cg.66rpg.com";
+    var cgv2Url = localBase;
+    var bbsUrl = "https://bbs.66rpg.com";
+    var picUrl = "https://pic.cgyouxi.com";
+    var cdnUrl = "https://c2.cgyouxi.com";
+    var wsUrl = "ws://bd.66rpg.com:6970";
+    var mUrl = "https://m.66rpg.com";
+    var cUrl = "https://c.66rpg.com";
+    var hfJsUrl = "https://c2.cgyouxi.com/website/hfplayer/js";
+    var hfCssUrl = "https://c2.cgyouxi.com/website/hfplayer/css";
+    var hfIMGUrl = "https://c2.cgyouxi.com/website/hfplayer/img";
+    var hfSWFUrl = "__HFSWF__";
+    var reportUrl = "https://report.66rpg.com";
+    var channel_id = "";
+    var gamefv_times = "999999";
+    var platMark = "isFlash";
+    var aspect_ratio = "1";
+    var gamePath = window.location.href;
+    window.author_uid = "";
+    window.author_uname = "";
+    window.check_level = "2";
+    window.flower_unlock = platformUnlock ? "0" : "30";
+  </script>
+  <script src="https://c2.cgyouxi.com/website/hfplayer/v3/lib/utfx.min.js?v=202606170002"></script>
+  <script src="https://c2.cgyouxi.com/website/hfplayer/v3/lib/jquery-2.1.4.min.js?v=202606170002"></script>
+  <script src="https://c2.cgyouxi.com/website/hfplayer/v3/lib/spine-core.js?v=202606170002"></script>
+  <script src="https://c2.cgyouxi.com/website/hfplayer/v3/common/OrgWeb.js?v=202606170002"></script>
+  <script src="https://c2.cgyouxi.com/website/hfplayer/v3/common/InfoTool.js?v=202606170002"></script>
+  <script src="https://c2.cgyouxi.com/website/hfplayer/v3/common/GameInfoData.js?v=202606170002"></script>
+  <script src="https://c2.cgyouxi.com/website/hfplayer/v3/common/Common.js?v=202606170002"></script>
+  <script src="https://c2.cgyouxi.com/website/hfplayer/v3/bin/official/lib/webGLLib.js?v=202606170002"></script>
+  <script src="https://c2.cgyouxi.com/website/hfplayer/v3/bin/official/lib/SALInterface.js?v=202606170002"></script>
+  <script src="official_player_v3_game.js?v=202606170002"></script>
+  <script src="official_player_compat.js"></script>
+</head>
+<body>
+  <div id="debug"></div>
+  <div id="EngineVer" style="display:none"></div>
+  <video id="videos" class="video-js" preload="auto" style="display:none;width:1px;height:1px"></video>
+  <div id="data"></div>
+  <button class="ssologin" style="display:none"></button>
+  <button class="logout" style="display:none"></button>
+  <script>
+    (function () {
+      var isInit = false;
+      window.commonGIndex = gameId;
+      if (window.commonPlayer) {
+        commonPlayer.loginStatus = true;
+        commonPlayer.userInfos = commonPlayer.userInfos || {};
+        commonPlayer.userInfos.uid = "local-player";
+        commonPlayer.userInfos.code = "local-player";
+        commonPlayer.userInfos.gindex = gameId;
+        commonPlayer.userInfos.open_id = "";
+        commonPlayer.userInfos.channel_type = "";
+        commonPlayer.userInfos.third_sign = "";
+      }
+      window.THURPLAN = window.THRPLAN || {
+        uid: "local-player",
+        code: "local-player",
+        gindex: gameId,
+        token: "",
+        channel_id: "",
+        channel_type: ""
+      };
+
+      function initGame() {
+        if (isInit) return;
+        isInit = true;
+        try {
+          var info = {
+            index: gameId,
+            aGuid: guid,
+            aVer: ver,
+            q: quality,
+            canvasWidth: 1280,
+            canvasHeight: 720,
+            gid: "",
+            gver: "",
+            extra: { is_play_actor: false, actor_version: null },
+            isM: false,
+            testPath: false,
+            pmode: false
+          };
+          logLine("official proxy v3 startEngine gameId=" + gameId + " guid=" + guid + " version=" + ver + " quality=" + quality);
+          startEngine(info, null, "");
+          if (platformUnlock) logLine("official proxy v3 platform unlock mode enabled");
+        } catch (error) {
+          logLine("V3 INIT ERROR: " + (error && (error.stack || error.message) || error));
+        }
+      }
+      initGame();
+      window.gameMainBlur = function () {
+        if (window.gameMain && gameMain.stageBlur) gameMain.stageBlur();
+      };
+      window.gameMainFocus = function () {
+        if (window.gameMain && gameMain.stageFocus) gameMain.stageFocus();
+      };
+    })();
+  </script>
+</body>
+</html>

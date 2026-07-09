@@ -21,6 +21,21 @@ DEFAULT_CDN_HOSTS = (
     "https://c3.cgyouxi.com",
     "https://c4.cgyouxi.com",
 )
+V3_GAME_JS_URL = "https://c2.cgyouxi.com/website/hfplayer/v3/bin/official/game.js?v=202606170002"
+V3_DEVTOOLS_HOST_GUARD = (
+    "if(!location[_0x43e3bb][_0x68aca4](_0x1ec5d0)&&"
+    "!location[_0x43e3bb][_0x68aca4](_0x4f7ada))"
+)
+V3_TOP_BLANK_REDIRECT = "window['to'+'p']['lo'+'ca'+'ti'+'on']['re'+'pl'+'ac'+'e'](_0x19585e['le'+'Gd'+'R'])"
+V3_CALLBACK_BLANK_REDIRECT = "window['to'+'p']['lo'+'ca'+'ti'+'on']['re'+'pl'+'ac'+'e'](_0x471dfa['OB'+'YH'+'g'])"
+V3_CONSOLE_TABLE_CHECK = (
+    "Function['pr'+'ot'+'ot'+'yp'+'e']['to'+'St'+'ri'+'ng']['ca'+'ll']"
+    "(window['co'+'ns'+'ol'+'e2']['ta'+'bl'+'e'])!==_0x145aa2&&"
+)
+V3_TIMEOUT_REDIRECT = (
+    "window['lo'+'ca'+'ti'+'on']['hr'+'ef']=_0x263270['ti'+'me'+'Ou'+'tU'+'rl']||"
+    "_0x58f9f1['ET'+'gZ'+'b']['co'+'nc'+'at'](_0x58f9f1['Pp'+'PI'+'a'](encodeURIComponent,location['ho'+'st']))"
+)
 LOCAL_API_PREFIXES = ("engine/", "PropShop/", "game/", "task/", "pay/", "flower/", "account/", "user/")
 DEV_FREE_UNLOCK_AMOUNT = 999999
 DEV_FLOWER_AMOUNT = 9999
@@ -170,6 +185,9 @@ class OfficialPlayerProxyHandler(SimpleHTTPRequestHandler):
             if route in ("favicon.ico", "null path"):
                 self._send_bytes(TRANSPARENT_PNG, "image/png")
                 return
+            if route == "official_player_v3_game.js":
+                self._serve_official_v3_game_js()
+                return
             if route == "api/oapi_map.php":
                 self._send_bytes(self._map_api_payload(query), "application/json; charset=utf-8")
                 return
@@ -257,6 +275,37 @@ class OfficialPlayerProxyHandler(SimpleHTTPRequestHandler):
         if not target.exists() and self.server.download_missing:
             self._download_shareres(route, target)
         self._serve_file(target, self._guess_type(target))
+
+    def _serve_official_v3_game_js(self):
+        cached = self.server.v3_game_js_cache
+        if cached is None:
+            req = urllib.request.Request(
+                V3_GAME_JS_URL,
+                headers={
+                    "User-Agent": "Mozilla/5.0 OfficialPlayerProxy/1.0",
+                    "Referer": "https://www.66rpg.com/",
+                },
+            )
+            with urllib.request.urlopen(req, timeout=self.server.download_timeout) as response:
+                text = response.read().decode("utf-8", errors="replace")
+            replacements = 0
+            for source, target in (
+                (V3_DEVTOOLS_HOST_GUARD, "if(false)"),
+                (V3_CONSOLE_TABLE_CHECK, "false&&"),
+                (V3_TOP_BLANK_REDIRECT, "void 0"),
+                (V3_CALLBACK_BLANK_REDIRECT, "void 0"),
+                (V3_TIMEOUT_REDIRECT, "void 0"),
+            ):
+                count = text.count(source)
+                if count:
+                    text = text.replace(source, target)
+                    replacements += count
+                else:
+                    self.log_error("v3 game.js patch marker missing: %.80s", source)
+            cached = text.encode("utf-8")
+            self.server.v3_game_js_cache = cached
+            self.log_message("patched official v3 game.js replacements=%s bytes=%s", replacements, len(cached))
+        self._send_bytes(cached, "application/javascript; charset=utf-8")
 
     def _download_shareres(self, route, target):
         target.parent.mkdir(parents=True, exist_ok=True)
@@ -492,6 +541,7 @@ class OfficialPlayerProxyServer(ThreadingHTTPServer):
         self.platform_unlock = platform_unlock
         self.dev_inventory = {}
         self.map_payload_cache = {}
+        self.v3_game_js_cache = None
 
 
 def main():

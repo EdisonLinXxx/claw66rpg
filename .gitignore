@@ -6,3 +6,4 @@ shareres/
 .http-server.*.log
 .manual-play-*.log
 .official-proxy-*.log
+.official-proxy.*.log

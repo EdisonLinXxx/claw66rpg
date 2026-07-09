@@ -344,6 +344,9 @@
   }
 
   function installButtonPaddingPatch() {
+    var legacyGuid = "0a235c54f16c431ab5736c92997edb47";
+    var forceEnabled = String(parseUrlParams(window.location.search).compatDButton || "") === "1";
+    if (!forceEnabled && window.__officialProxyGuid !== legacyGuid) return false;
     if (!window.org_data || !org_data.DButton || org_data.DButton.__officialProxyPadWrapped) return false;
     var OriginalDButton = org_data.DButton;
     var readI32LE = function (stream, pos) {
@@ -372,6 +375,9 @@
   }
 
   function installNewDSystemPatch() {
+    var legacyGuid = "0a235c54f16c431ab5736c92997edb47";
+    var forceEnabled = String(parseUrlParams(window.location.search).compatDSystem || "") === "1";
+    if (!forceEnabled && window.__officialProxyGuid !== legacyGuid) return false;
     if (!window.org_data || !org_data.DSystem || org_data.DSystem.__officialProxyNewPatched) return false;
 
     var parseEventList = function (stream) {
