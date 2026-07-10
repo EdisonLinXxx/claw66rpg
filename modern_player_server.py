@@ -89,6 +89,9 @@ class ModernPlayerHandler(SimpleHTTPRequestHandler):
             if route == "modern_player_boot.js":
                 self._serve_file(self.server.root / "modern_player_boot.js", "application/javascript; charset=utf-8")
                 return
+            if route == "player_render_refresh.js":
+                self._serve_file(self.server.root / "player_render_refresh.js", "application/javascript; charset=utf-8")
+                return
             if route == "api/oapi_map.php":
                 self._serve_map(query)
                 return
