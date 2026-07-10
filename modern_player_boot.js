@@ -14,6 +14,8 @@
 
   if (!traceEnabled) {
     statusNode.style.display = "none";
+  } else {
+    statusNode.style.pointerEvents = "none";
   }
 
   function writeStatus(message, detail) {
@@ -67,7 +69,6 @@
     var isTargetGame = guid === "fbb2a8717f628920e662bdba3b89b418" && version === "18";
     var parsingSystem = false;
     var parsingPopMessage = false;
-    var entitlementAutoSavePending = false;
     GameByte.prototype.getInt32 = function () {
       if (isTargetGame && parsingSystem && GloableData.getInstance().gameInfo.ver === 110 && this.pos === 2038) {
         writeStatus("v110 setting extension skipped", {
@@ -180,40 +181,6 @@
           });
         }
       }
-      if (
-        isTargetGame &&
-        condition.type === 0 &&
-        (condition.id === 234 || condition.id === 547) &&
-        condition.op === 0 &&
-        condition.otherVar === 0 &&
-        condition.idOrValue === 1
-      ) {
-        var localEntitlementVariableId = condition.id;
-        var localEntitlementHaveElse = condition.haveElse;
-        condition.clean();
-        condition.type = 3;
-        condition.op = 1;
-        condition.otherVar = 0;
-        condition.idOrValue = 0;
-        condition.haveElse = localEntitlementHaveElse;
-        if (traceEnabled) {
-          writeStatus("standalone custom entitlement unlocked", {
-            variableId: localEntitlementVariableId
-          });
-        }
-        if (localEntitlementVariableId === 234 && !entitlementAutoSavePending) {
-          entitlementAutoSavePending = true;
-          window.setTimeout(function () {
-            try {
-              var entitlementData = GloableData.getInstance();
-              entitlementData.snap(entitlementData.autoSaveIndex - 1, true);
-              writeStatus("standalone weekly-card reward auto-saved");
-            } catch (error) {
-              writeStatus("standalone weekly-card auto-save failed", String(error && error.message || error));
-            }
-          }, 1200);
-        }
-      }
       if (traceEnabled && isTargetGame && condition.type === 3) {
         writeStatus("flower condition", {
           op: condition.op,
@@ -230,19 +197,94 @@
           haveElse: condition.haveElse
         });
       }
-      // Product-lock conditions depend on 66RPG account entitlements that do
-      // not exist in the standalone player. Convert only those conditions to
-      // an always-satisfied flower check; normal mall inventory stays intact.
       if (isTargetGame && condition.type === 8) {
-        var itemConditionHaveElse = condition.haveElse;
+        var productConditionHaveElse = condition.haveElse;
         condition.clean();
         condition.type = 3;
         condition.op = 1;
         condition.otherVar = 0;
         condition.idOrValue = 0;
-        condition.haveElse = itemConditionHaveElse;
+        condition.haveElse = productConditionHaveElse;
       }
       return condition;
+    };
+
+    // These variables are server-issued access credentials in the original
+    // game. Keep their real stored values untouched, but expose the standalone
+    // entitlement to every condition engine (story IF and custom UI alike).
+    var originalGetGameVariable = org_data.DGameVariables.prototype.getVar;
+    var standaloneVariableMinimums = {
+      26: 999999,
+      234: 1,
+      547: 1
+    };
+    org_data.DGameVariables.prototype.getVar = function (variableId) {
+      var value = originalGetGameVariable.apply(this, arguments);
+      var data = GloableData.getInstance();
+      if (isTargetGame && data.dGameSystem && this === data.dGameSystem.vars) {
+        var standaloneMinimum = standaloneVariableMinimums[variableId];
+        if (standaloneMinimum !== undefined) {
+          return Math.max(standaloneMinimum, Number(value) || 0);
+        }
+      }
+      return value;
+    };
+
+    var originalSetGameVariable = org_data.DGameVariables.prototype.setVar;
+    var standaloneAutoSaveTimer = 0;
+    org_data.DGameVariables.prototype.setVar = function () {
+      var result = originalSetGameVariable.apply(this, arguments);
+      var data = GloableData.getInstance();
+      var main = data.iMain;
+      var storyId = main && (main.storyId || (main.mainLine && main.mainLine.storyId));
+      if (isTargetGame && data.dGameSystem && this === data.dGameSystem.vars && storyId > 0) {
+        window.clearTimeout(standaloneAutoSaveTimer);
+        standaloneAutoSaveTimer = window.setTimeout(function () {
+          try {
+            data.snap(data.autoSaveIndex - 1, true);
+            writeStatus("standalone variable changes auto-saved");
+          } catch (error) {
+            writeStatus("standalone variable auto-save failed", String(error && error.message || error));
+          }
+        }, 1200);
+      }
+      return result;
+    };
+
+    var originalGetCumulativeFlower = OrgWeb.prototype.getFlowrHuaNum;
+    OrgWeb.prototype.getFlowrHuaNum = function () {
+      var value = originalGetCumulativeFlower.apply(this, arguments);
+      return isTargetGame ? Math.max(999999, Number(value) || 0) : value;
+    };
+    var originalGetSpendableFlower = OrgWeb.prototype.getReWidFlower;
+    OrgWeb.prototype.getReWidFlower = function () {
+      var value = originalGetSpendableFlower.apply(this, arguments);
+      return isTargetGame ? Math.max(999999, Number(value) || 0) : value;
+    };
+
+    var originalCheckIIF = org_event.TextDifUtil.checkIIF;
+    org_event.TextDifUtil.checkIIF = function (event, taskIds, autoSaveFlags) {
+      var result = originalCheckIIF.apply(this, arguments);
+      var inlineType = event && event.Argv && String(event.Argv[0] || "");
+      // ST conditions are account-owned product credentials. The standalone
+      // player has no 66RPG account inventory, so make those gates available
+      // without altering ordinary mall purchases or reward inventory.
+      if (isTargetGame && inlineType.indexOf("ST") > -1) {
+        result = true;
+      }
+      if (
+        traceEnabled &&
+        isTargetGame &&
+        event &&
+        event.Argv &&
+        inlineType.indexOf("MO") === -1
+      ) {
+        writeStatus("inline condition", {
+          args: Array.prototype.slice.call(event.Argv, 0, 8),
+          result: result
+        });
+      }
+      return result;
     };
 
     if (window.MallProxy && MallProxy.prototype.createOrderComplete) {
@@ -294,7 +336,10 @@
       commonPlayer.flower = Object.assign({}, commonPlayer.flower || {}, {
         // Story flower conditions read this legacy cumulative value instead
         // of the modern mall balance returned by getMyAccountMoney.
-        num: 999999
+        num: 999999,
+        fresh_flower_num: 999999,
+        wild_flower_num: 0,
+        tanhua_flower_num: 0
       });
     }
 
