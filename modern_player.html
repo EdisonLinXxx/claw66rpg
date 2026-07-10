@@ -40,6 +40,35 @@
       return new URLSearchParams(window.location.search).get(name);
     }
 
+    var base64Canvas;
+    window.GetImageBase64 = function (src, width, height, callback) {
+      var image = document.createElement("img");
+      image.crossOrigin = "anonymous";
+      image.onload = function () {
+        var dataUrl = "";
+        try {
+          if (!base64Canvas) {
+            base64Canvas = document.createElement("canvas");
+          }
+          base64Canvas.width = width;
+          base64Canvas.height = height;
+          var context = base64Canvas.getContext("2d");
+          context.clearRect(0, 0, width, height);
+          context.drawImage(image, 0, 0, width, height);
+          dataUrl = base64Canvas.toDataURL("image/png");
+        } catch (error) {
+          console.warn("GetImageBase64 failed", error);
+        }
+        callback(dataUrl);
+        image = null;
+      };
+      image.onerror = function () {
+        callback("");
+        image = null;
+      };
+      image.src = src;
+    };
+
     var basePrefix = window.location.pathname.indexOf("/play-modern/") === 0 ? "/play-modern" : "";
     var localHost = "//" + window.location.host + basePrefix;
     var webUrl = localHost;
