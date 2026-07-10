@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+  <title>66RPG Modern Local Player</title>
+  <style>
+    html, body {
+      width: 100%;
+      height: 100%;
+      margin: 0;
+      overflow: hidden;
+      background: #000;
+    }
+
+    #player-status {
+      position: fixed;
+      z-index: 999999;
+      left: 12px;
+      bottom: 12px;
+      max-width: min(760px, calc(100vw - 24px));
+      max-height: 42vh;
+      overflow: auto;
+      padding: 10px 12px;
+      color: #d8ffe0;
+      background: rgb(0 0 0 / 78%);
+      border: 1px solid rgb(139 255 168 / 35%);
+      border-radius: 6px;
+      font: 12px/1.45 Consolas, monospace;
+      white-space: pre-wrap;
+      pointer-events: none;
+    }
+
+    #player-status:empty {
+      display: none;
+    }
+  </style>
+  <script>
+    function GetQueryString(name) {
+      return new URLSearchParams(window.location.search).get(name);
+    }
+
+    var basePrefix = window.location.pathname.indexOf("/play-modern/") === 0 ? "/play-modern" : "";
+    var localHost = "//" + window.location.host + basePrefix;
+    var webUrl = localHost;
+    var passUrl = localHost;
+    var cgUrl = localHost;
+    var bbsUrl = localHost;
+    var picUrl = "//pic.cgyouxi.com";
+    var cdnUrl = "//c2.cgyouxi.com";
+    var wsUrl = "";
+    var mUrl = localHost;
+    var cUrl = localHost;
+    var reportUrl = localHost;
+    var hfJsUrl = "https://c2.cgyouxi.com/website/hfplayer/js";
+    var hfCssUrl = "https://c2.cgyouxi.com/website/hfplayer/css";
+    var hfIMGUrl = "https://c2.cgyouxi.com/website/hfplayer/img";
+    var hfSWFUrl = "";
+    var channel_id = "";
+    var platMark = "";
+    var aspect_ratio = "1";
+    var platformUid = "local-player";
+    var platfromNum = "";
+    var gamefv_times = "0";
+    var flower_unlock = "0";
+    var pmode = "0";
+    var debug = GetQueryString("trace") === "1";
+    var pathGameId = (window.location.pathname.match(/\/(\d+)\/?$/) || [])[1];
+    var gIndex = GetQueryString("gameId") || pathGameId || "1692579";
+    var guid = GetQueryString("guid") || "fbb2a8717f628920e662bdba3b89b418";
+    var ver = GetQueryString("version") || "18";
+    var quality = GetQueryString("quality") || "32";
+    window.author_uname = "笠泽之鱼";
+    window.check_level = "2";
+  </script>
+  <script src="https://c1.cgyouxi.com/website/hfplayer/v2/bin/libs/jquery-2.1.4.min.js?v=20210202002"></script>
+  <script src="https://c1.cgyouxi.com/website/hfplayer/v2/bin/libs/base91.js?v=20210202002"></script>
+  <script src="https://c2.cgyouxi.com/website/hfplayer/v2/bin/libs/utils.js?v=20210202002"></script>
+  <script src="https://c2.cgyouxi.com/website/hfplayer/v2/common/Common.js?v=20210202002"></script>
+</head>
+<body>
+  <div id="data"></div>
+  <video id="videos" preload="auto" style="display: none; width: 1px; height: 1px"></video>
+  <pre id="player-status"></pre>
+
+  <script src="https://c1.cgyouxi.com/website/hfplayer/v2/bin/libs/min/laya.core.min.js?v=20210202002"></script>
+  <script src="https://c4.cgyouxi.com/website/hfplayer/v2/bin/libs/min/laya.webgl.min.js?v=20210202002"></script>
+  <script src="https://c1.cgyouxi.com/website/hfplayer/v2/bin/libs/min/laya.filter.min.js?v=20210202002"></script>
+  <script src="https://c4.cgyouxi.com/website/hfplayer/v2/bin/libs/min/laya.ui.min.js?v=20210202002"></script>
+  <script src="https://c1.cgyouxi.com/website/hfplayer/v2/bin/libs/min/laya.html.min.js?v=20210202002"></script>
+  <script src="https://c1.cgyouxi.com/website/hfplayer/v2/bin/js/lib/LibClass.js?v=20210202002"></script>
+  <script src="https://c2.cgyouxi.com/website/hfplayer/v2/bin/libs/pc-common-VA.js?v=20210202002"></script>
+  <script src="https://c2.cgyouxi.com/website/hfplayer/v2/bin/main.min.js?v=20210202002"></script>
+  <script src="../modern_player_boot.js"></script>
+</body>
+</html>

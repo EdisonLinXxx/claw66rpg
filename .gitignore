@@ -7,3 +7,5 @@ shareres/
 .manual-play-*.log
 .official-proxy-*.log
 .official-proxy.*.log
+.modern-player-data/
+.modern-player-*.log
