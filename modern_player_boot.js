@@ -216,7 +216,7 @@
     var standaloneVariableMinimums = {
       26: 999999,
       234: 1,
-      547: 1
+      235: 1
     };
     org_data.DGameVariables.prototype.getVar = function (variableId) {
       var value = originalGetGameVariable.apply(this, arguments);
@@ -286,6 +286,198 @@
       }
       return result;
     };
+
+    // v110 added periodic custom-UI buttons (type 6), but the public v2
+    // runtime only creates controls 0-4. These four buttons cover daily,
+    // weekly and monthly sign-in plus the daily fortune action in this game.
+    // Preserve the intended period limit locally and use image1 as the
+    // already-claimed state, matching the data authored by the game.
+    var standalonePeriodicButtons = {
+      128: "day",
+      129: "week",
+      130: "month",
+      273: "day"
+    };
+    var standalonePeriodicMemory = {};
+
+    function resolveCustomUIButtonIndex(control) {
+      var index = control.isUserIndex
+        ? GloableData.getInstance().dGameSystem.vars.getVar(control.index) - 1
+        : control.index;
+      var buttons = GloableData.getInstance().gameMainData.System.Buttons;
+      if (index < 0 || index >= buttons.length) {
+        index = 0;
+      }
+      return index;
+    }
+
+    function standalonePeriodKey(period) {
+      var now = new Date();
+      var year = now.getFullYear();
+      var month = String(now.getMonth() + 1).padStart(2, "0");
+      var day = String(now.getDate()).padStart(2, "0");
+      if (period === "month") {
+        return year + "-" + month;
+      }
+      if (period === "week") {
+        var weekStart = new Date(year, now.getMonth(), now.getDate());
+        var weekday = weekStart.getDay() || 7;
+        weekStart.setDate(weekStart.getDate() - weekday + 1);
+        return [
+          weekStart.getFullYear(),
+          String(weekStart.getMonth() + 1).padStart(2, "0"),
+          String(weekStart.getDate()).padStart(2, "0")
+        ].join("-");
+      }
+      return [year, month, day].join("-");
+    }
+
+    function standalonePeriodicStorageKey(buttonIndex) {
+      var period = standalonePeriodicButtons[buttonIndex];
+      return [
+        "modern-player-periodic-control",
+        guid,
+        version,
+        buttonIndex,
+        standalonePeriodKey(period)
+      ].join(":");
+    }
+
+    function hasClaimedStandalonePeriodicButton(buttonIndex) {
+      var key = standalonePeriodicStorageKey(buttonIndex);
+      try {
+        return window.localStorage && localStorage.getItem(key) === "1";
+      } catch (_) {
+        return standalonePeriodicMemory[key] === true;
+      }
+    }
+
+    function markStandalonePeriodicButtonClaimed(buttonIndex) {
+      var key = standalonePeriodicStorageKey(buttonIndex);
+      standalonePeriodicMemory[key] = true;
+      try {
+        if (window.localStorage) {
+          localStorage.setItem(key, "1");
+        }
+      } catch (_) {}
+    }
+
+    function normalizeCustomUIImage(path) {
+      return String(path || "").replace(/\\/g, "/").replace(/\/{2,}/g, "/");
+    }
+
+    if (window.view && view.SCustomUI && view.SCustomUI.prototype.loadControls) {
+      var originalLoadCustomUIControl = view.SCustomUI.prototype.loadControls;
+      view.SCustomUI.prototype.loadControls = function (control) {
+        if (!isTargetGame || !control || control.type !== 6) {
+          return originalLoadCustomUIControl.apply(this, arguments);
+        }
+
+        var buttonIndex = resolveCustomUIButtonIndex(control);
+        var period = standalonePeriodicButtons[buttonIndex];
+        if (!period) {
+          writeStatus("unsupported v110 periodic button", { buttonIndex: buttonIndex });
+          return originalLoadCustomUIControl.apply(this, arguments);
+        }
+
+        var component;
+        var position = this.getControlPoint(control);
+        if (hasClaimedStandalonePeriodicButton(buttonIndex)) {
+          var claimedImage = normalizeCustomUIImage(control.image1);
+          component = new ImageComponent();
+          component.pixelHitTest = false;
+          component.mouseEnabled = false;
+          component.updateURL(this._sp_url + claimedImage, -1, 1, this.clickImage, this);
+          component.x = position.x;
+          component.y = position.y;
+        } else {
+          var buttonData = GloableData.getInstance().gameMainData.System.Buttons[buttonIndex];
+          var normalImage = buttonData.image1 && buttonData.image1.name
+            ? this._btn_url + buttonData.image1
+            : "";
+          var hoverImage = buttonData.image2 && buttonData.image2.name
+            ? this._btn_url + buttonData.image2
+            : "";
+          component = new ORGButton(normalImage, hoverImage, GameEventConstant.CLICK_SCUI_BUTTON);
+          component.pixelHitTest = true;
+          component.visible = true;
+          component.index = control.index;
+          component.postion = position;
+        }
+
+        component.tag = control;
+        component.__standalonePeriodicButtonIndex = buttonIndex;
+        this.addChild(component);
+        this.controlsArr.push(component);
+      };
+    }
+
+    if (window.view && view.SCustomUIMediator && view.SCustomUIMediator.prototype.onSelect) {
+      var originalCustomUISelect = view.SCustomUIMediator.prototype.onSelect;
+      view.SCustomUIMediator.prototype.onSelect = function (button) {
+        if (traceEnabled && isTargetGame) {
+          var buttonData = GloableData.getInstance().gameMainData.System.Buttons[button && button.index];
+          writeStatus("custom UI button", {
+            cuiIndex: view.SCustomUI && view.SCustomUI.F_Index,
+            buttonIndex: button && button.index,
+            image1: buttonData && buttonData.image1 && buttonData.image1.name,
+            events: button && button.tag && button.tag.event && button.tag.event.map(function (event) {
+              return {
+                code: event.Code,
+                args: event.Argv && Array.prototype.slice.call(event.Argv, 0, 12)
+              };
+            })
+          });
+        }
+        var periodicButtonIndex = button && button.__standalonePeriodicButtonIndex;
+        var canRunPeriodicButton = periodicButtonIndex !== undefined &&
+          (!this.view.buttonInter || this.view.buttonInter.isEnd) &&
+          button.tag && button.tag.event && button.tag.event.length > 0;
+        if (canRunPeriodicButton) {
+          if (hasClaimedStandalonePeriodicButton(periodicButtonIndex)) {
+            return;
+          }
+          button.mouseEnabled = false;
+        }
+
+        try {
+          var result = originalCustomUISelect.apply(this, arguments);
+          if (canRunPeriodicButton) {
+            markStandalonePeriodicButtonClaimed(periodicButtonIndex);
+            var claimedImage = normalizeCustomUIImage(button.tag.image1);
+            if (claimedImage && button.parent) {
+              var claimedURL = this.view._sp_url + claimedImage;
+              var claimedComponent = new ImageComponent();
+              var claimedPosition = this.view.getControlPoint(button.tag);
+              claimedComponent.pixelHitTest = false;
+              claimedComponent.mouseEnabled = false;
+              claimedComponent.tag = button.tag;
+              claimedComponent.__standalonePeriodicButtonIndex = periodicButtonIndex;
+              claimedComponent.updateURL(claimedURL, -1, 1, this.view.clickImage, this.view);
+              claimedComponent.x = claimedPosition.x;
+              claimedComponent.y = claimedPosition.y;
+              var controlIndex = this.view.controlsArr.indexOf(button);
+              if (controlIndex >= 0) {
+                this.view.controlsArr.splice(controlIndex, 1);
+              }
+              button.visible = false;
+              this.view.addChild(claimedComponent);
+              this.view.controlsArr.push(claimedComponent);
+            }
+            writeStatus("standalone periodic action claimed", {
+              buttonIndex: periodicButtonIndex,
+              period: standalonePeriodicButtons[periodicButtonIndex]
+            });
+          }
+          return result;
+        } catch (error) {
+          if (canRunPeriodicButton) {
+            button.mouseEnabled = true;
+          }
+          throw error;
+        }
+      };
+    }
 
     if (window.MallProxy && MallProxy.prototype.createOrderComplete) {
       var originalCreateOrderComplete = MallProxy.prototype.createOrderComplete;
