@@ -132,6 +132,40 @@
       return popMsg;
     };
     org_data.DPopMsg.prototype = OriginalPopMsg.prototype;
+
+    var originalDataToVar = org_event.TextDifUtil.dataToVar;
+    org_event.TextDifUtil.dataToVar = function (value) {
+      var fields = value instanceof Array ? value : String(value).split(",");
+      var condition = originalDataToVar.call(this, value);
+      var marker = fields.length > 6 ? String(fields[6] || "") : "";
+      // The current v2 runtime treats every extended v110 condition without a
+      // task marker as task type 6, which never completes in IFEvent.
+      if (
+        isTargetGame &&
+        fields.length > 6 &&
+        marker.indexOf("TA") === -1 &&
+        marker.indexOf("AS") === -1 &&
+        condition.type === 6
+      ) {
+        condition.clean();
+        condition.type = 0;
+        condition.id = parseInt(fields[0], 10);
+        condition.op = parseInt(fields[1], 10);
+        condition.otherVar = parseInt(fields[2], 10);
+        condition.idOrValue = parseInt(fields[3], 10);
+        condition.haveElse = parseInt(fields[4], 10) !== 0;
+        if (traceEnabled) {
+          writeStatus("v110 standard condition restored", {
+            id: condition.id,
+            op: condition.op,
+            otherVar: condition.otherVar,
+            value: condition.idOrValue,
+            haveElse: condition.haveElse
+          });
+        }
+      }
+      return condition;
+    };
   }
 
   function configureLocalRuntime() {
@@ -160,9 +194,59 @@
     }
   }
 
+  function installRuntimeTrace() {
+    if (!traceEnabled) {
+      return;
+    }
+    var lastState = "";
+    window.setInterval(function () {
+      try {
+        var data = GloableData.getInstance();
+        var main = data.iMain;
+        var line = main && (main.mainLine || main);
+        var currentEvent = line && line.currentEvent;
+        var chat = UIManager.getInstance().chat;
+        var talkText = chat && chat.talkText;
+        var primitiveEventData = {};
+        if (currentEvent) {
+          Object.keys(currentEvent).forEach(function (key) {
+            var value = currentEvent[key];
+            if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
+              primitiveEventData[key] = value;
+            }
+          });
+        }
+        var state = {
+          storyId: main && main.storyId,
+          lineStoryId: line && line.storyId,
+          position: line && line.pos,
+          storyLength: line && line.story && line.story.length,
+          eventRunFinish: line && line.eventRunFinish,
+          paused: line && line.isPause,
+          currentEvent: currentEvent && currentEvent.Code,
+          eventData: primitiveEventData,
+          eventArgs: currentEvent && currentEvent.Argv && Array.prototype.slice.call(currentEvent.Argv, 0, 20),
+          chatVisible: chat && chat.visible,
+          showingText: talkText && talkText.showingText,
+          textComplete: talkText && talkText.isComplete,
+          textPaused: talkText && talkText.pause,
+          text: talkText && talkText.text
+        };
+        var serialized = JSON.stringify(state);
+        if (serialized !== lastState) {
+          lastState = serialized;
+          writeStatus("runtime state", state);
+        }
+      } catch (error) {
+        writeStatus("runtime trace unavailable", String(error && error.message || error));
+      }
+    }, 1000);
+  }
+
   function boot() {
     installBinaryTrace();
     configureLocalRuntime();
+    installRuntimeTrace();
     window.gameMain = new Main();
     writeStatus("initGameData", {
       gameId: gameId,

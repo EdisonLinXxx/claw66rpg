@@ -8,4 +8,5 @@ shareres/
 .official-proxy-*.log
 .official-proxy.*.log
 .modern-player-data/
+.modern-player-test-data/
 .modern-player-*.log

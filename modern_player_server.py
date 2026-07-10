@@ -208,11 +208,22 @@ class ModernPlayerHandler(SimpleHTTPRequestHandler):
             payload = {"status": 1, "data": {"is_free": 1, "start_time": 0, "end_time": now + 31536000}}
         elif route.endswith("get_status"):
             payload = {"status": 1, "data": {"status": 0}}
-        elif route.endswith("cloud_save") or route.endswith("cloud_save_ex"):
-            self._save_cloud_payload(query, body)
+        elif route.endswith("cloud_flag"):
+            payload = {"status": 1, "data": True}
+        elif route.endswith("cloud_save_ex"):
+            # Extended variables and main progress are independent stores in
+            # the official player API; mixing them corrupts resume payloads.
+            namespace = "vars-" + str(body.get("varsType") or "normal")
+            self._save_cloud_value(query, body, namespace, str(body.get("varsEx") or ""))
             payload = {"status": 1, "data": {"saved": 1}}
-        elif route.endswith("cloud_load") or route.endswith("cloud_load_ex"):
-            payload = {"status": 1, "data": self._load_cloud_payload(query, body)}
+        elif route.endswith("cloud_load_ex"):
+            namespace = "vars-" + str(body.get("varsType") or "normal")
+            payload = {"status": 1, "data": self._load_cloud_value(query, body, namespace, "")}
+        elif route.endswith("cloud_save"):
+            self._save_cloud_value(query, body, "saves", str(body.get("content") or ""))
+            payload = {"status": 1, "data": {"saved": 1}}
+        elif route.endswith("cloud_load"):
+            payload = {"status": 1, "data": self._load_cloud_value(query, body, "saves", "")}
         elif route.endswith("get_game_info.json"):
             payload = {
                 "status": 1,
@@ -232,27 +243,26 @@ class ModernPlayerHandler(SimpleHTTPRequestHandler):
             payload = {"status": 1, "data": {}}
         self._send_json(payload, query)
 
-    def _cloud_key(self, query, body):
+    def _cloud_key(self, query, body, namespace):
         merged = {}
         merged.update({key: values[-1] for key, values in query.items() if values})
         merged.update(body)
         game = str(merged.get("gindex") or merged.get("gameId") or "1692579")
         user = str(merged.get("uid") or "local-player")
-        slot = str(merged.get("save_id") or merged.get("id") or merged.get("index") or "default")
-        return re.sub(r"[^A-Za-z0-9_.-]", "_", f"{game}-{user}-{slot}")
+        return re.sub(r"[^A-Za-z0-9_.-]", "_", f"{game}-{user}-{namespace}")
 
-    def _save_cloud_payload(self, query, body):
-        key = self._cloud_key(query, body)
+    def _save_cloud_value(self, query, body, namespace, value):
+        key = self._cloud_key(query, body, namespace)
         self.server.data_dir.mkdir(parents=True, exist_ok=True)
         target = self.server.data_dir / f"{key}.json"
         temp = target.with_suffix(".json.tmp")
-        temp.write_text(json.dumps(body, ensure_ascii=False), encoding="utf-8")
+        temp.write_text(json.dumps(value, ensure_ascii=False), encoding="utf-8")
         temp.replace(target)
 
-    def _load_cloud_payload(self, query, body):
-        target = self.server.data_dir / f"{self._cloud_key(query, body)}.json"
+    def _load_cloud_value(self, query, body, namespace, default):
+        target = self.server.data_dir / f"{self._cloud_key(query, body, namespace)}.json"
         if not target.is_file():
-            return {}
+            return default
         return json.loads(target.read_text(encoding="utf-8"))
 
     def _read_body(self):
