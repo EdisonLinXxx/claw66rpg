@@ -191,7 +191,14 @@ class ModernPlayerHandler(SimpleHTTPRequestHandler):
     def _serve_api(self, route, query, body):
         now = int(time.time())
         if route.endswith("getMyAccountMoney"):
-            payload = {"status": 1, "data": {"flower_count": 9999, "light_count": 9999}}
+            payload = {
+                "status": 1,
+                "data": {
+                    "coin_count": 999900,
+                    "flower_count": 9999,
+                    "light_count": 9999,
+                },
+            }
         elif route.endswith("getUserHaveAllPropNum"):
             payload = {"status": 1, "data": []}
         elif route.endswith("getUserHavePropNum"):
