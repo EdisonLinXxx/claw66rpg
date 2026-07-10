@@ -178,6 +178,28 @@
       }
       return condition;
     };
+
+    if (window.MallProxy && MallProxy.prototype.createOrderComplete) {
+      var originalCreateOrderComplete = MallProxy.prototype.createOrderComplete;
+      MallProxy.prototype.createOrderComplete = function (event) {
+        var result = originalCreateOrderComplete.apply(this, arguments);
+        if (isTargetGame && event && event.data && event.data.status === 1) {
+          window.setTimeout(function () {
+            try {
+              var data = GloableData.getInstance();
+              data.snap(data.autoSaveIndex - 1, true);
+              writeStatus("mall purchase auto-saved", {
+                goodsId: event.data.data && event.data.data.goods_id,
+                buyNum: event.data.data && event.data.data.buy_num
+              });
+            } catch (error) {
+              writeStatus("mall purchase auto-save failed", String(error && error.message || error));
+            }
+          }, 0);
+        }
+        return result;
+      };
+    }
   }
 
   function configureLocalRuntime() {

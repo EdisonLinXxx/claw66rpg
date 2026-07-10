@@ -4,6 +4,7 @@ import mimetypes
 import re
 import struct
 import tempfile
+import threading
 import time
 import urllib.error
 import urllib.parse
@@ -200,11 +201,32 @@ class ModernPlayerHandler(SimpleHTTPRequestHandler):
                 },
             }
         elif route.endswith("getUserHaveAllPropNum"):
-            payload = {"status": 1, "data": []}
+            payload = {"status": 1, "data": self._inventory_items(query, body)}
         elif route.endswith("getUserHavePropNum"):
-            payload = {"status": 1, "data": {"num": 999, "goods_num": 999}}
+            goods_id = self._request_int(query, body, "goods_id")
+            items = self._inventory_items(query, body)
+            payload = {
+                "status": 1,
+                "data": [item for item in items if item["goods_id"] == goods_id],
+            }
         elif "createBuyOrder" in route:
-            payload = {"status": 1, "data": {"is_buy": 1, "order_status": 1}}
+            goods_id = self._request_int(query, body, "goods_id")
+            buy_num = max(1, self._request_int(query, body, "buy_num", 1))
+            if goods_id <= 0:
+                payload = {"status": 0, "msg": "invalid goods_id", "data": {}}
+            else:
+                using_num = self._add_inventory_item(query, body, goods_id, buy_num)
+                payload = {
+                    "status": 1,
+                    "data": {
+                        "is_buy": 1,
+                        "order_status": 1,
+                        "order_id": f"local-{int(time.time() * 1000)}",
+                        "goods_id": goods_id,
+                        "buy_num": buy_num,
+                        "using_num": using_num,
+                    },
+                }
         elif route.endswith("init_user_hp") or route.endswith("get_user_hp") or route.endswith("get_user_hp_v2"):
             payload = {"status": 1, "data": {"hp": 9999, "user_hp": 9999, "max_hp": 9999}}
         elif route.endswith("un_lock"):
@@ -272,6 +294,38 @@ class ModernPlayerHandler(SimpleHTTPRequestHandler):
             return default
         return json.loads(target.read_text(encoding="utf-8"))
 
+    def _inventory_items(self, query, body):
+        with self.server.inventory_lock:
+            inventory = self._load_cloud_value(query, body, "inventory", {})
+        if not isinstance(inventory, dict):
+            return []
+        return [
+            {"goods_id": int(goods_id), "using_num": int(count), "goods_num": int(count)}
+            for goods_id, count in sorted(inventory.items(), key=lambda item: int(item[0]))
+            if int(count) > 0
+        ]
+
+    def _add_inventory_item(self, query, body, goods_id, buy_num):
+        with self.server.inventory_lock:
+            inventory = self._load_cloud_value(query, body, "inventory", {})
+            if not isinstance(inventory, dict):
+                inventory = {}
+            key = str(goods_id)
+            inventory[key] = int(inventory.get(key, 0)) + buy_num
+            self._save_cloud_value(query, body, "inventory", inventory)
+            return inventory[key]
+
+    @staticmethod
+    def _request_int(query, body, name, default=0):
+        value = body.get(name)
+        if value in (None, ""):
+            values = query.get(name)
+            value = values[-1] if values else default
+        try:
+            return int(value)
+        except (TypeError, ValueError):
+            return default
+
     def _read_body(self):
         length = int(self.headers.get("Content-Length", "0") or "0")
         raw = self.rfile.read(length) if length else b""
@@ -315,6 +369,7 @@ class ModernPlayerServer(ThreadingHTTPServer):
         self.data_dir = data_dir.resolve()
         self.cdn_host = cdn_host
         self.map_cache = {}
+        self.inventory_lock = threading.Lock()
 
 
 def main():
