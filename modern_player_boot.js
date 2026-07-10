@@ -67,6 +67,7 @@
     var isTargetGame = guid === "fbb2a8717f628920e662bdba3b89b418" && version === "18";
     var parsingSystem = false;
     var parsingPopMessage = false;
+    var entitlementAutoSavePending = false;
     GameByte.prototype.getInt32 = function () {
       if (isTargetGame && parsingSystem && GloableData.getInstance().gameInfo.ver === 110 && this.pos === 2038) {
         writeStatus("v110 setting extension skipped", {
@@ -172,9 +173,74 @@
             op: condition.op,
             otherVar: condition.otherVar,
             value: condition.idOrValue,
+            currentValue: condition.type === 0
+              ? GloableData.getInstance().dGameSystem.vars.getVar(condition.id)
+              : GloableData.getInstance().dGameSystem.varsEx.getVar(condition.id),
             haveElse: condition.haveElse
           });
         }
+      }
+      if (
+        isTargetGame &&
+        condition.type === 0 &&
+        (condition.id === 234 || condition.id === 547) &&
+        condition.op === 0 &&
+        condition.otherVar === 0 &&
+        condition.idOrValue === 1
+      ) {
+        var localEntitlementVariableId = condition.id;
+        var localEntitlementHaveElse = condition.haveElse;
+        condition.clean();
+        condition.type = 3;
+        condition.op = 1;
+        condition.otherVar = 0;
+        condition.idOrValue = 0;
+        condition.haveElse = localEntitlementHaveElse;
+        if (traceEnabled) {
+          writeStatus("standalone custom entitlement unlocked", {
+            variableId: localEntitlementVariableId
+          });
+        }
+        if (localEntitlementVariableId === 234 && !entitlementAutoSavePending) {
+          entitlementAutoSavePending = true;
+          window.setTimeout(function () {
+            try {
+              var entitlementData = GloableData.getInstance();
+              entitlementData.snap(entitlementData.autoSaveIndex - 1, true);
+              writeStatus("standalone weekly-card reward auto-saved");
+            } catch (error) {
+              writeStatus("standalone weekly-card auto-save failed", String(error && error.message || error));
+            }
+          }, 1200);
+        }
+      }
+      if (traceEnabled && isTargetGame && condition.type === 3) {
+        writeStatus("flower condition", {
+          op: condition.op,
+          value: condition.idOrValue,
+          currentValue: GloableData.getInstance().flowerHua,
+          haveElse: condition.haveElse
+        });
+      }
+      if (traceEnabled && isTargetGame && condition.type === 8) {
+        var ownedItem = GloableData.getInstance().getItemById(condition.id);
+        writeStatus("inventory condition", {
+          goodsId: condition.id,
+          usingNum: ownedItem ? ownedItem.max : 0,
+          haveElse: condition.haveElse
+        });
+      }
+      // Product-lock conditions depend on 66RPG account entitlements that do
+      // not exist in the standalone player. Convert only those conditions to
+      // an always-satisfied flower check; normal mall inventory stays intact.
+      if (isTargetGame && condition.type === 8) {
+        var itemConditionHaveElse = condition.haveElse;
+        condition.clean();
+        condition.type = 3;
+        condition.op = 1;
+        condition.otherVar = 0;
+        condition.idOrValue = 0;
+        condition.haveElse = itemConditionHaveElse;
       }
       return condition;
     };
@@ -225,7 +291,16 @@
       commonPlayer.loginStatus = true;
       commonPlayer.channel_id = "";
       commonPlayer.platform = "";
+      commonPlayer.flower = Object.assign({}, commonPlayer.flower || {}, {
+        // Story flower conditions read this legacy cumulative value instead
+        // of the modern mall balance returned by getMyAccountMoney.
+        num: 999999
+      });
     }
+
+    writeStatus("standalone entitlements enabled", {
+      cumulativeFlower: commonPlayer && commonPlayer.flower && commonPlayer.flower.num
+    });
   }
 
   function installRuntimeTrace() {
