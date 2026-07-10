@@ -65,8 +65,10 @@
     var originalGetInt32 = GameByte.prototype.getInt32;
     var originalReadString = GameByte.prototype.readStringE;
     var isTargetGame = guid === "fbb2a8717f628920e662bdba3b89b418" && version === "18";
+    var parsingSystem = false;
+    var parsingPopMessage = false;
     GameByte.prototype.getInt32 = function () {
-      if (isTargetGame && GloableData.getInstance().gameInfo.ver === 110 && this.pos === 2038) {
+      if (isTargetGame && parsingSystem && GloableData.getInstance().gameInfo.ver === 110 && this.pos === 2038) {
         writeStatus("v110 setting extension skipped", {
           from: this.pos,
           to: 2050,
@@ -74,7 +76,7 @@
         });
         this.pos = 2050;
       }
-      if (isTargetGame && GloableData.getInstance().gameInfo.ver === 110 && this.pos === 2580312) {
+      if (isTargetGame && parsingPopMessage && GloableData.getInstance().gameInfo.ver === 110 && this.pos === 2580312) {
         writeStatus("v110 pop-message version skipped", {
           from: this.pos,
           to: 2580316,
@@ -91,7 +93,7 @@
         969: 1014,
         1278: 1328
       }[start];
-      if (isTargetGame && GloableData.getInstance().gameInfo.ver === 110 && extensionEnd) {
+      if (isTargetGame && parsingSystem && GloableData.getInstance().gameInfo.ver === 110 && extensionEnd) {
         this.pos = extensionEnd;
         writeStatus("v110 extension skipped", {
           from: start,
@@ -118,18 +120,28 @@
     var OriginalSystem = org_data.DSystem;
     org_data.DSystem = function (byte) {
       writeStatus("DSystem start", { position: byte.pos });
-      var system = new OriginalSystem(byte);
-      writeStatus("DSystem complete", { position: byte.pos });
-      return system;
+      parsingSystem = true;
+      try {
+        var system = new OriginalSystem(byte);
+        writeStatus("DSystem complete", { position: byte.pos });
+        return system;
+      } finally {
+        parsingSystem = false;
+      }
     };
     org_data.DSystem.prototype = OriginalSystem.prototype;
 
     var OriginalPopMsg = org_data.DPopMsg;
     org_data.DPopMsg = function (byte) {
       writeStatus("DPopMsg start", { position: byte.pos });
-      var popMsg = new OriginalPopMsg(byte);
-      writeStatus("DPopMsg complete", { position: byte.pos });
-      return popMsg;
+      parsingPopMessage = true;
+      try {
+        var popMsg = new OriginalPopMsg(byte);
+        writeStatus("DPopMsg complete", { position: byte.pos });
+        return popMsg;
+      } finally {
+        parsingPopMessage = false;
+      }
     };
     org_data.DPopMsg.prototype = OriginalPopMsg.prototype;
 
