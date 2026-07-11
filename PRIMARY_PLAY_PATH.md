@@ -57,9 +57,3 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\validate-official-
 ```
 
 The validation script enters the official proxy path, captures the main management page, key second-level pages, menu, and save/load UI, then writes screenshots plus `summary.json` under `C:\tmp\official_proxy_main_pages` by default.
-
-Legacy/debug path:
-
-- `h5_runner_experiment.html`
-
-Use the legacy runner only for parser diagnostics or side-by-side debugging. UI parity and save/load work should be developed against the official proxy path.

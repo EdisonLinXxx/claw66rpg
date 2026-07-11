@@ -5,11 +5,9 @@
 
 ## Initial Long Run
 
-Command:
-
-```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\collect-story-coverage.ps1 -DurationSeconds 1800 -MaxSteps 900 -TimeoutSeconds 2400 -Out C:\tmp\claw_story_coverage_long_30m -Policies "round-robin,first,last"
-```
+This result was produced by the retired legacy autoplay harness. The historical
+observations are kept for resource-coverage context, but the old command is no
+longer a supported workflow.
 
 Observed result:
 
@@ -40,12 +38,6 @@ Additional missing MD5s:
 - `5bd85705bf1165c1ad16e06c26bdd10d`
 
 ## Final Confirmation
-
-Command:
-
-```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\autoplay-story.ps1 -DurationSeconds 720 -MaxSteps 340 -Out C:\tmp\claw_autoplay_confirm_after_more_mirrors -Port 8935 -ChoicePolicy round-robin
-```
 
 Result:
 

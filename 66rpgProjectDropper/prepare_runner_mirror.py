@@ -52,7 +52,7 @@ def parse_map_bin(map_bin):
 def write_api_map(entries, root):
     api_path = root / "api" / "oapi_map.php"
     api_path.parent.mkdir(parents=True, exist_ok=True)
-    payload = {"status": 1, "msg": "local runner map proxy", "data": entries}
+    payload = {"status": 1, "msg": "local resource map proxy", "data": entries}
     api_path.write_text(json.dumps(payload, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
     return api_path
 
@@ -124,7 +124,7 @@ def mirror_entry(http, entry, cdn_host, root, retries=3):
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Prepare local files needed by h5_runner_experiment.html.")
+    parser = argparse.ArgumentParser(description="Prepare a validated local resource mirror for the supported players.")
     parser.add_argument("game", help="66rpg game URL, gindex, or guid")
     parser.add_argument("--version", help="specific version; default is latest")
     parser.add_argument("--cdn-host", default="https://dlcdn1.cgyouxi.com", help="resource CDN host")
