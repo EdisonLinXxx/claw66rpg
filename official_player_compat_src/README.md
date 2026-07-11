@@ -3,8 +3,8 @@
 `official_player_compat.js` is a generated browser bundle. Edit the modules in
 this directory and regenerate the bundle with:
 
-```powershell
-.\scripts\build-official-player-compat.ps1
+```sh
+npm run compat:build
 ```
 
 Module responsibilities:
@@ -28,6 +28,6 @@ existing capability before adding a new parser implementation.
 
 Run the source/bundle and syntax checks with:
 
-```powershell
-.\scripts\validate-official-player-compat.ps1
+```sh
+npm run compat:validate
 ```

@@ -1,0 +1,9 @@
+{
+  "name": "claw66rpg-local-player",
+  "private": true,
+  "scripts": {
+    "compat:build": "node scripts/build-official-player-compat.js",
+    "compat:validate": "node scripts/validate-official-player-compat.js",
+    "compat:check": "npm run compat:build && npm run compat:validate"
+  }
+}

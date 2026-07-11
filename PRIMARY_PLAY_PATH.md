@@ -48,17 +48,17 @@ Implementation files:
 - `official_player_proxy.py`
 - `official_player_compat_src/` (canonical compatibility modules and game profiles)
 - `official_player_compat.js` (generated single-file browser bundle)
-- `scripts/build-official-player-compat.ps1`
-- `scripts/validate-official-player-compat.ps1`
+- `scripts/build-official-player-compat.js`
+- `scripts/validate-official-player-compat.js`
 - `scripts/serve-play.ps1`
 - `scripts/serve-official-proxy.ps1`
 
 Regenerate and validate the compatibility bundle after changing a module or
 game profile:
 
-```powershell
-.\scripts\build-official-player-compat.ps1
-.\scripts\validate-official-player-compat.ps1
+```sh
+npm run compat:build
+npm run compat:validate
 ```
 
 Game GUID/version matching belongs in

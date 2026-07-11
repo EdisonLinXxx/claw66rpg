@@ -36,10 +36,13 @@ overrides `compatDButton=1` and `compatDSystem=1` remain available.
 
 ## Build And Validation
 
-```powershell
-.\scripts\build-official-player-compat.ps1
-.\scripts\validate-official-player-compat.ps1
+```sh
+npm run compat:build
+npm run compat:validate
 ```
+
+Both commands use dependency-free Node.js scripts and run unchanged on Windows
+and Linux. The generated browser bundle has no Node.js runtime dependency.
 
 Validation covers:
 
