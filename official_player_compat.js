@@ -660,8 +660,12 @@
 
   function installNewDSystemPatch() {
     var legacyGuid = "0a235c54f16c431ab5736c92997edb47";
+    var springTownGuid = "468fe16ef100b2f24215e6874783ad66";
+    var springTownVersion = "1544";
     var forceEnabled = String(parseUrlParams(window.location.search).compatDSystem || "") === "1";
-    if (!forceEnabled && window.__officialProxyGuid !== legacyGuid) return false;
+    var springTownEnabled = window.__officialProxyGuid === springTownGuid &&
+      String(window.__officialProxyVersion || "") === springTownVersion;
+    if (!forceEnabled && window.__officialProxyGuid !== legacyGuid && !springTownEnabled) return false;
     if (!window.org_data || !org_data.DSystem || org_data.DSystem.__officialProxyNewPatched) return false;
 
     var parseEventList = function (stream) {
@@ -781,8 +785,32 @@
         var cuiCount = stream.getInt32();
         this.Cuis = new Array(cuiCount);
         for (var cuiIndex = 0; cuiIndex < cuiCount; cuiIndex++) {
-          var declaredSize = stream.getInt32();
-          this.Cuis[cuiIndex] = new NewCustomUIData(stream, declaredSize);
+          var declaredSize;
+          var cuiStart;
+          try {
+            if (springTownEnabled) {
+              cuiStart = stream.pos;
+              declaredSize = new DataView(stream.buffer).getInt32(cuiStart, true);
+              this.Cuis[cuiIndex] = new org_data.DCustomUIData(stream);
+              var actualSize = stream.pos - cuiStart - 4;
+              if (declaredSize !== actualSize) {
+                throw new Error("spring-town CUI size mismatch declared=" + declaredSize +
+                  " actual=" + actualSize + " start=" + cuiStart);
+              }
+            } else {
+              declaredSize = stream.getInt32();
+              cuiStart = stream.pos;
+              this.Cuis[cuiIndex] = new NewCustomUIData(stream, declaredSize);
+            }
+          } catch (error) {
+            if (springTownEnabled) {
+              compatLog("official proxy spring-town CUI failed index=" + cuiIndex +
+                " declared=" + declaredSize + " start=" + cuiStart +
+                " pos=" + stream.pos + " error=" +
+                (error && (error.stack || error.message) || error));
+            }
+            throw error;
+          }
         }
         this.MenuIndex = stream.getInt32();
       }
@@ -815,7 +843,12 @@
     }
 
     if (window.UIManager && UIManager.getInstance) {
-      var ui = UIManager.getInstance();
+      var ui;
+      try {
+        ui = UIManager.getInstance();
+      } catch (error) {
+        return patched;
+      }
       var layer = ui && ui.orgWebFreeLayer;
       if (layer && !layer.__officialProxyFreeTimeBypassed) {
         layer.getFreeTime = bypass;
