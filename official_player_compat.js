@@ -9,7 +9,7 @@
     return match ? decodeURIComponent(match[1]) : "";
   }
 
-  var DEV_INVENTORY_KEY = "officialProxyDevFreeUnlockInventory:v1";
+  var DEV_INVENTORY_KEY_PREFIX = "officialProxyDevFreeUnlockInventory:v2:";
   var DEV_FLOWER_AMOUNT = 9999;
   var DEV_FLOWER_COIN_AMOUNT = DEV_FLOWER_AMOUNT * 100;
 
@@ -39,9 +39,13 @@
     return fallback;
   }
 
+  function getDevInventoryKey() {
+    return DEV_INVENTORY_KEY_PREFIX + String(window.__officialProxyGameId || "default");
+  }
+
   function readDevInventory() {
     try {
-      var raw = window.localStorage && localStorage.getItem(DEV_INVENTORY_KEY);
+      var raw = window.localStorage && localStorage.getItem(getDevInventoryKey());
       var parsed = raw ? JSON.parse(raw) : {};
       return parsed && typeof parsed === "object" ? parsed : {};
     } catch (error) {
@@ -51,7 +55,7 @@
 
   function writeDevInventory(inventory) {
     try {
-      if (window.localStorage) localStorage.setItem(DEV_INVENTORY_KEY, JSON.stringify(inventory));
+      if (window.localStorage) localStorage.setItem(getDevInventoryKey(), JSON.stringify(inventory));
     } catch (error) {}
   }
 
@@ -74,15 +78,12 @@
     return { goods_id: goodsId, using_num: next };
   }
 
-  function ensureDevInventory(goodsId) {
+  function getDevInventoryItem(goodsId) {
     if (!goodsId || goodsId <= 0) return null;
     var inventory = readDevInventory();
     var key = String(goodsId);
-    if (!inventory[key]) {
-      inventory[key] = 1;
-      writeDevInventory(inventory);
-    }
-    return { goods_id: goodsId, using_num: parseInt(inventory[key], 10) || 1 };
+    var usingNum = parseInt(inventory[key], 10) || 0;
+    return usingNum > 0 ? { goods_id: goodsId, using_num: usingNum } : null;
   }
 
   function mergeObject(target, source) {
@@ -300,8 +301,8 @@
       return { status: 1, data: devInventoryArray() };
     }
     if (lower.indexOf("getuserhavepropnum") !== -1 || lower.indexOf("propnum") !== -1) {
-      var item = goodsId ? ensureDevInventory(goodsId) : null;
-      return { status: 1, data: item ? [item] : devInventoryArray() };
+      var item = goodsId ? getDevInventoryItem(goodsId) : null;
+      return { status: 1, data: goodsId ? (item ? [item] : []) : devInventoryArray() };
     }
     if (lower.indexOf("get_user_hp") !== -1 || lower.indexOf("init_user_hp") !== -1) {
       return { status: 1, data: { hp: 999999, max_hp: 999999 } };

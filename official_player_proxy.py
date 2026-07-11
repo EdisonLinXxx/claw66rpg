@@ -374,7 +374,7 @@ class OfficialPlayerProxyHandler(SimpleHTTPRequestHandler):
             else:
                 payload = {"status": 1, "data": {"coin_count": 0}}
         elif platform_unlock and "createbuyorder" in route_lower:
-            item = self._add_dev_inventory(goods_id, buy_num)
+            item = self._add_dev_inventory(query, goods_id, buy_num)
             payload = {
                 "status": 1,
                 "msg": "local platform unlock",
@@ -392,12 +392,15 @@ class OfficialPlayerProxyHandler(SimpleHTTPRequestHandler):
             }
         elif "getUserHavePropNum" in route:
             if platform_unlock:
-                item = self._ensure_dev_inventory(goods_id)
-                payload = {"status": 1, "data": [item] if item else self._dev_inventory_array()}
+                item = self._get_dev_inventory_item(query, goods_id)
+                payload = {
+                    "status": 1,
+                    "data": ([item] if item else []) if goods_id else self._dev_inventory_array(query),
+                }
             else:
                 payload = {"status": 1, "data": []}
         elif "getUserHaveAllPropNum" in route:
-            payload = {"status": 1, "data": self._dev_inventory_array() if platform_unlock else []}
+            payload = {"status": 1, "data": self._dev_inventory_array(query) if platform_unlock else []}
         elif "get_user_hp" in route or "init_user_hp" in route:
             payload = {"status": 1, "data": {"hp": amount, "max_hp": amount}}
         elif "getLimitFreeTime" in route or "getOldLimitFreeTime" in route:
@@ -480,27 +483,36 @@ class OfficialPlayerProxyHandler(SimpleHTTPRequestHandler):
                     continue
         return default
 
-    def _dev_inventory_array(self):
+    def _dev_inventory(self, query, create=False):
+        gindex, _, _ = self._game_context(query)
+        if create:
+            return self.server.dev_inventory.setdefault(gindex, {})
+        return self.server.dev_inventory.get(gindex, {})
+
+    def _dev_inventory_array(self, query):
+        inventory = self._dev_inventory(query)
         return [
             {"goods_id": int(goods_id), "using_num": int(using_num)}
-            for goods_id, using_num in sorted(self.server.dev_inventory.items())
+            for goods_id, using_num in sorted(inventory.items())
             if int(goods_id) > 0
         ]
 
-    def _add_dev_inventory(self, goods_id, buy_num):
+    def _add_dev_inventory(self, query, goods_id, buy_num):
         if goods_id <= 0:
             return None
-        current = int(self.server.dev_inventory.get(goods_id, 0))
+        inventory = self._dev_inventory(query, create=True)
+        current = int(inventory.get(goods_id, 0))
         next_num = current + max(1, int(buy_num or 1))
-        self.server.dev_inventory[goods_id] = next_num
+        inventory[goods_id] = next_num
         return {"goods_id": goods_id, "using_num": next_num}
 
-    def _ensure_dev_inventory(self, goods_id):
+    def _get_dev_inventory_item(self, query, goods_id):
         if goods_id <= 0:
             return None
-        if goods_id not in self.server.dev_inventory:
-            self.server.dev_inventory[goods_id] = 1
-        return {"goods_id": goods_id, "using_num": int(self.server.dev_inventory[goods_id])}
+        using_num = int(self._dev_inventory(query).get(goods_id, 0))
+        if using_num <= 0:
+            return None
+        return {"goods_id": goods_id, "using_num": using_num}
 
     def _send_jsonp(self, query, payload):
         callback = ""
