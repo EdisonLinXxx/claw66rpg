@@ -76,11 +76,9 @@
     if (!nextCanvas || nextCanvas === canvas) return nextCanvas;
 
     canvas = nextCanvas;
-    ["click", "touchend"].forEach(function (eventName) {
+    ["pointerdown", "click", "touchend"].forEach(function (eventName) {
       canvas.addEventListener(eventName, function (event) {
-        if (event.isTrusted === true) {
-          requestRefresh("user-input");
-        }
+        if (event.isTrusted === true) ignoreSignatureUntil = Date.now() + 1200;
       }, true);
     });
     requestRefresh("canvas-ready");

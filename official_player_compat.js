@@ -108,14 +108,14 @@
     id: "66rpg-1683317-v1544",
     guid: "468fe16ef100b2f24215e6874783ad66",
     versions: ["1544"],
-    capabilities: ["extended-dsystem", "native-v108-sized-cui"]
+    capabilities: ["extended-dsystem", "native-v108-sized-cui", "jump-story-v2063"]
   });
 
   registerGameProfile({
     id: "66rpg-1692665-v56",
     guid: "9076a69f88f6c963ec508dabe224a73e",
     versions: ["56"],
-    capabilities: ["extended-dsystem", "native-v108-sized-cui"]
+    capabilities: ["extended-dsystem", "native-v108-sized-cui", "jump-story-v2063"]
   });
 
   window.__officialProxyCompatRegistry = {
@@ -918,7 +918,9 @@
       commonPlayer.userInfos = commonPlayer.userInfos || {};
       commonPlayer.userInfos.uid = commonPlayer.userInfos.uid || "local-player";
       commonPlayer.userInfos.code = commonPlayer.userInfos.code || "local-player";
-      commonPlayer.userInfos.gindex = commonPlayer.userInfos.gindex || "1569947";
+      if (!/^\d+$/.test(String(commonPlayer.userInfos.gindex || ""))) {
+        commonPlayer.userInfos.gindex = String(window.__officialProxyGameId || "1569947");
+      }
       commonPlayer.userInfos.open_id = commonPlayer.userInfos.open_id || "";
       commonPlayer.userInfos.channel_type = commonPlayer.userInfos.channel_type || "";
       commonPlayer.userInfos.third_sign = commonPlayer.userInfos.third_sign || "";
@@ -1155,6 +1157,27 @@
 
   registerCompatPatch("DButton padding", 10, installButtonPaddingPatch);
   registerCompatPatch("DSystem/CUI", 20, installNewDSystemPatch);
+
+  function installJumpStoryV2063Patch() {
+    if (!hasCompatCapability("jump-story-v2063")) return false;
+    if (typeof MainEventLine === "undefined" || !MainEventLine.prototype) return false;
+    if (MainEventLine.prototype.__officialProxyJumpStoryV2063Wrapped) return false;
+
+    var originalMakeEvent = MainEventLine.prototype.makeEvent;
+    MainEventLine.prototype.makeEvent = function (event) {
+      var currentEvent = event || (this.story && this.story.events && this.story.events[this.pos]);
+      if (currentEvent && currentEvent.Code === 2063) {
+        currentEvent.Code = 206;
+        compatLog("official proxy v2063 jump-story compat story=" + currentEvent.Argv[0]);
+      }
+      return originalMakeEvent.apply(this, arguments);
+    };
+    MainEventLine.prototype.__officialProxyJumpStoryV2063Wrapped = true;
+    compatLog("official proxy v2063 jump-story compat enabled");
+    return true;
+  }
+
+  registerCompatPatch("v2063 jump-story", 30, installJumpStoryV2063Patch);
 
   function installFreeTimeBypass() {
     var patched = false;
