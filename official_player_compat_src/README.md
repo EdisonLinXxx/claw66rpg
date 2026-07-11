@@ -12,7 +12,7 @@ Module responsibilities:
 | Module | Responsibility |
 | --- | --- |
 | `00-core.js` | Shared helpers, patch registry, profile matching, and ordered installation. |
-| `05-game-profiles.js` | GUID/version matching and declarative capability selection. |
+| `05-profile-registry.js` | Runtime registration API for dynamically loaded game profiles. |
 | `10-built-in-menu.js` | Missing built-in menu implementations such as `10014`. |
 | `15-game-index.js` | Capability-gated fallback from the proxy query game ID to an invalid runtime game index. |
 | `20-platform-state.js` | Development entitlement and inventory state helpers. |
@@ -23,9 +23,15 @@ Module responsibilities:
 | `70-storage-trace.js` | Save/archive tracing and automatic/manual archive bridging. |
 | `90-bootstrap.js` | Retry lifecycle for installing registered patches. |
 
-Game GUIDs and versions belong only in `05-game-profiles.js`. Parser and runtime
-modules must select behavior by capability name. New games should reuse an
-existing capability before adding a new parser implementation.
+Game GUIDs and versions belong only in `official_player_game_profiles/<gameId>.js`.
+The stable core bundle contains no game identifiers. At runtime,
+`official_player_profile_loader.js` requests only the current `gameId` profile;
+the profile then verifies GUID and version before its capabilities become active.
+New games add one profile file and do not modify the common bundle source list.
+Parser and runtime modules must select behavior by capability name.
+Games that have not passed a compatibility investigation use an exact-match
+profile with an empty `capabilities` array; they must not borrow another game's
+parser merely to suppress a startup error.
 
 `player_render_refresh.js` preserves the legacy forced-repaint behavior unless a
 GUID/version profile explicitly selects another policy through

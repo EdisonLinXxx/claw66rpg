@@ -8,7 +8,7 @@ const sourceRoot = path.join(repoRoot, 'official_player_compat_src');
 const outputPath = path.join(repoRoot, 'official_player_compat.js');
 const sourceFiles = [
   '00-core.js',
-  '05-game-profiles.js',
+  '05-profile-registry.js',
   '10-built-in-menu.js',
   '15-game-index.js',
   '20-platform-state.js',

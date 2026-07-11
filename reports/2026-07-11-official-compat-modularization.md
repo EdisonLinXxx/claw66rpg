@@ -1,5 +1,10 @@
 # Official Player Compatibility Modularization
 
+> Historical note: this report describes the first source-module refactor. The
+> runtime profile list was replaced on 2026-07-12 by dynamically loaded
+> `official_player_game_profiles/<gameId>.js` files; see `PRIMARY_PLAY_PATH.md`
+> for the current architecture.
+
 ## Scope
 
 Refactor the v2 official-player compatibility layer without changing its public

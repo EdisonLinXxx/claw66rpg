@@ -161,7 +161,8 @@
   <script crossorigin="anonymous" src="https://c2.cgyouxi.com/website/hfplayer/v2/bin/main.min.js?v=20210202002"></script>
   <script src="player_render_refresh_policy.js?v=20260712-profile-policy"></script>
   <script src="player_render_refresh.js?v=20260712-legacy-default"></script>
-  <script src="official_player_compat.js?v=20260712-profile-isolation"></script>
+  <script src="official_player_compat.js?v=20260712-stable-core"></script>
+  <script src="official_player_profile_loader.js?v=20260712-dynamic-profile"></script>
 </head>
 <body>
   <div id="debug"></div>
@@ -172,59 +173,71 @@
   <button class="logout" style="display:none"></button>
   <script>
     (function () {
-      var localBase = window.location.origin + "/";
+      function startOfficialPlayer() {
+        var localBase = window.location.origin + "/";
 
-      function configureLocalHostUrls() {
-        if (window.HttpURL) {
-          HttpURL.CGV2_SERVER_URL = localBase;
-          HttpURL.M_RESOUSE_SERVER_URL = localBase;
+        function configureLocalHostUrls() {
+          if (window.HttpURL) {
+            HttpURL.CGV2_SERVER_URL = localBase;
+            HttpURL.M_RESOUSE_SERVER_URL = localBase;
+          }
+          if (window.GloableData && GloableData.getInstance) {
+            GloableData.getInstance().serverPath = "https://c2.cgyouxi.com/website/hfplayer/v2/bin/";
+          }
+          if (window.OrgWeb && OrgWeb.prototype && !OrgWeb.prototype.__officialProxyPatched) {
+            OrgWeb.prototype.__officialProxyPatched = true;
+            OrgWeb.prototype.getUid = function () { return "local-player"; };
+            OrgWeb.prototype.getOrgPlat = function () { return "WEB"; };
+            OrgWeb.prototype.getIsUnLock = function () { return true; };
+            OrgWeb.prototype.upTrafficFileNum = function () {};
+            OrgWeb.prototype.getServerTime = function () { return Math.floor(Date.now() / 1000); };
+          }
+          if (platformUnlock && window.GloableData && GloableData.getInstance) {
+            var data = GloableData.getInstance();
+            data.flowerUnlock = 0;
+            data.gameFvTimes = 999999;
+          }
         }
-        if (window.GloableData && GloableData.getInstance) {
-          GloableData.getInstance().serverPath = "https://c2.cgyouxi.com/website/hfplayer/v2/bin/";
-        }
-        if (window.OrgWeb && OrgWeb.prototype && !OrgWeb.prototype.__officialProxyPatched) {
-          OrgWeb.prototype.__officialProxyPatched = true;
-          OrgWeb.prototype.getUid = function () { return "local-player"; };
-          OrgWeb.prototype.getOrgPlat = function () { return "WEB"; };
-          OrgWeb.prototype.getIsUnLock = function () { return true; };
-          OrgWeb.prototype.upTrafficFileNum = function () {};
-          OrgWeb.prototype.getServerTime = function () { return Math.floor(Date.now() / 1000); };
-        }
-        if (platformUnlock && window.GloableData && GloableData.getInstance) {
-          var data = GloableData.getInstance();
-          data.flowerUnlock = 0;
-          data.gameFvTimes = 999999;
+
+        try {
+          if (window.Main && Main.prototype && Main.prototype.setGameConfig && !Main.prototype.__officialProxyUrlPatched) {
+            var originalSetGameConfig = Main.prototype.setGameConfig;
+            Main.prototype.setGameConfig = function () {
+              var result = originalSetGameConfig.apply(this, arguments);
+              configureLocalHostUrls();
+              return result;
+            };
+            Main.prototype.__officialProxyUrlPatched = true;
+          }
+
+          configureLocalHostUrls();
+          window.gameMain = new Main();
+          window.gameMain.initGameData(
+            guid,
+            ver,
+            "",
+            "",
+            quality,
+            gameBinPath,
+            "1",
+            gameId,
+            ""
+          );
+          logLine("official proxy initGameData called gameId=" + gameId + " guid=" + guid + " version=" + ver);
+          if (platformUnlock) logLine("official proxy platform unlock mode enabled");
+        } catch (error) {
+          logLine("INIT ERROR: " + (error && (error.stack || error.message) || error));
         }
       }
 
-      try {
-        if (window.Main && Main.prototype && Main.prototype.setGameConfig && !Main.prototype.__officialProxyUrlPatched) {
-          var originalSetGameConfig = Main.prototype.setGameConfig;
-          Main.prototype.setGameConfig = function () {
-            var result = originalSetGameConfig.apply(this, arguments);
-            configureLocalHostUrls();
-            return result;
-          };
-          Main.prototype.__officialProxyUrlPatched = true;
-        }
-
-        configureLocalHostUrls();
-        window.gameMain = new Main();
-        window.gameMain.initGameData(
-          guid,
-          ver,
-          "",
-          "",
-          quality,
-          gameBinPath,
-          "1",
-          gameId,
-          ""
-        );
-        logLine("official proxy initGameData called gameId=" + gameId + " guid=" + guid + " version=" + ver);
-        if (platformUnlock) logLine("official proxy platform unlock mode enabled");
-      } catch (error) {
-        logLine("INIT ERROR: " + (error && (error.stack || error.message) || error));
+      var profileReady = window.__officialProxyProfileReady;
+      if (profileReady && typeof profileReady.then === "function") {
+        profileReady.then(startOfficialPlayer, function (error) {
+          logLine("PROFILE LOAD ERROR: " + (error && (error.stack || error.message) || error));
+          startOfficialPlayer();
+        });
+      } else {
+        startOfficialPlayer();
       }
     })();
   </script>

@@ -46,24 +46,29 @@ Implementation files:
 
 - `official_player_proxy.html`
 - `official_player_proxy.py`
-- `official_player_compat_src/` (canonical compatibility modules and game profiles)
-- `official_player_compat.js` (generated single-file browser bundle)
+- `official_player_compat_src/` (canonical shared compatibility modules)
+- `official_player_compat.js` (generated stable shared browser bundle)
+- `official_player_game_profiles/<gameId>.js` (one dynamically loaded game profile)
+- `official_player_profile_loader.js` (numeric game-ID profile loader)
 - `scripts/build-official-player-compat.js`
 - `scripts/validate-official-player-compat.js`
 - `scripts/serve-play.ps1`
 - `scripts/serve-official-proxy.ps1`
 
-Regenerate and validate the compatibility bundle after changing a module or
-game profile:
+Regenerate the compatibility bundle after changing a shared module. Adding or
+changing a game profile does not change the shared bundle, but validation must
+still be run:
 
 ```sh
 npm run compat:build
 npm run compat:validate
 ```
 
-Game GUID/version matching belongs in
-`official_player_compat_src/05-game-profiles.js`. Parser and runtime modules
-select behavior by capability name and must not embed game identifiers.
+Game GUID/version matching belongs only in
+`official_player_game_profiles/<gameId>.js`. The loader requests one profile by
+numeric `gameId`; that profile must also match GUID and version before enabling
+capabilities. Parser and runtime modules select behavior by capability name and
+must not embed game identifiers.
 
 Regression validation:
 
