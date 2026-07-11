@@ -391,6 +391,35 @@
     return patched;
   }
 
+  var cloudSavePayloadInstalled = false;
+
+  function installCloudSavePayloadPatch() {
+    if (
+      cloudSavePayloadInstalled ||
+      !window.view ||
+      !view.SaveFileUI ||
+      !view.SaveFileUI.prototype ||
+      typeof view.SaveFileUI.prototype.downComplete !== "function"
+    ) return false;
+
+    var originalDownComplete = view.SaveFileUI.prototype.downComplete;
+    view.SaveFileUI.prototype.downComplete = function (response) {
+      if (response && response.data && typeof response.data !== "string") {
+        var normalized = {};
+        for (var key in response) {
+          if (Object.prototype.hasOwnProperty.call(response, key)) normalized[key] = response[key];
+        }
+        normalized.data = JSON.stringify(response.data);
+        response = normalized;
+      }
+      return originalDownComplete.call(this, response);
+    };
+    view.SaveFileUI.prototype.downComplete.__officialProxyPayloadWrapped = true;
+    cloudSavePayloadInstalled = true;
+    compatLog("official proxy cloud save payload normalization enabled");
+    return true;
+  }
+
   function getDevFreeUnlockPayload(url) {
     var text = String(url || "");
     var lower = text.toLowerCase();
@@ -1294,6 +1323,7 @@
     run("local API", installLocalRequestPatch);
     run("network toast filter", installNetworkNoiseToastFilterPatch);
     run("local save mode", installLocalSaveModePatch);
+    run("cloud save payload", installCloudSavePayloadPatch);
     run("free-time", installFreeTimeBypass);
     run("storage trace", installStorageTracePatch);
     return ok;
