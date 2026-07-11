@@ -905,10 +905,15 @@
     var legacyGuid = "0a235c54f16c431ab5736c92997edb47";
     var springTownGuid = "468fe16ef100b2f24215e6874783ad66";
     var springTownVersion = "1544";
+    var spaCenterGuid = "9076a69f88f6c963ec508dabe224a73e";
+    var spaCenterVersion = "56";
     var forceEnabled = String(parseUrlParams(window.location.search).compatDSystem || "") === "1";
     var springTownEnabled = window.__officialProxyGuid === springTownGuid &&
       String(window.__officialProxyVersion || "") === springTownVersion;
-    if (!forceEnabled && window.__officialProxyGuid !== legacyGuid && !springTownEnabled) return false;
+    var spaCenterEnabled = window.__officialProxyGuid === spaCenterGuid &&
+      String(window.__officialProxyVersion || "") === spaCenterVersion;
+    var nativeV108CuiEnabled = springTownEnabled || spaCenterEnabled;
+    if (!forceEnabled && window.__officialProxyGuid !== legacyGuid && !nativeV108CuiEnabled) return false;
     if (!window.org_data || !org_data.DSystem || org_data.DSystem.__officialProxyNewPatched) return false;
 
     var parseEventList = function (stream) {
@@ -1031,13 +1036,13 @@
           var declaredSize;
           var cuiStart;
           try {
-            if (springTownEnabled) {
+            if (nativeV108CuiEnabled) {
               cuiStart = stream.pos;
               declaredSize = new DataView(stream.buffer).getInt32(cuiStart, true);
               this.Cuis[cuiIndex] = new org_data.DCustomUIData(stream);
               var actualSize = stream.pos - cuiStart - 4;
               if (declaredSize !== actualSize) {
-                throw new Error("spring-town CUI size mismatch declared=" + declaredSize +
+                throw new Error("native v108 CUI size mismatch declared=" + declaredSize +
                   " actual=" + actualSize + " start=" + cuiStart);
               }
             } else {
@@ -1046,8 +1051,8 @@
               this.Cuis[cuiIndex] = new NewCustomUIData(stream, declaredSize);
             }
           } catch (error) {
-            if (springTownEnabled) {
-              compatLog("official proxy spring-town CUI failed index=" + cuiIndex +
+            if (nativeV108CuiEnabled) {
+              compatLog("official proxy native v108 CUI failed index=" + cuiIndex +
                 " declared=" + declaredSize + " start=" + cuiStart +
                 " pos=" + stream.pos + " error=" +
                 (error && (error.stack || error.message) || error));
