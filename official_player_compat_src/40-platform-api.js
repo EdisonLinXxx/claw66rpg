@@ -337,7 +337,9 @@
       commonPlayer.userInfos = commonPlayer.userInfos || {};
       commonPlayer.userInfos.uid = commonPlayer.userInfos.uid || "local-player";
       commonPlayer.userInfos.code = commonPlayer.userInfos.code || "local-player";
-      commonPlayer.userInfos.gindex = commonPlayer.userInfos.gindex || "1569947";
+      if (!/^\d+$/.test(String(commonPlayer.userInfos.gindex || ""))) {
+        commonPlayer.userInfos.gindex = String(window.__officialProxyGameId || "1569947");
+      }
       commonPlayer.userInfos.open_id = commonPlayer.userInfos.open_id || "";
       commonPlayer.userInfos.channel_type = commonPlayer.userInfos.channel_type || "";
       commonPlayer.userInfos.third_sign = commonPlayer.userInfos.third_sign || "";

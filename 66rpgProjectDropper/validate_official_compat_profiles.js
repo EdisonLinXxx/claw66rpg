@@ -33,7 +33,7 @@ assert.deepEqual(resolveProfile("0a235c54f16c431ab5736c92997edb47", "364"), {
 });
 assert.deepEqual(resolveProfile("468fe16ef100b2f24215e6874783ad66", "1544"), {
   profiles: ["66rpg-1683317-v1544"],
-  capabilities: ["extended-dsystem", "native-v108-sized-cui"],
+  capabilities: ["extended-dsystem", "jump-story-v2063", "native-v108-sized-cui"],
 });
 assert.deepEqual(resolveProfile("468fe16ef100b2f24215e6874783ad66", "1543"), {
   profiles: [],
@@ -41,7 +41,7 @@ assert.deepEqual(resolveProfile("468fe16ef100b2f24215e6874783ad66", "1543"), {
 });
 assert.deepEqual(resolveProfile("9076a69f88f6c963ec508dabe224a73e", "56"), {
   profiles: ["66rpg-1692665-v56"],
-  capabilities: ["extended-dsystem", "native-v108-sized-cui"],
+  capabilities: ["extended-dsystem", "jump-story-v2063", "native-v108-sized-cui"],
 });
 assert.deepEqual(resolveProfile("00000000000000000000000000000000", "1"), {
   profiles: [],

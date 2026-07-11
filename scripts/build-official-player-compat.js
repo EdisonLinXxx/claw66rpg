@@ -14,6 +14,7 @@ const sourceFiles = [
   '30-local-save.js',
   '40-platform-api.js',
   '50-binary-parser.js',
+  '55-event-compat.js',
   '60-free-time.js',
   '70-storage-trace.js',
   '90-bootstrap.js',
