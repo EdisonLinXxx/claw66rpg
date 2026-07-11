@@ -25,8 +25,6 @@
     budget.count += 1;
 
     if (typeof node.repaint === "function") node.repaint(1);
-    node._repaint = 3;
-    if (node._cacheStyle) node._cacheStyle.reCache = true;
 
     var children = getChildren(node);
     for (var index = 0; index < children.length; index += 1) {

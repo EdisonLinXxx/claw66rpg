@@ -118,6 +118,13 @@
     capabilities: ["extended-dsystem", "native-v108-sized-cui", "jump-story-v2063"]
   });
 
+  registerGameProfile({
+    id: "66rpg-1693705-v28",
+    guid: "544d66fdeb58b5219cb5e3adb543e6aa",
+    versions: ["28"],
+    capabilities: ["extended-dsystem", "native-v108-sized-cui"]
+  });
+
   window.__officialProxyCompatRegistry = {
     activeProfileIds: function () {
       return getActiveGameProfiles().map(function (profile) { return profile.id; });
@@ -1011,6 +1018,38 @@
       return events;
     };
 
+    var collectCustomUiInventory = function (cuis) {
+      var controlTypes = {};
+      var eventCodes = {};
+      var menuIndexes = {};
+      var totalControls = 0;
+      var collectEvents = function (events) {
+        (events || []).forEach(function (event) {
+          eventCodes[event.Code] = true;
+          if (event.Code === 214 && event.Argv && event.Argv.length) {
+            var menuIndex = parseInt(event.Argv[0], 10);
+            if (!isNaN(menuIndex)) menuIndexes[menuIndex] = true;
+          }
+        });
+      };
+      (cuis || []).forEach(function (cui) {
+        collectEvents(cui.loadEvent);
+        collectEvents(cui.afterEvent);
+        (cui.controls || []).forEach(function (control) {
+          totalControls += 1;
+          controlTypes[control.type] = (controlTypes[control.type] || 0) + 1;
+          collectEvents(control.event);
+        });
+      });
+      return {
+        customUiCount: (cuis || []).length,
+        totalControls: totalControls,
+        controlTypes: controlTypes,
+        eventCodes: Object.keys(eventCodes).map(Number).sort(function (a, b) { return a - b; }),
+        menuIndexes: Object.keys(menuIndexes).map(Number).sort(function (a, b) { return a - b; })
+      };
+    };
+
     var NewCustomUIItem = function (stream) {
       stream.getInt32();
       this.event = parseEventList(stream);
@@ -1147,6 +1186,10 @@
         }
         this.MenuIndex = stream.getInt32();
       }
+      this.__officialProxyCapabilityInventory = collectCustomUiInventory(this.Cuis);
+      window.__officialProxyCapabilityInventory = this.__officialProxyCapabilityInventory;
+      compatLog("official proxy capability inventory " +
+        JSON.stringify(this.__officialProxyCapabilityInventory));
       compatLog("official proxy DSystem compat parsed buttons=" + buttonCount + " header=" + (buttonTableHeader ? buttonTableHeader.join("/") : oldButtonCount) + " pos=" + stream.pos);
     };
     NewDSystem.__officialProxyNewPatched = true;

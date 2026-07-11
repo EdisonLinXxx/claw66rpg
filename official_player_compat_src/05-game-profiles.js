@@ -19,6 +19,13 @@
     capabilities: ["extended-dsystem", "native-v108-sized-cui", "jump-story-v2063"]
   });
 
+  registerGameProfile({
+    id: "66rpg-1693705-v28",
+    guid: "544d66fdeb58b5219cb5e3adb543e6aa",
+    versions: ["28"],
+    capabilities: ["extended-dsystem", "native-v108-sized-cui"]
+  });
+
   window.__officialProxyCompatRegistry = {
     activeProfileIds: function () {
       return getActiveGameProfiles().map(function (profile) { return profile.id; });
