@@ -46,9 +46,24 @@ Implementation files:
 
 - `official_player_proxy.html`
 - `official_player_proxy.py`
-- `official_player_compat.js`
+- `official_player_compat_src/` (canonical compatibility modules and game profiles)
+- `official_player_compat.js` (generated single-file browser bundle)
+- `scripts/build-official-player-compat.ps1`
+- `scripts/validate-official-player-compat.ps1`
 - `scripts/serve-play.ps1`
 - `scripts/serve-official-proxy.ps1`
+
+Regenerate and validate the compatibility bundle after changing a module or
+game profile:
+
+```powershell
+.\scripts\build-official-player-compat.ps1
+.\scripts\validate-official-player-compat.ps1
+```
+
+Game GUID/version matching belongs in
+`official_player_compat_src/05-game-profiles.js`. Parser and runtime modules
+select behavior by capability name and must not embed game identifiers.
 
 Regression validation:
 
