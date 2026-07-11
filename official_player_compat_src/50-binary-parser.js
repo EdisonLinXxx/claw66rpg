@@ -212,10 +212,12 @@
         }
         this.MenuIndex = stream.getInt32();
       }
-      this.__officialProxyCapabilityInventory = collectCustomUiInventory(this.Cuis);
-      window.__officialProxyCapabilityInventory = this.__officialProxyCapabilityInventory;
-      compatLog("official proxy capability inventory " +
-        JSON.stringify(this.__officialProxyCapabilityInventory));
+      if (hasCompatCapability("cui-capability-inventory")) {
+        this.__officialProxyCapabilityInventory = collectCustomUiInventory(this.Cuis);
+        window.__officialProxyCapabilityInventory = this.__officialProxyCapabilityInventory;
+        compatLog("official proxy capability inventory " +
+          JSON.stringify(this.__officialProxyCapabilityInventory));
+      }
       compatLog("official proxy DSystem compat parsed buttons=" + buttonCount + " header=" + (buttonTableHeader ? buttonTableHeader.join("/") : oldButtonCount) + " pos=" + stream.pos);
     };
     NewDSystem.__officialProxyNewPatched = true;

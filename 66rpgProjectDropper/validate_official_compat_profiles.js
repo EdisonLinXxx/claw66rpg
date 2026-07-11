@@ -27,6 +27,44 @@ function resolveProfile(guid, version) {
   };
 }
 
+function resolveGameIndexAfterConfig({ guid, version, gameId, runtimeIndex, userIndex }) {
+  const gameData = { gameInfo: { gIndex: runtimeIndex } };
+  const commonPlayer = { userInfos: { gindex: userIndex } };
+  const GloableData = { getInstance() { return gameData; } };
+  function Main() {}
+  Main.prototype.setGameConfig = function () {
+    gameData.gameInfo.gIndex = runtimeIndex;
+    commonPlayer.userInfos.gindex = userIndex;
+  };
+
+  const window = {
+    __officialProxyGuid: guid,
+    __officialProxyVersion: version,
+    __officialProxyGameId: gameId,
+    __officialProxyDevFreeUnlock: false,
+    location: { search: "" },
+    console: { log() {} },
+    commonPlayer,
+    GloableData,
+    Main,
+  };
+  const context = {
+    window,
+    console: window.console,
+    commonPlayer,
+    GloableData,
+    Main,
+    setInterval() { return 1; },
+    clearInterval() {},
+  };
+  vm.runInNewContext(bundle, context, { filename: "official_player_compat.js" });
+  new Main().setGameConfig();
+  return {
+    runtimeIndex: gameData.gameInfo.gIndex,
+    userIndex: commonPlayer.userInfos.gindex,
+  };
+}
+
 assert.deepEqual(resolveProfile("0a235c54f16c431ab5736c92997edb47", "364"), {
   profiles: ["66rpg-1569947-legacy-v2"],
   capabilities: ["extended-dsystem", "padded-dbutton"],
@@ -45,7 +83,12 @@ assert.deepEqual(resolveProfile("9076a69f88f6c963ec508dabe224a73e", "56"), {
 });
 assert.deepEqual(resolveProfile("544d66fdeb58b5219cb5e3adb543e6aa", "28"), {
   profiles: ["66rpg-1693705-v28"],
-  capabilities: ["extended-dsystem", "native-v108-sized-cui"],
+  capabilities: [
+    "cui-capability-inventory",
+    "extended-dsystem",
+    "native-v108-sized-cui",
+    "proxy-query-game-index",
+  ],
 });
 assert.deepEqual(resolveProfile("544d66fdeb58b5219cb5e3adb543e6aa", "27"), {
   profiles: [],
@@ -54,6 +97,47 @@ assert.deepEqual(resolveProfile("544d66fdeb58b5219cb5e3adb543e6aa", "27"), {
 assert.deepEqual(resolveProfile("00000000000000000000000000000000", "1"), {
   profiles: [],
   capabilities: [],
+});
+
+assert.deepEqual(resolveGameIndexAfterConfig({
+  guid: "544d66fdeb58b5219cb5e3adb543e6aa",
+  version: "28",
+  gameId: "1693705",
+  runtimeIndex: Number.NaN,
+  userIndex: "",
+}), {
+  runtimeIndex: 1693705,
+  userIndex: "1693705",
+});
+assert.deepEqual(resolveGameIndexAfterConfig({
+  guid: "544d66fdeb58b5219cb5e3adb543e6aa",
+  version: "28",
+  gameId: "1693705",
+  runtimeIndex: 1569947,
+  userIndex: "1569947",
+}), {
+  runtimeIndex: 1569947,
+  userIndex: "1569947",
+});
+assert.deepEqual(resolveGameIndexAfterConfig({
+  guid: "9076a69f88f6c963ec508dabe224a73e",
+  version: "56",
+  gameId: "1692665",
+  runtimeIndex: Number.NaN,
+  userIndex: "",
+}), {
+  runtimeIndex: Number.NaN,
+  userIndex: "",
+});
+assert.deepEqual(resolveGameIndexAfterConfig({
+  guid: "544d66fdeb58b5219cb5e3adb543e6aa",
+  version: "28",
+  gameId: "1693705-not-valid",
+  runtimeIndex: Number.NaN,
+  userIndex: "",
+}), {
+  runtimeIndex: Number.NaN,
+  userIndex: "",
 });
 
 console.log("official compatibility profiles passed");

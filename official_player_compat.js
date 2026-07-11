@@ -122,7 +122,12 @@
     id: "66rpg-1693705-v28",
     guid: "544d66fdeb58b5219cb5e3adb543e6aa",
     versions: ["28"],
-    capabilities: ["extended-dsystem", "native-v108-sized-cui"]
+    capabilities: [
+      "cui-capability-inventory",
+      "extended-dsystem",
+      "native-v108-sized-cui",
+      "proxy-query-game-index"
+    ]
   });
 
   window.__officialProxyCompatRegistry = {
@@ -278,6 +283,43 @@
   }
 
   registerCompatPatch("built-in CUI", 30, installCuiCompatibilityPatch);
+
+  function isValidGameIndex(value) {
+    var parsed = Number(value);
+    return isFinite(parsed) && parsed > 0 && Math.floor(parsed) === parsed;
+  }
+
+  function installQueryGameIndexFallback() {
+    if (!hasCompatCapability("proxy-query-game-index")) return false;
+    if (!window.Main || !Main.prototype || !Main.prototype.setGameConfig) return false;
+    if (Main.prototype.__officialProxyGameIndexPatched) return true;
+
+    var originalSetGameConfig = Main.prototype.setGameConfig;
+    Main.prototype.setGameConfig = function () {
+      var result = originalSetGameConfig.apply(this, arguments);
+      var queryGameIndex = Number(window.__officialProxyGameId);
+      if (!isValidGameIndex(queryGameIndex)) return result;
+
+      if (window.GloableData && GloableData.getInstance) {
+        var data = GloableData.getInstance();
+        if (data && data.gameInfo && !isValidGameIndex(data.gameInfo.gIndex)) {
+          data.gameInfo.gIndex = queryGameIndex;
+        }
+      }
+      if (
+        window.commonPlayer && commonPlayer.userInfos &&
+        !isValidGameIndex(commonPlayer.userInfos.gindex)
+      ) {
+        commonPlayer.userInfos.gindex = String(queryGameIndex);
+      }
+      return result;
+    };
+    Main.prototype.__officialProxyGameIndexPatched = true;
+    compatLog("official proxy query game index fallback enabled");
+    return true;
+  }
+
+  registerCompatPatch("query game index", 15, installQueryGameIndexFallback);
 
   function readDevInventory() {
     try {
@@ -1186,10 +1228,12 @@
         }
         this.MenuIndex = stream.getInt32();
       }
-      this.__officialProxyCapabilityInventory = collectCustomUiInventory(this.Cuis);
-      window.__officialProxyCapabilityInventory = this.__officialProxyCapabilityInventory;
-      compatLog("official proxy capability inventory " +
-        JSON.stringify(this.__officialProxyCapabilityInventory));
+      if (hasCompatCapability("cui-capability-inventory")) {
+        this.__officialProxyCapabilityInventory = collectCustomUiInventory(this.Cuis);
+        window.__officialProxyCapabilityInventory = this.__officialProxyCapabilityInventory;
+        compatLog("official proxy capability inventory " +
+          JSON.stringify(this.__officialProxyCapabilityInventory));
+      }
       compatLog("official proxy DSystem compat parsed buttons=" + buttonCount + " header=" + (buttonTableHeader ? buttonTableHeader.join("/") : oldButtonCount) + " pos=" + stream.pos);
     };
     NewDSystem.__officialProxyNewPatched = true;

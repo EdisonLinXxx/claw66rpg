@@ -20,15 +20,29 @@
     return (node && (node._children || node._childs || node._$childs)) || [];
   }
 
-  function invalidateTree(node, budget) {
+  function resolvePolicy() {
+    var policyModule = window.__playerRenderRefreshPolicy;
+    if (policyModule && typeof policyModule.resolve === "function") {
+      return policyModule.resolve(window.__officialProxyCompatRegistry);
+    }
+    return {
+      id: "legacy-forced-repaint",
+      forceRepaintLevel: true,
+      recache: true
+    };
+  }
+
+  function invalidateTree(node, budget, policy) {
     if (!node || budget.count >= 2048) return;
     budget.count += 1;
 
     if (typeof node.repaint === "function") node.repaint(1);
+    if (policy.forceRepaintLevel) node._repaint = 3;
+    if (policy.recache && node._cacheStyle) node._cacheStyle.reCache = true;
 
     var children = getChildren(node);
     for (var index = 0; index < children.length; index += 1) {
-      invalidateTree(children[index], budget);
+      invalidateTree(children[index], budget, policy);
       if (budget.count >= 2048) break;
     }
   }
@@ -37,11 +51,12 @@
     var stage = window.Laya && Laya.stage;
     if (!stage) return false;
 
-    invalidateTree(stage, { count: 0 });
+    var policy = resolvePolicy();
+    invalidateTree(stage, { count: 0 }, policy);
     if (typeof stage.repaint === "function") stage.repaint(1);
     if (window.Laya && Laya.timer && typeof Laya.timer.frameOnce === "function") {
       Laya.timer.frameOnce(1, null, function () {
-        invalidateTree(stage, { count: 0 });
+        invalidateTree(stage, { count: 0 }, policy);
       });
     }
     return true;
@@ -140,6 +155,7 @@
 
   window.__playerRenderRefresh = {
     request: requestRefresh,
-    repaint: repaintStage
+    repaint: repaintStage,
+    policy: resolvePolicy
   };
 })();
