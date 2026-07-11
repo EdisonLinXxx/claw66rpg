@@ -393,6 +393,76 @@
 
   var cloudSavePayloadInstalled = false;
 
+  var saveFileLocalModeInstalled = false;
+
+  function installSaveFileLocalModePatch() {
+    if (
+      saveFileLocalModeInstalled ||
+      !window.view ||
+      !view.SaveFileUI ||
+      !view.SaveFileUI.prototype
+    ) return false;
+
+    var proto = view.SaveFileUI.prototype;
+    var patched = false;
+
+    function selectLocalMode(saveView, updateState) {
+      try {
+        var gd = window.GloableData && GloableData.getInstance ? GloableData.getInstance() : null;
+        if (gd) {
+          gd.isCloud = false;
+          gd.isOpenSaveFileUI = true;
+        }
+        if (window.utils && utils.addCookie && window.GloableStaticData && saveView) {
+          if (saveView.saveSelectkey) {
+            utils.addCookie(saveView.saveSelectkey, GloableStaticData.SELECT_SAVE_TYPE_LOCAL);
+          }
+          if (saveView.saveGuidekey) utils.addCookie(saveView.saveGuidekey, "1");
+          if (saveView.firstOpenKey) utils.addCookie(saveView.firstOpenKey, "1");
+        }
+        if (saveView) {
+          try {
+            if (saveView.saveGuidekey) localStorage.setItem(saveView.saveGuidekey, "1");
+            if (saveView.firstOpenKey) localStorage.setItem(saveView.firstOpenKey, "1");
+          } catch (storageError) {}
+          if (updateState && typeof saveView.changeState === "function") saveView.changeState(0);
+        }
+        if (window.UIManager && UIManager.getInstance && window.view && view.SaveFileGuideMediator) {
+          UIManager.getInstance().closeView(view.SaveFileGuideMediator.NAME, false);
+        }
+      } catch (error) {
+        compatLog("official proxy local save UI selection failed: " + (error && (error.stack || error.message) || error));
+      }
+    }
+
+    if (typeof proto.drawCloudBtn === "function" && !proto.drawCloudBtn.__officialProxyLocalModeWrapped) {
+      var originalDrawCloudBtn = proto.drawCloudBtn;
+      proto.drawCloudBtn = function () {
+        selectLocalMode(this, false);
+        var result = originalDrawCloudBtn.apply(this, arguments);
+        selectLocalMode(this, true);
+        return result;
+      };
+      proto.drawCloudBtn.__officialProxyLocalModeWrapped = true;
+      patched = true;
+    }
+
+    if (typeof proto.clickCloud === "function" && !proto.clickCloud.__officialProxyLocalModeWrapped) {
+      proto.clickCloud = function () {
+        selectLocalMode(this, false);
+        if (typeof this.clickLocal === "function") return this.clickLocal();
+      };
+      proto.clickCloud.__officialProxyLocalModeWrapped = true;
+      patched = true;
+    }
+
+    if (!patched) return false;
+    proto.__officialProxyLocalModePatched = true;
+    saveFileLocalModeInstalled = true;
+    compatLog("official proxy save UI forced to local mode");
+    return true;
+  }
+
   function installCloudSavePayloadPatch() {
     if (
       cloudSavePayloadInstalled ||
@@ -1323,6 +1393,7 @@
     run("local API", installLocalRequestPatch);
     run("network toast filter", installNetworkNoiseToastFilterPatch);
     run("local save mode", installLocalSaveModePatch);
+    run("save UI local mode", installSaveFileLocalModePatch);
     run("cloud save payload", installCloudSavePayloadPatch);
     run("free-time", installFreeTimeBypass);
     run("storage trace", installStorageTracePatch);
