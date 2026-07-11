@@ -4,6 +4,12 @@
   "scripts": {
     "compat:build": "node scripts/build-official-player-compat.js",
     "compat:validate": "node scripts/validate-official-player-compat.js",
-    "compat:check": "npm run compat:build && npm run compat:validate"
+    "compat:check": "npm run compat:build && npm run compat:validate",
+    "prepare:game": "node scripts/prepare-official-player-game.js",
+    "serve:players": "node scripts/dev-services.js",
+    "serve:official": "node scripts/dev-services.js --official-only",
+    "serve:modern": "node scripts/dev-services.js --modern-only",
+    "validate:proxy-pages": "node scripts/validate-official-proxy-pages.js",
+    "scripts:validate": "node scripts/validate-node-entrypoints.js"
   }
 }

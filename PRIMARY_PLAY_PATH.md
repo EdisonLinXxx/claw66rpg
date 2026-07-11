@@ -4,8 +4,8 @@ The main implementation is now the official 66RPG H5 player with a local resourc
 
 Run:
 
-```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\serve-play.ps1
+```sh
+npm run serve:official
 ```
 
 Play:
@@ -22,8 +22,8 @@ http://127.0.0.1:8766/official_player_proxy.html
 
 Platform unlock is the default MVP play mode. It models the product rule that the user pays once on the platform and does not see in-game purchases:
 
-```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\serve-play.ps1
+```sh
+npm run serve:official
 ```
 
 ```text
@@ -34,8 +34,8 @@ This mode only affects the local proxy. It returns local stub balances, HP, buy/
 
 Comparison mode can be started explicitly when needed:
 
-```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\serve-play.ps1 -NoPlatformUnlock
+```sh
+node scripts/dev-services.js --official-only --no-platform-unlock
 ```
 
 ```text
@@ -52,8 +52,8 @@ Implementation files:
 - `official_player_profile_loader.js` (numeric game-ID profile loader)
 - `scripts/build-official-player-compat.js`
 - `scripts/validate-official-player-compat.js`
-- `scripts/serve-play.ps1`
-- `scripts/serve-official-proxy.ps1`
+- `scripts/dev-services.js`
+- `scripts/prepare-official-player-game.js`
 
 Regenerate the compatibility bundle after changing a shared module. Adding or
 changing a game profile does not change the shared bundle, but validation must
@@ -72,8 +72,8 @@ must not embed game identifiers.
 
 Regression validation:
 
-```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\validate-official-proxy-pages.ps1
+```sh
+npm run validate:proxy-pages
 ```
 
-The validation script enters the official proxy path, captures the main management page, key second-level pages, menu, and save/load UI, then writes screenshots plus `summary.json` under `C:\tmp\official_proxy_main_pages` by default.
+The validation script enters the official proxy path, captures the main management page, key second-level pages, menu, and save/load UI, then writes screenshots plus `summary.json` under the operating system temporary directory by default.
