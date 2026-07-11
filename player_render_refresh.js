@@ -24,13 +24,6 @@
     if (!node || budget.count >= 2048) return;
     budget.count += 1;
 
-    // Refresh the current visual state directly. This initializes late button
-    // textures without manufacturing pointer movement or hover side effects.
-    if (typeof node._setStateChanged === "function") {
-      node._setStateChanged();
-    } else if (typeof node.changeState === "function" && "_state" in node) {
-      node.changeState();
-    }
     if (typeof node.repaint === "function") node.repaint(1);
     node._repaint = 3;
     if (node._cacheStyle) node._cacheStyle.reCache = true;
